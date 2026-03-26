@@ -1,62 +1,80 @@
-# Fluxboard 
+# 🚀 Fluxboard 
 
-**Nền tảng Quản lý Dự án Thông minh tích hợp AI**
+**AI-Powered Smart Project Management Platform**
 
-Fluxboard tự động hóa việc khởi tạo không gian làm việc bằng cách phân tích Prompt của người dùng thông qua Google Gemini API để tạo ra các bảng Kanban (Lists & Cards) hoàn chỉnh, đi kèm tính năng kéo thả mượt mà.
+Fluxboard is an intelligent project management platform that automates workspace creation by analyzing user prompts using the Google Gemini API. It dynamically generates fully structured Kanban boards (Lists & Cards) with a smooth drag-and-drop experience, helping teams kickstart projects instantly.
 
-## Tech Stack
+## ✨ Key Features
+- **AI-Generated Workspaces**: Automatically creates Kanban boards based on natural language prompts
+- **Kanban Board System**: Organized Lists & Cards for intuitive task management
+- **Drag-and-Drop Interaction**: Seamless UI for managing tasks efficiently.
+-  **Modern Tech Stack**: High-performance frontend and scalable backend architecture.
+- **Cloud Database Integration**: Uses MongoDB Atlas for flexible and scalable data storage.
+
+## 🗂️ Tech Stack
 
 - **Frontend:** React JS (Vite), TypeScript, Tailwind CSS, Zustand
 - **Backend:** Java Spring Boot 3.x
 - **Database:** MongoDB Atlas (NoSQL)
 - **AI Integration:** Google Gemini API
 
-## Cấu trúc 
+## 📂 Project Structure
 
 ```text
 
 fluxboard/
 ├── frontend/                  # FRONTEND
-│   ├── public/                # Tài nguyên tĩnh (favicon, images)
+│   ├── public/                # Static assets (favicon, images)
 │   ├── src/
-│   │   ├── assets/            # CSS, icon dùng chung
-│   │   ├── components/        # Các UI component dùng lại (Button, Modal, Card...)
-│   │   ├── pages/             # Các trang chính (Dashboard, BoardView...)
-│   │   ├── services/          # Chứa logic gọi API (Axios)
-│   │   ├── store/             # Quản lý State toàn cục (Zustand)
-│   │   ├── types/             # Định nghĩa các Interface/Type của TypeScript
-│   │   ├── App.tsx            # Component gốc chứa Routing
-│   │   └── main.tsx           # Entry point của React
-│   ├── package.json           # Khai báo thư viện Node.js
-│   └── tailwind.config.js     # Cấu hình UI Tailwind
+│   │   ├── assets/            # Shared styles, icons
+│   │   ├── components/        # Reusable UI components (Button, Modal, Card...)
+│   │   ├── pages/             # Reusable UI components (Button, Modal, Card...)
+│   │   ├── services/          # API communication logic (Axios)
+│   │   ├── store/             # Global state management (Zustand)
+│   │   ├── types/             # TypeScript interfaces/types
+│   │   ├── App.tsx            # Root component with routing
+│   │   └── main.tsx           # Entry point
+│   ├── package.json           
+│   └── tailwind.config.js     
 │
 └── backend/                   # BACKEND/SERVER
     ├── src/main/java/com/fluxboard/
-    │   ├── config/            # Cấu hình hệ thống (CORS, RestTemplate/WebClient)
-    │   ├── controller/        # Xử lý HTTP Request & Response (REST API)
-    │   ├── service/           # Xử lý Logic nghiệp vụ (kể cả gọi Gemini API)
-    │   ├── repository/        # Giao tiếp với MongoDB Atlas
-    │   ├── entity/            # Các class ánh xạ với DB (Board, Card, User)
-    │   ├── dto/               # Các Object trung chuyển dữ liệu (Request/Response)
+    │   ├── config/            # System configuration (CORS, WebClient...)
+    │   ├── controller/        # REST API controllers
+    │   ├── service/           # Business logic (including Gemini API calls)
+    │   ├── repository/        # MongoDB data access layer
+    │   ├── entity/            # Database entities (Board, Card, User)
+    │   ├── dto/               # Data Transfer Objects (Request/Response)
     │   └── FluxboardApplication.java # File chạy chính của Spring Boot
     ├── src/main/resources/
-    │   └── application.yml    # Cấu hình port, MongoDB URI, Gemini Key
+    │   └── application.yml    # App configuration (port, DB URI, API keys)
     └── pom.xml                # Khai báo thư viện Maven (Lombok, Spring Data...)
 
 ```
-## Cài đặt & Chạy Local
-Yêu cầu môi trường: Node.js (18+), JDK 17+, MongoDB URI, Gemini API Key.
+## ⚙️ Getting Started 
+**🔧 Prerequisites**
 
-Mở 2 terminal riêng biệt để khởi tạo hệ thống:
+Make sure you have installed:
+- Node.js (v18 or higher)
+- JDK 17+
+- MongoDB Atlas URI
+- Google Gemini API Key
 
-1. Backend:
+### Backend
 ```
 cd backend
-# Đảm bảo đã cấu hình MongoDB URI và Gemini API Key 
-# trong src/main/resources/application.yml hoặc file .env
+```
+Configure your environment variables in:
+
+application.yml or .env
+- MongoDB URI
+- Gemini API Key
+
+Then run:
+```
 ./mvnw spring-boot:run
 ```
-2. Frontend:
+### Frontend
 
 ```
 cd frontend
