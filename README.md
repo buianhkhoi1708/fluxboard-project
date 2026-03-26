@@ -48,7 +48,7 @@ fluxboard/
     │   └── FluxboardApplication.java # File chạy chính của Spring Boot
     ├── src/main/resources/
     │   └── application.yml    # App configuration (port, DB URI, API keys)
-    └── pom.xml                # Khai báo thư viện Maven (Lombok, Spring Data...)
+    └── pom.xml                
 
 ```
 ## ⚙️ Getting Started 
