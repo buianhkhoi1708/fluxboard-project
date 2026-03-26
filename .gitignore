@@ -1,0 +1,26 @@
+#TỔNG HỢP 
+.DS_Store
+.idea/
+.vscode/
+*.log
+.env
+.env.local
+
+#FRONTEND
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+#BACKEND
+backend/target/
+backend/out/
+backend/build/
+backend/.gradle/
+backend/bin/
+backend/*.iml
+backend/*.class
+backend/*.jar
+backend/*.war
