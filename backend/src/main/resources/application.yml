@@ -5,8 +5,7 @@ spring:
     import: optional:file:.env[.properties],optional:file:backend/.env[.properties]
   data:
     mongodb:
-      uri: ${MONGODB_URI}
-
+      uri: mongodb+srv://fluxboard_admin:...@cluster0.sknswiy.mongodb.net/fluxboard
 server:
   address: ${SERVER_HOST:localhost}
   port: ${SERVER_PORT:8080}
