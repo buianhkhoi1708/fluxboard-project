@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: fluxboard-backend
+  config:
+    import: optional:file:.env[.properties],optional:file:backend/.env[.properties]
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+
+server:
+  address: ${SERVER_HOST:localhost}
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/v1
+
+# management:
+#   endpoints:
+#     web:
+#       exposure:
+#         include: health,info
