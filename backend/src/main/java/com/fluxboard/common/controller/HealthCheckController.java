@@ -16,7 +16,7 @@ public class HealthCheckController {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("success", true);
         response.put("message", "Server is running");
-        response.put("timeshtamp", Instant.now());
+        response.put("timestamp", Instant.now());
 
         return ResponseEntity.ok(response);
     }
