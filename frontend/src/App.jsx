@@ -9,7 +9,7 @@ function App() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/health-check');
+        const res = await fetch('http://localhost:8080/api/v1/health-check');
         if (res.ok) {
           setApiStatus('Kết nối Backend thành công! 🟢');
         } else {
