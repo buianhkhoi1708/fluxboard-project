@@ -2,7 +2,7 @@ spring:
   application:
     name: fluxboard-backend
   config:
-    import: file:D:/DL12/IE303_JV/TH1/.env[.properties]
+    import: optional:file:.env[.properties],optional:file:backend/.env[.properties]
   data:
     mongodb:
       uri: ${MONGODB_URI}
