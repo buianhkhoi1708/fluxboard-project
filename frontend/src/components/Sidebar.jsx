@@ -12,21 +12,26 @@ const Sidebar = ({ activeMenu, setActiveMenu }) => {
   ];
 
   return (
-    <aside className="sidebar">
-      <div className="menu-group">
+    <aside className="w-[240px] bg-mac-sidebar border-r border-mac-border flex flex-col h-full">
+      <div className="flex-1 py-4">
         {menuItems.map((item) => (
           <div 
             key={item.id} 
-            className={`nav-item ${activeMenu === item.id ? 'active' : ''}`} 
             onClick={() => setActiveMenu(item.id)}
+            className={`flex items-center gap-4 px-6 py-3 cursor-pointer transition-all border-l-4 
+              ${activeMenu === item.id 
+                ? 'bg-white text-blue-600 border-blue-600 font-bold shadow-sm' 
+                : 'text-gray-500 border-transparent hover:bg-gray-200'}`}
           >
-            {item.icon} <span>{item.label}</span>
+            <span className={activeMenu === item.id ? 'text-blue-600' : 'text-gray-400'}>{item.icon}</span>
+            <span className="text-sm">{item.label}</span>
           </div>
         ))}
       </div>
-      <div className="spacer"></div>
-      <div className="nav-item logout">
-        <LogOut size={20} /> <span>Logout</span>
+      
+      <div className="border-t border-mac-border px-6 py-5 flex items-center gap-4 text-gray-500 hover:bg-red-50 hover:text-red-500 cursor-pointer transition-colors group">
+        <LogOut size={20} className="group-hover:rotate-180 transition-transform duration-300" />
+        <span className="text-sm font-medium">Logout</span>
       </div>
     </aside>
   );
