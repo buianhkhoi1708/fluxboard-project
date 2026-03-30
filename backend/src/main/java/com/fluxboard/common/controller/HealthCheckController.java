@@ -9,15 +9,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api")
 public class HealthCheckController {
 
-    @GetMapping("health-check")
+    @GetMapping("/health-check")
     public ResponseEntity<Map<String, Object>> healthCheck() {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("success", true);
         response.put("message", "Server is running");
-        response.put("timestamp", Instant.now());
+        response.put("timeshtamp", Instant.now());
 
         return ResponseEntity.ok(response);
     }
