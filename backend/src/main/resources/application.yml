@@ -6,6 +6,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI}
+      database: fluxboard
 server:
   address: ${SERVER_HOST:localhost}
   port: ${SERVER_PORT:8080}
