@@ -1,31 +1,51 @@
 package com.fluxboard.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import java.time.Instant;
 
 @Document(collection = "users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
 
     @Id
     private String id;
 
-    private String username;
-    private String email;
-    private String password;
-    private String role;
+    @Indexed(unique = true) 
+    private String email; 
 
-    public String getId() { return id; }
-    public void setID(String id) { this.id = id;}
+    @JsonIgnore // BẢO MẬT
+    private String password; 
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) {this.username = username;}
+    @Field("full_name")
+    private String fullName; 
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) {this.email = email;}
+    @Field("avatar_url")
+    private String avatarUrl = "https://ui-avatars.com/api/?name=User&background=random"; 
 
-    public String getPassword() { return password;}
-    public void setPassword(String password) { this.password=password;}
+    private Role role; 
 
-    public String getRole() { return role;}
-    public void setRole(String role) { this.role=role;}
+    @CreatedDate
+    @Field("created_at")
+    private Instant createdAt;
+
+    @LastModifiedDate
+    @Field("updated_at")
+    private Instant updatedAt;
+    
+    public enum Role {
+        ADMIN, 
+        USER   
+    }
 }
