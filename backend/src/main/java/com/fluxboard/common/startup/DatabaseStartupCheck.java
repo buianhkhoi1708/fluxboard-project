@@ -28,6 +28,7 @@ public class DatabaseStartupCheck implements ApplicationRunner {
                     result.toJson());
         } catch (Exception e) {
             log.error("Failed to connect to MongoDB: {}", e.getMessage(), e);
+            throw new IllegalStateException("Application startup aborted due to MongoDB connection failure.", e);
         }
     }
 }

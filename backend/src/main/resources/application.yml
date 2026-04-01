@@ -5,16 +5,21 @@ spring:
     import: optional:file:.env[.properties],optional:file:backend/.env[.properties]
   data:
     mongodb:
-      uri: ${MONGODB_URI}
-      database: fluxboard
+      uri: ${MONGODB_URI:mongodb://localhost:27017/fluxboard_db}
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
 server:
   address: ${SERVER_HOST:localhost}
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /api/v1
 
-# management:
-#   endpoints:
-#     web:
-#       exposure:
-#         include: health,info  
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
