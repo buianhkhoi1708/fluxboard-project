@@ -20,6 +20,7 @@ backend/out/
 backend/build/
 backend/.gradle/
 backend/bin/
+backend/.m2
 backend/*.iml
 backend/*.class
 backend/*.jar
