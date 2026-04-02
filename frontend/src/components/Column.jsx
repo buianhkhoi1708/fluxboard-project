@@ -1,31 +1,60 @@
 import React, { useState } from 'react';
-import { MoreHorizontal, Plus, X, Trash2 } from 'lucide-react'; // Nhớ import Trash2
+import { MoreHorizontal, Plus, X, Trash2 } from 'lucide-react';
 import CardItem from './CardItem';
 import { useBoardStore } from '../store/useBoardStore';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-const Column = ({ column }) => {
-  // Lấy thêm hàm deleteColumn từ store
-  const { addTask, deleteColumn } = useBoardStore();
+const Column = ({ list }) => {
+  const { board, setBoard, getColumnTotalPoints } = useBoardStore();
   
+  // Trạng thái form thêm thẻ
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   
-  // State quản lý việc mở/tắt menu 3 chấm
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const totalPoints = getColumnTotalPoints ? getColumnTotalPoints(list.id) : 0;
 
   const { setNodeRef } = useDroppable({
-    id: column.id,
-    data: { type: 'Column', columnId: column.id }
+    id: list.id,
+    data: { type: 'List', listId: list.id }
   });
 
-  const handleAdd = () => {
+  // --- LOGIC THÊM THẺ MỚI CHUẨN TYPESCRIPT ---
+  const handleAddCard = () => {
     if (newTitle.trim()) {
-      addTask(column.id, newTitle.trim(), newDesc.trim());
-      setNewTitle('');
-      setNewDesc('');
+      // Khởi tạo thẻ mới đầy đủ các trường của ICard
+      const newCard = {
+        id: `card-${Date.now()}`,
+        title: newTitle.trim(),
+        description: newDesc.trim(),
+        assignee: "",
+        priority: "Medium",
+        start_date: new Date().toISOString().split('T')[0],
+        due_date: null,
+        estimated_days: 0,
+        story_points: 0,
+        ai_suggested_points: 0,
+        ai_estimation_reason: "",
+        tags: [],
+        subtasks: []
+      };
+      
+      // Chèn thẻ mới vào list tương ứng
+      const updatedLists = board.lists.map(l => {
+        if (l.id === list.id) {
+          return { ...l, cards: [...(l.cards || []), newCard] };
+        }
+        return l;
+      });
+
+      // Nạp lại Bảng
+      setBoard({ ...board, lists: updatedLists });
+      
+      // Reset Form
+      setNewTitle(''); 
+      setNewDesc(''); 
       setIsAdding(false);
     }
   };
@@ -33,45 +62,35 @@ const Column = ({ column }) => {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleAdd();
+      handleAddCard();
     }
+  };
+
+  const deleteList = () => {
+    setBoard({ ...board, lists: board.lists.filter(l => l.id !== list.id) });
   };
 
   return (
     <div className="w-[300px] shrink-0 flex flex-col bg-[#f1f2f4] rounded-2xl max-h-full relative">
-      {/* Màng chắn trong suốt để bắt sự kiện click ra ngoài menu */}
-      {isMenuOpen && (
-        <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)}></div>
-      )}
+      {isMenuOpen && <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)}></div>}
 
-      {/* Header Cột */}
+      {/* Header Danh sách */}
       <div className="flex justify-between items-center p-3 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-700">{column.icon} {column.title}</span>
-          <span className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-200/60 rounded-full">{column.tasks?.length || 0}</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-700">{list.list_name}</span>
+            <span className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-200/60 rounded-full">{list.cards?.length || 0}</span>
+          </div>
+          {totalPoints > 0 && <span className="text-[10px] text-slate-400 font-medium ml-1">Tổng điểm: {totalPoints} pt</span>}
         </div>
         
-        {/* NÚT 3 CHẤM VÀ POP-UP MENU */}
         <div className="relative z-20">
-          <button 
-            onClick={() => setIsMenuOpen(!isMenuOpen)} 
-            className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-md transition-colors"
-          >
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-md transition-colors">
             <MoreHorizontal size={16} />
           </button>
-          
-          {/* Menu thả xuống */}
           {isMenuOpen && (
             <div className="absolute right-0 top-8 w-44 bg-white rounded-lg shadow-xl border border-gray-100 py-1 overflow-hidden">
-              <button 
-                onClick={() => {
-                  if(window.confirm(`Bạn có chắc muốn xóa danh sách "${column.title}"?`)) {
-                    deleteColumn(column.id);
-                  }
-                  setIsMenuOpen(false);
-                }} 
-                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-              >
+              <button onClick={() => { if(window.confirm(`Xóa danh sách "${list.list_name}"?`)) deleteList(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
                 <Trash2 size={14} /> Xóa danh sách
               </button>
             </div>
@@ -79,31 +98,42 @@ const Column = ({ column }) => {
         </div>
       </div>
 
-      {/* Danh sách Thẻ */}
+      {/* Vùng chứa Thẻ */}
       <div ref={setNodeRef} className="flex-1 overflow-y-auto flex flex-col gap-2 px-2 pb-2 custom-scrollbar min-h-[50px]">
-        <SortableContext items={column.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          {column.tasks?.map((task) => (
-            <CardItem key={task.id} card={task} columnId={column.id} />
+        <SortableContext items={(list.cards || []).map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {(list.cards || []).map((card) => (
+            <CardItem key={card.id} card={card} listId={list.id} />
           ))}
         </SortableContext>
       </div>
 
-      {/* Vùng Thêm thẻ (Giữ nguyên như cũ) */}
+      {/* KHUNG THÊM THẺ MỚI */}
       <div className="p-2 pt-0">
         {isAdding ? (
           <div className="bg-white p-2.5 rounded-xl shadow-sm border border-blue-400 flex flex-col gap-2">
             <input 
-              autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Nhập tiêu đề thẻ..." className="text-sm font-medium border border-gray-200 rounded px-2 py-1.5 outline-none w-full focus:border-blue-500" 
+              autoFocus 
+              value={newTitle} 
+              onChange={e => setNewTitle(e.target.value)} 
+              onKeyDown={handleKeyDown} 
+              placeholder="Tiêu đề thẻ..." 
+              className="text-sm font-medium border border-gray-200 rounded px-2 py-1.5 outline-none w-full focus:border-blue-500" 
             />
             <textarea 
-              value={newDesc} onChange={e => setNewDesc(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Mô tả chi tiết (tùy chọn)..." rows={2}
-              className="text-xs text-slate-600 border border-gray-200 rounded px-2 py-1.5 outline-none w-full focus:border-blue-500 resize-none custom-scrollbar"
+              value={newDesc} 
+              onChange={e => setNewDesc(e.target.value)} 
+              onKeyDown={handleKeyDown} 
+              placeholder="Mô tả chi tiết (tùy chọn)..." 
+              rows={2} 
+              className="text-xs text-slate-600 border border-gray-200 rounded px-2 py-1.5 outline-none w-full focus:border-blue-500 resize-none custom-scrollbar" 
             />
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={handleAdd} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">Thêm thẻ</button>
-              <button onClick={() => {setIsAdding(false); setNewTitle(''); setNewDesc('');}} className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg"><X size={16}/></button>
+              <button onClick={handleAddCard} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 shadow-sm">
+                Thêm thẻ
+              </button>
+              <button onClick={() => { setIsAdding(false); setNewTitle(''); setNewDesc(''); }} className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors">
+                <X size={16}/>
+              </button>
             </div>
           </div>
         ) : (
