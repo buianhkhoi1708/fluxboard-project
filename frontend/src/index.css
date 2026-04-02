@@ -115,3 +115,32 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Scrollbar ngang màu trắng mờ (Dành riêng cho Board tổng) */
+.bg-blue-600.custom-scrollbar::-webkit-scrollbar-thumb,
+.bg-blue-700.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.bg-blue-600.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.bg-blue-700.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
