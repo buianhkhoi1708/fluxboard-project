@@ -19,7 +19,7 @@ public class AiService {
     @Value("${GEMINI_API_KEY}")
     private String apiKey;
 
-    // Đã cập nhật đúng chuẩn model Gemini 3 Flash mới nhất
+
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     public AiService(ObjectMapper objectMapper) {
         this.restClient = RestClient.create();
@@ -28,7 +28,6 @@ public class AiService {
 
     public String generateKanbanBoard(String userPrompt) {
         
-        // System Prompt V2 (Chỉ trả về điểm thẻ, Frontend tự cộng tổng)
         String systemInstruction = """
             Bạn là một chuyên gia quản lý dự án cấp cao và Scrum Master hệ thống cho ứng dụng Fluxboard. 
             Nhiệm vụ duy nhất của bạn là phân tích yêu cầu dự án từ người dùng và tự động tạo ra một bảng Kanban chi tiết.
