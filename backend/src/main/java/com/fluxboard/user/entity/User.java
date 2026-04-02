@@ -1,4 +1,4 @@
-package com.fluxboard.entity;
+package com.fluxboard.user.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -9,7 +9,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "users")
 @Data
@@ -30,16 +29,12 @@ public class User extends BaseDocument {
     @JsonProperty("avatar_url")
     private String avatarUrl = "https://ui-avatars.com/api/?name=User&background=random";
 
-    @Field("role_id")
     @JsonProperty("role_id")
     private String roleId;
-
 
     @JsonProperty("department_id")
     private String departmentId;
 
     @JsonProperty("team_id")
     private String teamId;
-
-    
 }
