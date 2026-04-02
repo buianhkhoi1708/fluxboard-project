@@ -5,6 +5,7 @@ import { useBoardStore } from '../store/useBoardStore';
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { X } from 'lucide-react'; 
+import AiGeneratorPanel from './AiGeneratorPanel';
 
 const BoardView = () => {
   const { board, setBoard, getBoardTotalPoints, addList } = useBoardStore();
@@ -69,6 +70,9 @@ const BoardView = () => {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex flex-col h-full bg-blue-600">
+
+        <AiGeneratorPanel/>
+
         <div className="px-6 py-4 bg-blue-700/50 text-white flex justify-between items-center shrink-0 border-b border-white/10">
           <div><h2 className="text-lg font-bold">{board.board_name}</h2></div>
           {getBoardTotalPoints && <div className="bg-blue-800/50 px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm">Tổng: {getBoardTotalPoints()} Story Points</div>}
