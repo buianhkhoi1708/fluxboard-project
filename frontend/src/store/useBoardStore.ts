@@ -42,6 +42,10 @@ export interface IBoard {
 interface IBoardState {
   board: IBoard | null;
   fetchBoardData: (boardId: string) => void;
+
+  // Các hàm tính toán động (Derived Data) hỗ trợ cho UI
+  getColumnTotalPoints: (listId: string) => number;
+  getBoardTotalPoints: () => number;
 }
 
 // Mock data
@@ -125,10 +129,34 @@ const initialState: IBoard = {
 };
 
 // Khởi tạo
-export const useBoardStore = create<IBoardState>((set) => ({
+export const useBoardStore = create<IBoardState>((set, get) => ({
   board: initialState, 
 
   fetchBoardData: (boardId: string) => {
     console.log(`Tiến hành fetch data từ BE cho board: ${boardId}`); // Để gọi API sau này
   },
+
+  // Hàm tính tổng điểm của 1 cột cụ thể (Long gọi hàm này khi render tên Cột)
+  getColumnTotalPoints: (listId: string) => {
+    const board = get().board;
+    if (!board) return 0;
+
+    const list = board.lists.find(l => l.id === listId);
+    if (!list) return 0;
+
+    // Cộng dồn story_points của tất cả các thẻ trong cột
+    return list.cards.reduce((total, card) => total + (card.story_points || 0), 0);
+  },
+
+  // Hàm tính tổng điểm của toàn bộ dự án (Long gọi hàm này ở Header Bảng)
+  getBoardTotalPoints: () => {
+    const board = get().board;
+    if (!board) return 0;
+
+    // Lặp qua tất cả các cột, rồi lặp qua tất cả các thẻ để cộng dồn
+    return board.lists.reduce((totalBoard, list) => {
+      const listTotal = list.cards.reduce((totalList, card) => totalList + (card.story_points || 0), 0);
+      return totalBoard + listTotal;
+    }, 0);
+  }
 }));
