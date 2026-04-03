@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Trash2, Edit2, Check, X, AlignLeft, Flag, CheckSquare, Square, Plus, Target, Sparkles } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -10,31 +10,32 @@ const CardItem = ({ card, listId, isOverlay }) => {
   const { updateCard, deleteCard, toggleSubtask } = useBoardStore();
   const [isEditing, setIsEditing] = useState(false);
   
-  const [editTitle, setEditTitle] = useState(card.title);
-  const [editDesc, setEditDesc] = useState(card.description || '');
-  const [editPriority, setEditPriority] = useState(card.priority || 'Medium');
-  const [editTags, setEditTags] = useState(card.tags ? card.tags.join(', ') : '');
-  const [editStoryPoints, setEditStoryPoints] = useState(card.story_points || 0);
-  const [editSubtasks, setEditSubtasks] = useState(card.subtasks || []);
+  // Các state lưu trữ tạm thời cho form Edit
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editPriority, setEditPriority] = useState('Medium');
+  const [editTags, setEditTags] = useState('');
+  const [editStoryPoints, setEditStoryPoints] = useState(0);
+  const [editSubtasks, setEditSubtasks] = useState([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-
-  // Reset form nếu hủy edit hoặc data thay đổi
-  useEffect(() => {
-    if (!isEditing) {
-      setEditTitle(card.title); 
-      setEditDesc(card.description || '');
-      setEditPriority(card.priority || 'Medium'); 
-      setEditTags(card.tags ? card.tags.join(', ') : '');
-      setEditStoryPoints(card.story_points || 0);
-      setEditSubtasks(card.subtasks || []);
-    }
-  }, [card, isEditing]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id, data: { type: 'Card', card, listId }
   });
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+
+  // 👉 HÀM MỚI: Chỉ nạp data vào state khi bắt đầu bấm nút Edit
+  const handleOpenEdit = (e) => {
+    e.stopPropagation();
+    setEditTitle(card.title); 
+    setEditDesc(card.description || '');
+    setEditPriority(card.priority || 'Medium'); 
+    setEditTags(card.tags ? card.tags.join(', ') : '');
+    setEditStoryPoints(card.story_points || 0);
+    setEditSubtasks(card.subtasks || []);
+    setIsEditing(true);
+  };
 
   const handleSave = (e) => {
     e.stopPropagation();
@@ -58,75 +59,38 @@ const CardItem = ({ card, listId, isOverlay }) => {
   };
 
   // ==========================================
-  // GIAO DIỆN CHỈNH SỬA (EDIT MODE) - SIÊU MƯỢT
+  // GIAO DIỆN CHỈNH SỬA (EDIT MODE)
   // ==========================================
   if (isEditing) {
     return (
       <div className="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-400 flex flex-col gap-3 cursor-default z-10 relative" onClick={(e)=>e.stopPropagation()}>
         
-        {/* Input Tiêu đề */}
         <div>
-          <input 
-            autoFocus 
-            value={editTitle} 
-            onChange={(e) => setEditTitle(e.target.value)} 
-            placeholder="Nhập tiêu đề thẻ..." 
-            className="w-full text-sm font-bold text-slate-800 placeholder:text-slate-400 border-none outline-none focus:ring-0 bg-transparent p-0" 
-          />
+          <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Nhập tiêu đề thẻ..." className="w-full text-sm font-bold text-slate-800 placeholder:text-slate-400 border-none outline-none focus:ring-0 bg-transparent p-0" />
         </div>
 
-        {/* Input Mô tả */}
         <div className="bg-slate-50 border border-slate-200 rounded-lg focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
-          <textarea 
-            value={editDesc} 
-            onChange={(e) => setEditDesc(e.target.value)} 
-            rows={2} 
-            placeholder="Thêm mô tả chi tiết..." 
-            className="w-full text-xs text-slate-600 bg-transparent border-none outline-none p-2 resize-none custom-scrollbar" 
-          />
+          <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder="Thêm mô tả chi tiết..." className="w-full text-xs text-slate-600 bg-transparent border-none outline-none p-2 resize-none custom-scrollbar" />
         </div>
 
-        {/* Cụm: Độ ưu tiên & Điểm số (Nằm ngang) */}
         <div className="flex gap-2 items-center">
           <div className="flex-1 relative">
-             <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-              <Flag size={12} className="text-slate-400" />
-            </div>
-            <select 
-              value={editPriority} 
-              onChange={(e) => setEditPriority(e.target.value)} 
-              className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-medium text-slate-700 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all appearance-none cursor-pointer"
-            >
+             <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Flag size={12} className="text-slate-400" /></div>
+            <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-medium text-slate-700 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all appearance-none cursor-pointer">
               {Object.keys(priorityColors).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
 
           <div className="w-1/3 relative">
-            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-              <Target size={12} className="text-slate-400" />
-            </div>
-            <input 
-              type="number" 
-              min="0"
-              value={editStoryPoints} 
-              onChange={(e) => setEditStoryPoints(e.target.value)} 
-              placeholder="Điểm" 
-              className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-bold text-blue-600 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all" 
-            />
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Target size={12} className="text-slate-400" /></div>
+            <input type="number" min="0" value={editStoryPoints} onChange={(e) => setEditStoryPoints(e.target.value)} placeholder="Điểm" className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-bold text-blue-600 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all" />
           </div>
         </div>
         
-        {/* Tag Input */}
         <div className="relative">
-          <input 
-            value={editTags} 
-            onChange={(e) => setEditTags(e.target.value)} 
-            placeholder="Thêm tags (cách nhau bằng dấu phẩy)..." 
-            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 outline-none text-slate-600 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all" 
-          />
+          <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="Thêm tags (cách nhau bằng dấu phẩy)..." className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 outline-none text-slate-600 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all" />
         </div>
 
-        {/* AI Suggestion Box (Nếu có dữ liệu từ AI sinh ra) */}
         {card.ai_estimation_reason && (
            <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 flex gap-2 items-start">
              <Sparkles size={12} className="text-amber-500 shrink-0 mt-0.5" />
@@ -137,49 +101,25 @@ const CardItem = ({ card, listId, isOverlay }) => {
            </div>
         )}
 
-        {/* Checklist */}
         <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-            <CheckSquare size={12} /> Checklist con
-          </span>
-          
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><CheckSquare size={12} /> Checklist con</span>
           <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto custom-scrollbar pr-1">
             {editSubtasks.map(st => (
               <div key={st.id} className="flex items-center justify-between group/st bg-slate-50 rounded px-2 py-1 border border-transparent hover:border-slate-200">
                 <span className={`text-[11px] truncate pr-2 ${st.is_done ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}>• {st.title}</span>
-                <button onClick={(e) => { e.stopPropagation(); setEditSubtasks(editSubtasks.filter(s => s.id !== st.id)); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover/st:opacity-100 transition-opacity">
-                  <X size={12} />
-                </button>
+                <button onClick={(e) => { e.stopPropagation(); setEditSubtasks(editSubtasks.filter(s => s.id !== st.id)); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover/st:opacity-100 transition-opacity"><X size={12} /></button>
               </div>
             ))}
           </div>
-
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
             <Plus size={14} className="text-indigo-400" />
-            <input 
-              value={newSubtaskTitle} 
-              onChange={e => setNewSubtaskTitle(e.target.value)} 
-              onKeyDown={handleAddSubtask} 
-              placeholder="Gõ & Nhấn Enter để thêm việc..." 
-              className="text-[11px] bg-transparent outline-none w-full text-slate-600 font-medium placeholder:font-normal" 
-            />
+            <input value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)} onKeyDown={handleAddSubtask} placeholder="Gõ & Nhấn Enter để thêm việc..." className="text-[11px] bg-transparent outline-none w-full text-slate-600 font-medium placeholder:font-normal" />
           </div>
         </div>
 
-        {/* Nút hành động */}
         <div className="flex justify-end gap-2 mt-1">
-          <button 
-            onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} 
-            className="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg text-xs font-semibold transition-colors"
-          >
-            Hủy bỏ
-          </button>
-          <button 
-            onClick={handleSave} 
-            className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
-          >
-            <Check size={14}/> Lưu thẻ
-          </button>
+          <button onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} className="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg text-xs font-semibold transition-colors">Hủy bỏ</button>
+          <button onClick={handleSave} className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"><Check size={14}/> Lưu thẻ</button>
         </div>
       </div>
     );
@@ -221,7 +161,6 @@ const CardItem = ({ card, listId, isOverlay }) => {
         <div className="flex items-center gap-2">
           {card.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[card.priority] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{card.priority}</span></span>}
         </div>
-        {/* Điểm số (Story Points) hiển thị ở dạng View */}
         {card.story_points > 0 && (
           <span className="min-w-[24px] h-6 px-1.5 flex items-center justify-center rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-extrabold border border-indigo-100 shadow-sm" title="Story Points">
             {card.story_points}
@@ -230,7 +169,8 @@ const CardItem = ({ card, listId, isOverlay }) => {
       </div>
 
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm rounded-lg p-0.5 shadow-sm border border-slate-100">
-        <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit2 size={14} /></button>
+        {/* 👉 GẮN HÀM MỚI VÀO NÚT EDIT NÀY */}
+        <button onClick={handleOpenEdit} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit2 size={14} /></button>
         <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa thẻ này?")) deleteCard(listId, card.id); }} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14} /></button>
       </div>
     </div>
