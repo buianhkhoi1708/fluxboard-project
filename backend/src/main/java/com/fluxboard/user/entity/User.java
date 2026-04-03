@@ -12,7 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "users")
 @Data
-@EqualsAndHashCode(callSuper = true) 
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class User extends BaseDocument {

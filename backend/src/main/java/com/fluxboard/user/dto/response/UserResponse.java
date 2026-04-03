@@ -1,11 +1,11 @@
-package com.fluxboard.user.dto;
+package com.fluxboard.user.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.time.Instant;
 
 @Data
-public class UserResponseDto {
+public class UserResponse {
     private String id;
     
     private String email;
