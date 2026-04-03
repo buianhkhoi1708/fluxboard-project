@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MoreHorizontal, Plus, X, Trash2 } from 'lucide-react';
 import CardItem from './CardItem';
-import { useBoardStore } from '../store/useBoardStore';
+import { useBoardStore } from '../stores/useBoardStore';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 

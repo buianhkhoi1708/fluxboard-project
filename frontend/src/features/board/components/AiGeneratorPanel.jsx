@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useBoardStore } from '../store/useBoardStore';
+import { useBoardStore } from '../stores/useBoardStore';
 import { Sparkles, Loader2, Zap } from 'lucide-react';
 
 const AiGeneratorPanel = () => {

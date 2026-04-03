@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Column from './Column';
 import CardItem from './CardItem';
-import { useBoardStore } from '../store/useBoardStore'; 
+import { useBoardStore } from '../stores/useBoardStore'; 
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { X } from 'lucide-react'; 
