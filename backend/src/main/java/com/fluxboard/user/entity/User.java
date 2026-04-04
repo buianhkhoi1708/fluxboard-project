@@ -1,40 +1,90 @@
 package com.fluxboard.user.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fluxboard.common.entity.BaseDocument;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "users")
-@Data
-@EqualsAndHashCode(callSuper = true)
-@NoArgsConstructor
-@AllArgsConstructor
 public class User extends BaseDocument {
 
     @Indexed(unique = true)
+    @Field("email")
     private String email;
 
     @JsonIgnore
+    @Field("password")
     private String password;
 
-    @JsonProperty("full_name")
+    @Field("full_name")
     private String fullName;
 
-    @JsonProperty("avatar_url")
+    @Field("avatar_url")
     private String avatarUrl = "https://ui-avatars.com/api/?name=User&background=random";
 
-    @JsonProperty("role_id")
+    @Field("role_id")
     private String roleId;
 
-    @JsonProperty("department_id")
+    @Field("department_id")
     private String departmentId;
 
-    @JsonProperty("team_id")
+    @Field("team_id")
     private String teamId;
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public String getRoleId() {
+        return roleId;
+    }
+
+    public void setRoleId(String roleId) {
+        this.roleId = roleId;
+    }
+
+    public String getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(String departmentId) {
+        this.departmentId = departmentId;
+    }
+
+    public String getTeamId() {
+        return teamId;
+    }
+
+    public void setTeamId(String teamId) {
+        this.teamId = teamId;
+    }
 }

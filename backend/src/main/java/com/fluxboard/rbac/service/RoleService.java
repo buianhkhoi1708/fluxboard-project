@@ -3,6 +3,7 @@ package com.fluxboard.rbac.service;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
+import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.rbac.dto.request.CreateRoleRequest;
 import com.fluxboard.rbac.dto.request.UpdateRoleRequest;
 import com.fluxboard.rbac.dto.response.RoleResponse;
@@ -33,7 +34,7 @@ public class RoleService implements CrudService<RoleResponse, String, CreateRole
         RoleEntity entity = new RoleEntity();
         entity.setName(request.name());
         entity.setScope(request.scope());
-        entity.setDescription(normalizeNullableText(request.description()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
 
         return toResponse(roleRepository.save(entity));
     }
@@ -58,7 +59,7 @@ public class RoleService implements CrudService<RoleResponse, String, CreateRole
 
         entity.setName(request.name());
         entity.setScope(request.scope());
-        entity.setDescription(normalizeNullableText(request.description()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
 
         return toResponse(roleRepository.save(entity));
     }
@@ -70,17 +71,9 @@ public class RoleService implements CrudService<RoleResponse, String, CreateRole
         roleRepository.delete(entity);
     }
 
-    RoleEntity findRoleById(String roleId) {
-        return roleRepository.findById(roleId)
+    RoleEntity findRoleById(String id) {
+        return roleRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Role not found."));
-    }
-
-    private String normalizeNullableText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private RoleResponse toResponse(RoleEntity entity) {
@@ -90,7 +83,6 @@ public class RoleService implements CrudService<RoleResponse, String, CreateRole
                 entity.getScope(),
                 entity.getDescription(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
+                entity.getUpdatedAt());
     }
 }
