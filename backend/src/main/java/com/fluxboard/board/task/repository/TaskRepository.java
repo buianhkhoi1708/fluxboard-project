@@ -1,0 +1,30 @@
+package com.fluxboard.board.task.repository;
+
+import com.fluxboard.board.task.entity.TaskEntity;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface TaskRepository extends MongoRepository<TaskEntity, String> {
+
+    Optional<TaskEntity> findByIdAndDeletedFalse(String id);
+
+    Page<TaskEntity> findByDeletedFalse(Pageable pageable);
+
+    Page<TaskEntity> findByColumnIdAndDeletedFalse(String columnId, Pageable pageable);
+
+    Page<TaskEntity> findByColumnIdInAndDeletedFalse(List<String> columnIds, Pageable pageable);
+
+    List<TaskEntity> findByColumnIdInAndDeletedFalse(List<String> columnIds);
+
+    List<TaskEntity> findByColumnIdAndDeletedFalseOrderByOrderAsc(String columnId);
+
+    List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanEqualOrderByOrderAsc(
+            String columnId,
+            int order
+    );
+
+    List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(String columnId, int order);
+}

@@ -1,5 +1,6 @@
 package com.fluxboard.common.exception;
 
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fluxboard.common.dto.ApiErrorResponse;
 import com.fluxboard.common.dto.FieldErrorDetail;
 import com.fluxboard.common.filter.RequestIdFilter;
@@ -105,6 +106,21 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException ex,
             HttpServletRequest request
     ) {
+        UnrecognizedPropertyException unrecognizedPropertyException = findCause(
+                ex,
+                UnrecognizedPropertyException.class
+        );
+        if (unrecognizedPropertyException != null) {
+            String propertyName = unrecognizedPropertyException.getPropertyName();
+            List<FieldErrorDetail> errors = List.of(new FieldErrorDetail(propertyName, "Unknown field is not allowed."));
+            return buildErrorResponse(
+                    ErrorCode.BAD_REQUEST,
+                    "Unknown field '" + propertyName + "' is not allowed.",
+                    request.getRequestURI(),
+                    errors
+            );
+        }
+
         return buildErrorResponse(
                 ErrorCode.MALFORMED_JSON,
                 ErrorCode.MALFORMED_JSON.getDefaultMessage(),
@@ -167,6 +183,17 @@ public class GlobalExceptionHandler {
     private FieldErrorDetail toFieldErrorDetail(ConstraintViolation<?> violation) {
         String path = violation.getPropertyPath() != null ? violation.getPropertyPath().toString() : "";
         return new FieldErrorDetail(path, violation.getMessage());
+    }
+
+    private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private ResponseEntity<ApiErrorResponse> buildErrorResponse(

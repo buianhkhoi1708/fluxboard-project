@@ -3,6 +3,7 @@ package com.fluxboard.rbac.service;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
+import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.rbac.dto.request.CreatePermissionRequest;
 import com.fluxboard.rbac.dto.request.UpdatePermissionRequest;
 import com.fluxboard.rbac.dto.response.PermissionResponse;
@@ -29,8 +30,8 @@ public class PermissionService implements CrudService<PermissionResponse, String
 
     @Override
     public PermissionResponse create(CreatePermissionRequest request) {
-        String normalizedCode = normalizeText(request.code());
-        String normalizedModule = normalizeText(request.module());
+        String normalizedCode = TextUtils.trim(request.code());
+        String normalizedModule = TextUtils.trim(request.module());
         if (permissionRepository.existsByCode(normalizedCode)) {
             throw new AppException(ErrorCode.CONFLICT, "Permission code already exists.");
         }
@@ -38,7 +39,7 @@ public class PermissionService implements CrudService<PermissionResponse, String
         PermissionEntity entity = new PermissionEntity();
         entity.setCode(normalizedCode);
         entity.setModule(normalizedModule);
-        entity.setDescription(normalizeNullableText(request.description()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
 
         return toResponse(permissionRepository.save(entity));
     }
@@ -56,8 +57,8 @@ public class PermissionService implements CrudService<PermissionResponse, String
     @Override
     public PermissionResponse update(String id, UpdatePermissionRequest request) {
         PermissionEntity entity = findPermissionById(id);
-        String normalizedCode = normalizeText(request.code());
-        String normalizedModule = normalizeText(request.module());
+        String normalizedCode = TextUtils.trim(request.code());
+        String normalizedModule = TextUtils.trim(request.module());
 
         if (permissionRepository.existsByCodeAndIdNot(normalizedCode, id)) {
             throw new AppException(ErrorCode.CONFLICT, "Permission code already exists.");
@@ -65,7 +66,7 @@ public class PermissionService implements CrudService<PermissionResponse, String
 
         entity.setCode(normalizedCode);
         entity.setModule(normalizedModule);
-        entity.setDescription(normalizeNullableText(request.description()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
 
         return toResponse(permissionRepository.save(entity));
     }
@@ -85,18 +86,6 @@ public class PermissionService implements CrudService<PermissionResponse, String
     PermissionEntity findPermissionByCode(String code) {
         return permissionRepository.findByCode(code)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Permission not found."));
-    }
-
-    private String normalizeText(String value) {
-        return value == null ? null : value.trim();
-    }
-
-    private String normalizeNullableText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private PermissionResponse toResponse(PermissionEntity entity) {
