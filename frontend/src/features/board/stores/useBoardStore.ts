@@ -56,7 +56,7 @@ interface IBoardState {
   deleteList: (listId: string) => void;
 
   // Thao tác Thẻ (Cards)
-  addCard: (listId: string, title: string, description?: string) => void;
+  addCard: (listId: string, cardData: { title: string; description?: string; assignee?: string; priority?: 'Low' | 'Medium' | 'High' | 'Critical'; story_points?: number; tags?: string; }) => void;
   deleteCard: (listId: string, cardId: string) => void;
   updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
   toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
