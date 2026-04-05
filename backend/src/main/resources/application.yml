@@ -6,6 +6,9 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/fluxboard_db}
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   mvc:
     throw-exception-if-no-handler-found: true
   web:

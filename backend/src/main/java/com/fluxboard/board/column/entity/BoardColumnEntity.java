@@ -6,7 +6,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "board_column")
-@CompoundIndex(name = "idx_board_position", def = "{'board_id': 1, 'position': 1}")
+@CompoundIndex(name = "uniq_board_order_active", def = "{'board_id': 1, 'order': 1, 'is_deleted': 1}", unique = true)
 public class BoardColumnEntity extends BaseDocument {
 
     @Field("board_id")
@@ -15,11 +15,8 @@ public class BoardColumnEntity extends BaseDocument {
     @Field("name")
     private String name;
 
-    @Field("position")
-    private int position;
-
-    @Field("is_done_column")
-    private boolean doneColumn;
+    @Field("order")
+    private int order;
 
     public String getBoardId() {
         return boardId;
@@ -37,19 +34,11 @@ public class BoardColumnEntity extends BaseDocument {
         this.name = name;
     }
 
-    public int getPosition() {
-        return position;
+    public int getOrder() {
+        return order;
     }
 
-    public void setPosition(int position) {
-        this.position = position;
-    }
-
-    public boolean isDoneColumn() {
-        return doneColumn;
-    }
-
-    public void setDoneColumn(boolean doneColumn) {
-        this.doneColumn = doneColumn;
+    public void setOrder(int order) {
+        this.order = order;
     }
 }

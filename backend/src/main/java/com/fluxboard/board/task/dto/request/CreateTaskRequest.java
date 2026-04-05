@@ -1,44 +1,48 @@
 package com.fluxboard.board.task.dto.request;
 
+import com.fluxboard.board.task.enums.TaskPriority;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
 
 public record CreateTaskRequest(
-        @NotBlank(message = "Task code must not be blank.")
-        @Size(max = 80, message = "Task code must be at most 80 characters.")
-        String taskCode,
+        @NotBlank(message = "Title must not be blank.")
+        @Size(max = 200, message = "Title must be at most 200 characters.")
+        String title,
 
-        @NotBlank(message = "Project ID must not be blank.")
-        String projectId,
+        @Size(max = 5000, message = "Description must be at most 5000 characters.")
+        String description,
 
-        @NotBlank(message = "Board ID must not be blank.")
-        String boardId,
-
-        @NotBlank(message = "List ID must not be blank.")
-        String listId,
-
-        String sprintId,
+        @NotBlank(message = "Column ID must not be blank.")
+        String columnId,
 
         String parentTaskId,
 
-        @NotBlank(message = "Reporter user ID must not be blank.")
-        String reporterUserId,
+        List<String> assigneesUserId,
 
-        List<String> assigneeIds,
+        @NotNull(message = "Priority is required.")
+        TaskPriority priority,
 
-        List<String> labelIds,
+        Instant startDate,
+
+        Instant dueDate,
 
         @NotBlank(message = "Status must not be blank.")
         @Size(max = 50, message = "Status must be at most 50 characters.")
         String status,
 
-        @NotBlank(message = "Priority must not be blank.")
-        @Size(max = 50, message = "Priority must be at most 50 characters.")
-        String priority,
+        @Min(value = 0, message = "Story point must be at least 0.")
+        Integer storyPoint,
 
-        @Min(value = 1, message = "Position must be at least 1.")
-        Integer position
+        Instant estimatedDate,
+
+        @Min(value = 0, message = "AI suggested point must be at least 0.")
+        Integer aiSuggestedPoint,
+
+        @Size(max = 2000, message = "AI estimated reason must be at most 2000 characters.")
+        String aiEstimatedReason
 ) {
 }

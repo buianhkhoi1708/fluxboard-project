@@ -1,12 +1,13 @@
 package com.fluxboard.board.task.service;
 
-import com.fluxboard.board.entity.BoardEntity;
-import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
+import com.fluxboard.board.entity.BoardEntity;
+import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
+import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.common.exception.AppException;
@@ -15,12 +16,17 @@ import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
+import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -49,162 +55,214 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
     @Override
     public TaskResponse create(CreateTaskRequest request) {
-        String projectId = TextUtils.trim(request.projectId());
-        findProjectById(projectId);
+        return create(request, null);
+    }
 
-        String boardId = TextUtils.trim(request.boardId());
-        BoardEntity board = findBoardById(boardId);
-        if (!projectId.equals(board.getProjectId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Board must belong to the same project.");
-        }
+    public TaskResponse create(CreateTaskRequest request, String authorUserId) {
+        String columnId = TextUtils.trim(request.columnId());
+        BoardColumnEntity column = findBoardColumnById(columnId);
+        String boardId = column.getBoardId();
 
-        String listId = TextUtils.trim(request.listId());
-        BoardColumnEntity column = findBoardColumnById(listId);
-        if (!boardId.equals(column.getBoardId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Board column must belong to the same board.");
-        }
+        String normalizedAuthorUserId = requireAuthenticatedUserId(authorUserId);
+        validateUserExists(normalizedAuthorUserId, "Author user does not exist.");
 
-        String taskCode = TextUtils.trim(request.taskCode());
-        if (taskRepository.existsByProjectIdAndTaskCodeAndDeletedFalse(projectId, taskCode)) {
-            throw new AppException(ErrorCode.CONFLICT, "Task code already exists in this project.");
-        }
+        List<String> assigneesUserId = normalizeIdList(request.assigneesUserId());
+        validateUsersExist(assigneesUserId, "Assignee user does not exist: ");
 
-        String reporterUserId = TextUtils.trim(request.reporterUserId());
-        validateUserExists(reporterUserId, "Reporter user does not exist.");
+        String parentTaskId = validateAndNormalizeParentTask(request.parentTaskId(), columnId, boardId, null);
+        validateDateRange(request.startDate(), request.dueDate());
 
-        List<String> assigneeIds = normalizeIdList(request.assigneeIds());
-        validateUsersExist(assigneeIds, "Assignee user does not exist: ");
-
-        String parentTaskId = TextUtils.trimToNull(request.parentTaskId());
-        validateParentTask(parentTaskId, projectId, null);
-
-        int targetPosition = resolveCreatePosition(listId, request.position());
-        shiftPositionsForInsert(listId, targetPosition, null);
+        int targetOrder = nextOrder(columnId, parentTaskId);
 
         TaskEntity entity = new TaskEntity();
-        entity.setTaskCode(taskCode);
-        entity.setProjectId(projectId);
-        entity.setBoardId(boardId);
-        entity.setListId(listId);
-        entity.setSprintId(TextUtils.trimToNull(request.sprintId()));
+        entity.setTitle(TextUtils.trim(request.title()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setColumnId(columnId);
         entity.setParentTaskId(parentTaskId);
-        entity.setReporterUserId(reporterUserId);
-        entity.setAssigneeIds(assigneeIds);
-        entity.setLabelIds(normalizeIdList(request.labelIds()));
+        entity.setAssigneesUserId(assigneesUserId);
+        entity.setPriority(request.priority());
+        entity.setStartDate(request.startDate());
+        entity.setDueDate(request.dueDate());
         entity.setStatus(TextUtils.trim(request.status()));
-        entity.setPriority(TextUtils.trim(request.priority()));
-        entity.setPosition(targetPosition);
+        entity.setStoryPoint(request.storyPoint());
+        entity.setEstimatedDate(request.estimatedDate());
+        entity.setOrder(targetOrder);
+        entity.setAiSuggestedPoint(request.aiSuggestedPoint());
+        entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
+        entity.setAuthorUserId(normalizedAuthorUserId);
 
-        return toResponse(taskRepository.save(entity));
+        TaskEntity saved = taskRepository.save(entity);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+        return toResponse(saved, users);
     }
 
     @Override
     public TaskResponse getById(String id) {
-        return toResponse(findTaskById(id));
+        TaskEntity entity = findTaskById(id);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(entity));
+        return toResponse(entity, users);
     }
 
     @Override
     public Page<TaskResponse> getPage(Pageable pageable) {
-        return taskRepository.findByDeletedFalse(pageable).map(this::toResponse);
+        return toResponsePage(taskRepository.findByDeletedFalse(pageable));
     }
 
     public Page<TaskResponse> getPageByProject(String projectId, Pageable pageable) {
-        findProjectById(TextUtils.trim(projectId));
-        return taskRepository.findByProjectIdAndDeletedFalse(TextUtils.trim(projectId), pageable).map(this::toResponse);
+        String normalizedProjectId = TextUtils.trim(projectId);
+        findProjectById(normalizedProjectId);
+
+        List<String> boardIds = boardRepository.findByProjectIdAndDeletedFalse(normalizedProjectId)
+                .stream()
+                .map(BoardEntity::getId)
+                .toList();
+
+        if (boardIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        List<String> columnIds = boardColumnRepository.findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(boardIds)
+                .stream()
+                .map(BoardColumnEntity::getId)
+                .toList();
+
+        if (columnIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return toResponsePage(taskRepository.findByColumnIdInAndDeletedFalse(columnIds, pageable));
     }
 
     public Page<TaskResponse> getPageByBoard(String boardId, Pageable pageable) {
-        findBoardById(TextUtils.trim(boardId));
-        return taskRepository.findByBoardIdAndDeletedFalse(TextUtils.trim(boardId), pageable).map(this::toResponse);
+        String normalizedBoardId = TextUtils.trim(boardId);
+        findBoardById(normalizedBoardId);
+        List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(normalizedBoardId)
+                .stream()
+                .map(BoardColumnEntity::getId)
+                .toList();
+
+        if (columnIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return toResponsePage(taskRepository.findByColumnIdInAndDeletedFalse(columnIds, pageable));
     }
 
     public Page<TaskResponse> getPageByColumn(String columnId, Pageable pageable) {
-        findBoardColumnById(TextUtils.trim(columnId));
-        return taskRepository.findByListIdAndDeletedFalse(TextUtils.trim(columnId), pageable).map(this::toResponse);
+        String normalizedColumnId = TextUtils.trim(columnId);
+        findBoardColumnById(normalizedColumnId);
+        return toResponsePage(taskRepository.findByColumnIdAndDeletedFalse(normalizedColumnId, pageable));
     }
 
     public List<TaskResponse> getByColumnIdOrdered(String columnId) {
-        findBoardColumnById(TextUtils.trim(columnId));
-        return taskRepository.findByListIdAndDeletedFalseOrderByPositionAsc(TextUtils.trim(columnId))
-                .stream()
-                .map(this::toResponse)
+        String normalizedColumnId = TextUtils.trim(columnId);
+        findBoardColumnById(normalizedColumnId);
+
+        List<TaskEntity> entities = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(normalizedColumnId);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
+
+        return entities.stream()
+                .map(entity -> toResponse(entity, users))
                 .toList();
     }
 
     @Override
     public TaskResponse update(String id, UpdateTaskRequest request) {
         TaskEntity entity = findTaskById(id);
-        String projectId = entity.getProjectId();
 
-        String boardId = TextUtils.trim(request.boardId());
-        BoardEntity board = findBoardById(boardId);
-        if (!projectId.equals(board.getProjectId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Board must belong to the same project.");
-        }
+        String columnId = TextUtils.trim(request.columnId());
+        BoardColumnEntity column = findBoardColumnById(columnId);
+        String boardId = column.getBoardId();
 
-        String listId = TextUtils.trim(request.listId());
-        BoardColumnEntity column = findBoardColumnById(listId);
-        if (!boardId.equals(column.getBoardId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Board column must belong to the same board.");
-        }
+        List<String> assigneesUserId = normalizeIdList(request.assigneesUserId());
+        validateUsersExist(assigneesUserId, "Assignee user does not exist: ");
 
-        String taskCode = TextUtils.trim(request.taskCode());
-        if (taskRepository.existsByProjectIdAndTaskCodeAndIdNotAndDeletedFalse(projectId, taskCode, id)) {
-            throw new AppException(ErrorCode.CONFLICT, "Task code already exists in this project.");
-        }
+        String parentTaskId = validateAndNormalizeParentTask(request.parentTaskId(), columnId, boardId, id);
+        validateDateRange(request.startDate(), request.dueDate());
 
-        String reporterUserId = TextUtils.trim(request.reporterUserId());
-        validateUserExists(reporterUserId, "Reporter user does not exist.");
+        String currentColumnId = entity.getColumnId();
+        String currentParentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
+        int currentOrder = entity.getOrder();
+        boolean sameGroup = currentColumnId.equals(columnId)
+                && sameParentTask(currentParentTaskId, parentTaskId);
+        int targetOrder = resolveUpdateOrder(
+                columnId,
+                parentTaskId,
+                request.order(),
+                sameGroup ? currentOrder : null
+        );
 
-        List<String> assigneeIds = normalizeIdList(request.assigneeIds());
-        validateUsersExist(assigneeIds, "Assignee user does not exist: ");
-
-        String parentTaskId = TextUtils.trimToNull(request.parentTaskId());
-        validateParentTask(parentTaskId, projectId, id);
-
-        String currentListId = entity.getListId();
-        int currentPosition = entity.getPosition();
-        boolean sameList = currentListId.equals(listId);
-        int targetPosition = resolveUpdatePosition(listId, request.position(), sameList ? currentPosition : null);
-
-        if (sameList) {
-            if (targetPosition != currentPosition) {
-                moveInsideList(listId, currentPosition, targetPosition, entity.getId());
+        if (sameGroup) {
+            if (targetOrder != currentOrder) {
+                moveInsideColumnGroup(columnId, parentTaskId, currentOrder, targetOrder, entity.getId());
             }
         } else {
-            shiftPositionsForInsert(listId, targetPosition, null);
-            shiftPositionsAfterDelete(currentListId, currentPosition, entity.getId());
+            shiftOrdersForInsert(columnId, parentTaskId, targetOrder, null);
+            shiftOrdersAfterDelete(currentColumnId, currentParentTaskId, currentOrder, entity.getId());
         }
 
-        entity.setTaskCode(taskCode);
-        entity.setBoardId(boardId);
-        entity.setListId(listId);
-        entity.setSprintId(TextUtils.trimToNull(request.sprintId()));
+        entity.setTitle(TextUtils.trim(request.title()));
+        entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setColumnId(columnId);
         entity.setParentTaskId(parentTaskId);
-        entity.setReporterUserId(reporterUserId);
-        entity.setAssigneeIds(assigneeIds);
-        entity.setLabelIds(normalizeIdList(request.labelIds()));
+        entity.setAssigneesUserId(assigneesUserId);
+        entity.setPriority(request.priority());
+        entity.setStartDate(request.startDate());
+        entity.setDueDate(request.dueDate());
         entity.setStatus(TextUtils.trim(request.status()));
-        entity.setPriority(TextUtils.trim(request.priority()));
-        entity.setPosition(targetPosition);
+        entity.setStoryPoint(request.storyPoint());
+        entity.setEstimatedDate(request.estimatedDate());
+        entity.setOrder(targetOrder);
+        entity.setAiSuggestedPoint(request.aiSuggestedPoint());
+        entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
 
-        return toResponse(taskRepository.save(entity));
+        TaskEntity saved = taskRepository.save(entity);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+        return toResponse(saved, users);
     }
 
     @Override
     public void delete(String id) {
         TaskEntity entity = findTaskById(id);
-        int currentPosition = entity.getPosition();
-        String listId = entity.getListId();
+        String columnId = entity.getColumnId();
 
-        entity.markDeleted();
-        taskRepository.save(entity);
+        List<TaskEntity> columnTasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(columnId);
+        Map<String, List<TaskEntity>> childrenByParentId = buildChildrenByParentId(columnTasks);
+        Set<String> deletedTaskIds = collectSubtreeTaskIds(entity.getId(), childrenByParentId);
 
-        shiftPositionsAfterDelete(listId, currentPosition, entity.getId());
+        if (deletedTaskIds.isEmpty()) {
+            return;
+        }
+
+        List<TaskEntity> toDelete = new ArrayList<>();
+        Set<String> affectedGroupKeys = new LinkedHashSet<>();
+
+        for (TaskEntity task : columnTasks) {
+            if (!deletedTaskIds.contains(task.getId())) {
+                continue;
+            }
+            affectedGroupKeys.add(toGroupKey(task.getParentTaskId()));
+            task.markDeleted();
+            toDelete.add(task);
+        }
+        taskRepository.saveAll(toDelete);
+
+        List<TaskEntity> toResequence = resequenceAfterDelete(columnTasks, deletedTaskIds, affectedGroupKeys);
+        if (!toResequence.isEmpty()) {
+            taskRepository.saveAll(toResequence);
+        }
     }
 
     public void softDeleteByBoardId(String boardId) {
-        List<TaskEntity> tasks = taskRepository.findByBoardIdAndDeletedFalse(TextUtils.trim(boardId));
+        List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
+                .stream()
+                .map(BoardColumnEntity::getId)
+                .toList();
+        if (columnIds.isEmpty()) {
+            return;
+        }
+
+        List<TaskEntity> tasks = taskRepository.findByColumnIdInAndDeletedFalse(columnIds);
         if (tasks.isEmpty()) {
             return;
         }
@@ -216,7 +274,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     }
 
     public void softDeleteByColumnId(String columnId) {
-        List<TaskEntity> tasks = taskRepository.findByListIdAndDeletedFalseOrderByPositionAsc(TextUtils.trim(columnId));
+        List<TaskEntity> tasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(columnId));
         if (tasks.isEmpty()) {
             return;
         }
@@ -238,28 +296,72 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     }
 
     private BoardEntity findBoardById(String boardId) {
-        return boardRepository.findByIdAndDeletedFalse(boardId)
+        BoardEntity board = boardRepository.findByIdAndDeletedFalse(boardId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board not found."));
+
+        if (!projectRepository.existsByIdAndDeletedFalse(board.getProjectId())) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Board not found.");
+        }
+
+        return board;
     }
 
     private BoardColumnEntity findBoardColumnById(String columnId) {
-        return boardColumnRepository.findByIdAndDeletedFalse(columnId)
+        BoardColumnEntity column = boardColumnRepository.findByIdAndDeletedFalse(columnId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board column not found."));
+        findBoardById(column.getBoardId());
+        return column;
     }
 
-    private void validateParentTask(String parentTaskId, String projectId, String selfTaskId) {
-        if (parentTaskId == null) {
-            return;
+    private String validateAndNormalizeParentTask(
+            String parentTaskId,
+            String columnId,
+            String boardId,
+            String selfTaskId
+    ) {
+        String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
+        if (normalizedParentTaskId == null) {
+            return null;
         }
 
-        if (selfTaskId != null && selfTaskId.equals(parentTaskId)) {
+        if (selfTaskId != null && selfTaskId.equals(normalizedParentTaskId)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Task cannot be parent of itself.");
         }
 
-        TaskEntity parentTask = taskRepository.findByIdAndDeletedFalse(parentTaskId)
+        TaskEntity parentTask = taskRepository.findByIdAndDeletedFalse(normalizedParentTaskId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Parent task does not exist."));
-        if (!projectId.equals(parentTask.getProjectId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Parent task must belong to the same project.");
+        BoardColumnEntity parentColumn = findBoardColumnById(parentTask.getColumnId());
+        if (!boardId.equals(parentColumn.getBoardId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Parent task must belong to the same board.");
+        }
+        if (!columnId.equals(parentTask.getColumnId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Subtask must belong to the same column as parent task.");
+        }
+
+        if (selfTaskId != null) {
+            validateNoParentCycle(selfTaskId, normalizedParentTaskId);
+        }
+
+        return normalizedParentTaskId;
+    }
+
+    private void validateNoParentCycle(String selfTaskId, String candidateParentTaskId) {
+        String cursor = TextUtils.trimToNull(candidateParentTaskId);
+        Set<String> visited = new LinkedHashSet<>();
+
+        while (cursor != null) {
+            if (!visited.add(cursor)) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Circular parent reference is not allowed.");
+            }
+
+            if (selfTaskId.equals(cursor)) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Circular parent reference is not allowed.");
+            }
+
+            TaskEntity current = taskRepository.findByIdAndDeletedFalse(cursor)
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Parent task does not exist."));
+
+            cursor = TextUtils.trimToNull(current.getParentTaskId());
         }
     }
 
@@ -274,6 +376,20 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             if (!userRepository.existsByIdAndDeletedFalse(userId)) {
                 throw new AppException(ErrorCode.BAD_REQUEST, prefixMessage + userId);
             }
+        }
+    }
+
+    private String requireAuthenticatedUserId(String userId) {
+        String normalizedUserId = TextUtils.trimToNull(userId);
+        if (normalizedUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Authenticated user is required.");
+        }
+        return normalizedUserId;
+    }
+
+    private void validateDateRange(Instant startDate, Instant dueDate) {
+        if (startDate != null && dueDate != null && dueDate.isBefore(startDate)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Due date must be after or equal to start date.");
         }
     }
 
@@ -293,99 +409,253 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return new ArrayList<>(unique);
     }
 
-    private int resolveCreatePosition(String listId, Integer requestedPosition) {
-        int appendPosition = nextPosition(listId);
-        if (requestedPosition == null) {
-            return appendPosition;
-        }
-        return Math.min(Math.max(requestedPosition, 1), appendPosition);
-    }
-
-    private int resolveUpdatePosition(String listId, Integer requestedPosition, Integer currentPositionIfSameList) {
-        if (requestedPosition == null) {
-            if (currentPositionIfSameList != null) {
-                return currentPositionIfSameList;
+    private int resolveUpdateOrder(
+            String columnId,
+            String parentTaskId,
+            Integer requestedOrder,
+            Integer currentOrderIfSameGroup
+    ) {
+        if (requestedOrder == null) {
+            if (currentOrderIfSameGroup != null) {
+                return currentOrderIfSameGroup;
             }
-            return nextPosition(listId);
+            return nextOrder(columnId, parentTaskId);
         }
 
-        int maxPosition = currentPositionIfSameList != null
-                ? Math.max(listSize(listId), 1)
-                : nextPosition(listId);
+        int maxOrder = currentOrderIfSameGroup != null
+                ? Math.max(listSize(columnId, parentTaskId), 1)
+                : nextOrder(columnId, parentTaskId);
 
-        return Math.min(Math.max(requestedPosition, 1), maxPosition);
+        return Math.min(Math.max(requestedOrder, 1), maxOrder);
     }
 
-    private int nextPosition(String listId) {
-        List<TaskEntity> tasks = taskRepository.findByListIdAndDeletedFalseOrderByPositionAsc(listId);
+    private int nextOrder(String columnId, String parentTaskId) {
+        List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         if (tasks.isEmpty()) {
             return 1;
         }
-        return tasks.get(tasks.size() - 1).getPosition() + 1;
+        return tasks.get(tasks.size() - 1).getOrder() + 1;
     }
 
-    private int listSize(String listId) {
-        return taskRepository.findByListIdAndDeletedFalseOrderByPositionAsc(listId).size();
+    private int listSize(String columnId, String parentTaskId) {
+        return findTasksByColumnAndParent(columnId, parentTaskId).size();
     }
 
-    private void shiftPositionsForInsert(String listId, int fromPosition, String exceptId) {
-        List<TaskEntity> tasks = taskRepository
-                .findByListIdAndDeletedFalseAndPositionGreaterThanEqualOrderByPositionAsc(listId, fromPosition);
+    private void shiftOrdersForInsert(String columnId, String parentTaskId, int fromOrder, String exceptId) {
+        List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
             if (exceptId != null && exceptId.equals(task.getId())) {
                 continue;
             }
-            task.setPosition(task.getPosition() + 1);
+            if (task.getOrder() >= fromOrder) {
+                task.setOrder(task.getOrder() + 1);
+            }
         }
         taskRepository.saveAll(tasks);
     }
 
-    private void shiftPositionsAfterDelete(String listId, int fromPosition, String exceptId) {
-        List<TaskEntity> tasks = taskRepository
-                .findByListIdAndDeletedFalseAndPositionGreaterThanOrderByPositionAsc(listId, fromPosition);
+    private void shiftOrdersAfterDelete(String columnId, String parentTaskId, int fromOrder, String exceptId) {
+        List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
             if (exceptId != null && exceptId.equals(task.getId())) {
                 continue;
             }
-            task.setPosition(task.getPosition() - 1);
+            if (task.getOrder() > fromOrder) {
+                task.setOrder(task.getOrder() - 1);
+            }
         }
         taskRepository.saveAll(tasks);
     }
 
-    private void moveInsideList(String listId, int currentPosition, int targetPosition, String taskId) {
-        List<TaskEntity> tasks = taskRepository.findByListIdAndDeletedFalseOrderByPositionAsc(listId);
+    private void moveInsideColumnGroup(
+            String columnId,
+            String parentTaskId,
+            int currentOrder,
+            int targetOrder,
+            String taskId
+    ) {
+        List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
             if (taskId.equals(task.getId())) {
                 continue;
             }
 
-            int position = task.getPosition();
-            if (targetPosition > currentPosition) {
-                if (position > currentPosition && position <= targetPosition) {
-                    task.setPosition(position - 1);
+            int order = task.getOrder();
+            if (targetOrder > currentOrder) {
+                if (order > currentOrder && order <= targetOrder) {
+                    task.setOrder(order - 1);
                 }
-            } else if (position >= targetPosition && position < currentPosition) {
-                task.setPosition(position + 1);
+            } else if (order >= targetOrder && order < currentOrder) {
+                task.setOrder(order + 1);
             }
         }
         taskRepository.saveAll(tasks);
     }
 
-    private TaskResponse toResponse(TaskEntity entity) {
+    private List<TaskEntity> findTasksByColumnAndParent(String columnId, String parentTaskId) {
+        String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
+        return taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(columnId).stream()
+                .filter(task -> sameParentTask(TextUtils.trimToNull(task.getParentTaskId()), normalizedParentTaskId))
+                .toList();
+    }
+
+    private boolean sameParentTask(String firstParentTaskId, String secondParentTaskId) {
+        String normalizedFirstParentTaskId = TextUtils.trimToNull(firstParentTaskId);
+        String normalizedSecondParentTaskId = TextUtils.trimToNull(secondParentTaskId);
+        if (normalizedFirstParentTaskId == null) {
+            return normalizedSecondParentTaskId == null;
+        }
+        return normalizedFirstParentTaskId.equals(normalizedSecondParentTaskId);
+    }
+
+    private Map<String, List<TaskEntity>> buildChildrenByParentId(List<TaskEntity> tasks) {
+        Map<String, List<TaskEntity>> result = new HashMap<>();
+
+        for (TaskEntity task : tasks) {
+            String parentTaskId = TextUtils.trimToNull(task.getParentTaskId());
+            if (parentTaskId == null) {
+                continue;
+            }
+            result.computeIfAbsent(parentTaskId, ignored -> new ArrayList<>()).add(task);
+        }
+
+        return result;
+    }
+
+    private Set<String> collectSubtreeTaskIds(String rootTaskId, Map<String, List<TaskEntity>> childrenByParentId) {
+        Set<String> result = new LinkedHashSet<>();
+        List<String> stack = new ArrayList<>();
+        stack.add(rootTaskId);
+
+        while (!stack.isEmpty()) {
+            String currentTaskId = stack.remove(stack.size() - 1);
+            if (!result.add(currentTaskId)) {
+                continue;
+            }
+
+            List<TaskEntity> children = childrenByParentId.getOrDefault(currentTaskId, List.of());
+            for (TaskEntity child : children) {
+                stack.add(child.getId());
+            }
+        }
+
+        return result;
+    }
+
+    private List<TaskEntity> resequenceAfterDelete(
+            List<TaskEntity> columnTasks,
+            Set<String> deletedTaskIds,
+            Set<String> affectedGroupKeys
+    ) {
+        List<TaskEntity> result = new ArrayList<>();
+
+        for (String groupKey : affectedGroupKeys) {
+            String parentTaskId = fromGroupKey(groupKey);
+            List<TaskEntity> siblings = columnTasks.stream()
+                    .filter(task -> !deletedTaskIds.contains(task.getId()))
+                    .filter(task -> sameParentTask(task.getParentTaskId(), parentTaskId))
+                    .toList();
+
+            int expectedOrder = 1;
+            for (TaskEntity sibling : siblings) {
+                if (sibling.getOrder() != expectedOrder) {
+                    sibling.setOrder(expectedOrder);
+                    result.add(sibling);
+                }
+                expectedOrder++;
+            }
+        }
+
+        return result;
+    }
+
+    private String toGroupKey(String parentTaskId) {
+        String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
+        return normalizedParentTaskId == null ? "__ROOT__" : normalizedParentTaskId;
+    }
+
+    private String fromGroupKey(String groupKey) {
+        return "__ROOT__".equals(groupKey) ? null : groupKey;
+    }
+
+    private Page<TaskResponse> toResponsePage(Page<TaskEntity> entityPage) {
+        List<TaskEntity> entities = entityPage.getContent();
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
+
+        List<TaskResponse> responses = entities.stream()
+                .map(entity -> toResponse(entity, users))
+                .toList();
+
+        return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
+    }
+
+    private Map<String, TaskUserSummaryResponse> resolveUserSummaries(List<TaskEntity> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<String> userIds = new LinkedHashSet<>();
+        for (TaskEntity entity : entities) {
+            String authorUserId = TextUtils.trimToNull(entity.getAuthorUserId());
+            if (authorUserId != null) {
+                userIds.add(authorUserId);
+            }
+
+            if (entity.getAssigneesUserId() != null) {
+                for (String assigneeId : entity.getAssigneesUserId()) {
+                    String normalized = TextUtils.trimToNull(assigneeId);
+                    if (normalized != null) {
+                        userIds.add(normalized);
+                    }
+                }
+            }
+        }
+
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<User> users = userRepository.findByIdInAndDeletedFalse(new ArrayList<>(userIds));
+        Map<String, TaskUserSummaryResponse> result = new HashMap<>();
+        for (User user : users) {
+            result.put(user.getId(), new TaskUserSummaryResponse(user.getId(), user.getFullName(), user.getAvatarUrl()));
+        }
+        return result;
+    }
+
+    private TaskResponse toResponse(TaskEntity entity, Map<String, TaskUserSummaryResponse> users) {
+        List<TaskUserSummaryResponse> assignees = entity.getAssigneesUserId() == null
+                ? List.of()
+                : entity.getAssigneesUserId().stream()
+                .map(TextUtils::trimToNull)
+                .filter(assigneeId -> assigneeId != null)
+                .map(assigneeId -> users.getOrDefault(
+                        assigneeId,
+                        new TaskUserSummaryResponse(assigneeId, null, null)
+                ))
+                .toList();
+
+        String authorId = TextUtils.trimToNull(entity.getAuthorUserId());
+        TaskUserSummaryResponse author = authorId == null
+                ? null
+                : users.getOrDefault(authorId, new TaskUserSummaryResponse(authorId, null, null));
+
         return new TaskResponse(
                 entity.getId(),
-                entity.getTaskCode(),
-                entity.getProjectId(),
-                entity.getBoardId(),
-                entity.getListId(),
-                entity.getSprintId(),
+                entity.getTitle(),
+                entity.getDescription(),
                 entity.getParentTaskId(),
-                entity.getReporterUserId(),
-                entity.getAssigneeIds() == null ? List.of() : List.copyOf(entity.getAssigneeIds()),
-                entity.getLabelIds() == null ? List.of() : List.copyOf(entity.getLabelIds()),
-                entity.getStatus(),
+                assignees,
                 entity.getPriority(),
-                entity.getPosition(),
+                entity.getStartDate(),
+                entity.getDueDate(),
+                entity.getStatus(),
+                entity.getStoryPoint(),
+                entity.getEstimatedDate(),
+                entity.getOrder(),
+                entity.getAiSuggestedPoint(),
+                entity.getAiEstimatedReason(),
+                author,
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

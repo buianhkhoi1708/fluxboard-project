@@ -1,17 +1,18 @@
 package com.fluxboard.board.column.service;
 
-import com.fluxboard.board.entity.BoardEntity;
-import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.column.dto.request.CreateBoardColumnRequest;
 import com.fluxboard.board.column.dto.request.UpdateBoardColumnRequest;
 import com.fluxboard.board.column.dto.response.BoardColumnResponse;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
+import com.fluxboard.board.entity.BoardEntity;
+import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.task.service.TaskService;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.project.repository.ProjectRepository;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,15 +24,18 @@ public class BoardColumnService
 
     private final BoardColumnRepository boardColumnRepository;
     private final BoardRepository boardRepository;
+    private final ProjectRepository projectRepository;
     private final TaskService taskService;
 
     public BoardColumnService(
             BoardColumnRepository boardColumnRepository,
             BoardRepository boardRepository,
+            ProjectRepository projectRepository,
             TaskService taskService
     ) {
         this.boardColumnRepository = boardColumnRepository;
         this.boardRepository = boardRepository;
+        this.projectRepository = projectRepository;
         this.taskService = taskService;
     }
 
@@ -45,19 +49,12 @@ public class BoardColumnService
             throw new AppException(ErrorCode.CONFLICT, "Column name already exists in this board.");
         }
 
-        int targetPosition = request.position() != null ? request.position() : nextPosition(boardId);
-        shiftPositionsForInsert(boardId, targetPosition, null);
-
-        boolean doneColumn = Boolean.TRUE.equals(request.isDoneColumn());
-        if (doneColumn) {
-            clearDoneColumn(boardId, null);
-        }
+        int targetOrder = nextOrder(boardId);
 
         BoardColumnEntity entity = new BoardColumnEntity();
         entity.setBoardId(boardId);
         entity.setName(name);
-        entity.setPosition(targetPosition);
-        entity.setDoneColumn(doneColumn);
+        entity.setOrder(targetOrder);
 
         return toResponse(boardColumnRepository.save(entity));
     }
@@ -80,7 +77,7 @@ public class BoardColumnService
 
     public List<BoardColumnResponse> getByBoardIdOrdered(String boardId) {
         findBoardById(TextUtils.trim(boardId));
-        return boardColumnRepository.findByBoardIdAndDeletedFalseOrderByPositionAsc(TextUtils.trim(boardId))
+        return boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -96,23 +93,14 @@ public class BoardColumnService
             throw new AppException(ErrorCode.CONFLICT, "Column name already exists in this board.");
         }
 
-        int currentPosition = entity.getPosition();
-        int targetPosition = request.position() != null ? request.position() : currentPosition;
-        if (targetPosition != currentPosition) {
-            shiftPositionsForInsert(boardId, targetPosition, entity.getId());
-            shiftPositionsAfterDelete(boardId, currentPosition, entity.getId());
-        }
-
-        boolean doneColumn = request.isDoneColumn() != null
-                ? request.isDoneColumn()
-                : entity.isDoneColumn();
-        if (doneColumn) {
-            clearDoneColumn(boardId, entity.getId());
+        int currentOrder = entity.getOrder();
+        int targetOrder = resolveUpdateOrder(boardId, request.order(), currentOrder);
+        if (targetOrder != currentOrder) {
+            moveInsideBoard(boardId, currentOrder, targetOrder, entity.getId());
         }
 
         entity.setName(name);
-        entity.setPosition(targetPosition);
-        entity.setDoneColumn(doneColumn);
+        entity.setOrder(targetOrder);
 
         return toResponse(boardColumnRepository.save(entity));
     }
@@ -120,19 +108,18 @@ public class BoardColumnService
     @Override
     public void delete(String id) {
         BoardColumnEntity entity = findBoardColumnById(id);
-        int position = entity.getPosition();
+        int currentOrder = entity.getOrder();
         String boardId = entity.getBoardId();
         taskService.softDeleteByColumnId(entity.getId());
 
         entity.markDeleted();
-        entity.setDoneColumn(false);
         boardColumnRepository.save(entity);
 
-        shiftPositionsAfterDelete(boardId, position, entity.getId());
+        shiftOrdersAfterDelete(boardId, currentOrder, entity.getId());
     }
 
     public void initializeDefaultColumns(String boardId) {
-        List<BoardColumnEntity> existing = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByPositionAsc(boardId);
+        List<BoardColumnEntity> existing = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         if (!existing.isEmpty()) {
             return;
         }
@@ -140,26 +127,23 @@ public class BoardColumnService
         BoardColumnEntity todo = new BoardColumnEntity();
         todo.setBoardId(boardId);
         todo.setName("to do");
-        todo.setPosition(1);
-        todo.setDoneColumn(false);
+        todo.setOrder(1);
 
         BoardColumnEntity doing = new BoardColumnEntity();
         doing.setBoardId(boardId);
         doing.setName("doing");
-        doing.setPosition(2);
-        doing.setDoneColumn(false);
+        doing.setOrder(2);
 
         BoardColumnEntity done = new BoardColumnEntity();
         done.setBoardId(boardId);
         done.setName("done");
-        done.setPosition(3);
-        done.setDoneColumn(true);
+        done.setOrder(3);
 
         boardColumnRepository.saveAll(List.of(todo, doing, done));
     }
 
     public void softDeleteByBoardId(String boardId) {
-        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByPositionAsc(boardId);
+        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         if (columns.isEmpty()) {
             return;
         }
@@ -167,62 +151,77 @@ public class BoardColumnService
         for (BoardColumnEntity column : columns) {
             taskService.softDeleteByColumnId(column.getId());
             column.markDeleted();
-            column.setDoneColumn(false);
         }
         boardColumnRepository.saveAll(columns);
     }
 
     private BoardColumnEntity findBoardColumnById(String columnId) {
-        return boardColumnRepository.findByIdAndDeletedFalse(columnId)
+        BoardColumnEntity column = boardColumnRepository.findByIdAndDeletedFalse(columnId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board column not found."));
+        findBoardById(column.getBoardId());
+        return column;
     }
 
     private BoardEntity findBoardById(String boardId) {
-        return boardRepository.findByIdAndDeletedFalse(boardId)
+        BoardEntity board = boardRepository.findByIdAndDeletedFalse(boardId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board not found."));
+
+        if (!projectRepository.existsByIdAndDeletedFalse(board.getProjectId())) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Board not found.");
+        }
+
+        return board;
     }
 
-    private int nextPosition(String boardId) {
-        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByPositionAsc(boardId);
+    private int resolveUpdateOrder(String boardId, Integer requestedOrder, int currentOrder) {
+        if (requestedOrder == null) {
+            return currentOrder;
+        }
+        int maxOrder = Math.max(listSize(boardId), 1);
+        return Math.min(Math.max(requestedOrder, 1), maxOrder);
+    }
+
+    private int nextOrder(String boardId) {
+        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         if (columns.isEmpty()) {
             return 1;
         }
-        return columns.get(columns.size() - 1).getPosition() + 1;
+        return columns.get(columns.size() - 1).getOrder() + 1;
     }
 
-    private void shiftPositionsForInsert(String boardId, int fromPosition, String exceptId) {
+    private int listSize(String boardId) {
+        return boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId).size();
+    }
+
+    private void shiftOrdersAfterDelete(String boardId, int fromOrder, String exceptId) {
         List<BoardColumnEntity> columns = boardColumnRepository
-                .findByBoardIdAndDeletedFalseAndPositionGreaterThanEqualOrderByPositionAsc(boardId, fromPosition);
+                .findByBoardIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(boardId, fromOrder);
         for (BoardColumnEntity column : columns) {
             if (exceptId != null && exceptId.equals(column.getId())) {
                 continue;
             }
-            column.setPosition(column.getPosition() + 1);
+            column.setOrder(column.getOrder() - 1);
         }
         boardColumnRepository.saveAll(columns);
     }
 
-    private void shiftPositionsAfterDelete(String boardId, int fromPosition, String exceptId) {
-        List<BoardColumnEntity> columns = boardColumnRepository
-                .findByBoardIdAndDeletedFalseAndPositionGreaterThanOrderByPositionAsc(boardId, fromPosition);
+    private void moveInsideBoard(String boardId, int currentOrder, int targetOrder, String columnId) {
+        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         for (BoardColumnEntity column : columns) {
-            if (exceptId != null && exceptId.equals(column.getId())) {
+            if (columnId.equals(column.getId())) {
                 continue;
             }
-            column.setPosition(column.getPosition() - 1);
+
+            int order = column.getOrder();
+            if (targetOrder > currentOrder) {
+                if (order > currentOrder && order <= targetOrder) {
+                    column.setOrder(order - 1);
+                }
+            } else if (order >= targetOrder && order < currentOrder) {
+                column.setOrder(order + 1);
+            }
         }
         boardColumnRepository.saveAll(columns);
-    }
-
-    private void clearDoneColumn(String boardId, String exceptId) {
-        List<BoardColumnEntity> doneColumns = boardColumnRepository.findByBoardIdAndDeletedFalseAndDoneColumnTrue(boardId);
-        for (BoardColumnEntity doneColumn : doneColumns) {
-            if (exceptId != null && exceptId.equals(doneColumn.getId())) {
-                continue;
-            }
-            doneColumn.setDoneColumn(false);
-        }
-        boardColumnRepository.saveAll(doneColumns);
     }
 
     private BoardColumnResponse toResponse(BoardColumnEntity entity) {
@@ -230,8 +229,7 @@ public class BoardColumnService
                 entity.getId(),
                 entity.getBoardId(),
                 entity.getName(),
-                entity.getPosition(),
-                entity.isDoneColumn(),
+                entity.getOrder(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

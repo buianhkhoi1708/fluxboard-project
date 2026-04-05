@@ -1,5 +1,7 @@
 package com.fluxboard.project.controller;
 
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.project.dto.request.CreateProjectRequest;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -38,10 +41,15 @@ public class ProjectController {
     @RequirePermission("PROJECT_CREATE")
     @PostMapping
     public ResponseEntity<ApiResponse<ProjectResponse>> createProject(
-            @Valid @RequestBody CreateProjectRequest request) {
-        return ResponseFactory.created("Project created successfully.", projectService.create(request));
+            @Valid @RequestBody CreateProjectRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        return ResponseFactory.created(
+                "Project created successfully.",
+                projectService.create(request, authUser.userId())
+        );
     }
 
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjects(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -49,24 +57,28 @@ public class ProjectController {
         return ResponseFactory.paged("Projects retrieved successfully.", page);
     }
 
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping("/{projectId}")
     public ResponseEntity<ApiResponse<ProjectResponse>> getProjectById(@PathVariable String projectId) {
         return ResponseFactory.ok("Project retrieved successfully.", projectService.getById(projectId));
     }
 
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping("/{projectId}/overview")
     public ResponseEntity<ApiResponse<ProjectOverviewResponse>> getProjectOverview(@PathVariable String projectId) {
         return ResponseFactory.ok("Project overview retrieved successfully.", projectService.getOverview(projectId));
     }
 
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping("/departments/{departmentId}")
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjectsByDepartment(
             @PathVariable String departmentId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+                @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<ProjectResponse> page = projectService.getPageByDepartment(departmentId, pageable);
         return ResponseFactory.paged("Department projects retrieved successfully.", page);
     }
 
+    @RequirePermission("PROJECT_UPDATE")
     @PutMapping("/{projectId}")
     public ResponseEntity<ApiResponse<ProjectResponse>> updateProject(
             @PathVariable String projectId,
@@ -74,6 +86,7 @@ public class ProjectController {
         return ResponseFactory.ok("Project updated successfully.", projectService.update(projectId, request));
     }
 
+    @RequirePermission("PROJECT_DELETE")
     @DeleteMapping("/{projectId}")
     public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable String projectId) {
         projectService.delete(projectId);

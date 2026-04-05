@@ -15,12 +15,6 @@ public class BoardEntity extends BaseDocument {
     @Field("name")
     private String name;
 
-    @Field("type")
-    private String type;
-
-    @Field("is_default")
-    private boolean defaultBoard;
-
     public String getProjectId() {
         return projectId;
     }
@@ -35,21 +29,5 @@ public class BoardEntity extends BaseDocument {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public boolean isDefaultBoard() {
-        return defaultBoard;
-    }
-
-    public void setDefaultBoard(boolean defaultBoard) {
-        this.defaultBoard = defaultBoard;
     }
 }

@@ -6,6 +6,7 @@ import com.fluxboard.board.column.dto.response.BoardColumnResponse;
 import com.fluxboard.board.column.service.BoardColumnService;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.rbac.annotation.RequirePermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -32,6 +33,7 @@ public class BoardColumnController {
         this.boardColumnService = boardColumnService;
     }
 
+    @RequirePermission("BOARD_COLUMN_MANAGE")
     @PostMapping
     public ResponseEntity<ApiResponse<BoardColumnResponse>> createBoardColumn(
             @Valid @RequestBody CreateBoardColumnRequest request
@@ -39,6 +41,7 @@ public class BoardColumnController {
         return ResponseFactory.created("Board column created successfully.", boardColumnService.create(request));
     }
 
+    @RequirePermission("BOARD_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<BoardColumnResponse>>> getBoardColumns(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
@@ -47,20 +50,23 @@ public class BoardColumnController {
         return ResponseFactory.paged("Board columns retrieved successfully.", page);
     }
 
+    @RequirePermission("BOARD_VIEW")
     @GetMapping("/{columnId}")
     public ResponseEntity<ApiResponse<BoardColumnResponse>> getBoardColumnById(@PathVariable String columnId) {
         return ResponseFactory.ok("Board column retrieved successfully.", boardColumnService.getById(columnId));
     }
 
+    @RequirePermission("BOARD_VIEW")
     @GetMapping("/boards/{boardId}")
     public ResponseEntity<ApiResponse<List<BoardColumnResponse>>> getBoardColumnsByBoard(
             @PathVariable String boardId,
-            @PageableDefault(size = 20, sort = "position", direction = Sort.Direction.ASC) Pageable pageable
+            @PageableDefault(size = 20, sort = "order", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         Page<BoardColumnResponse> page = boardColumnService.getPageByBoard(boardId, pageable);
         return ResponseFactory.paged("Board columns of board retrieved successfully.", page);
     }
 
+    @RequirePermission("BOARD_COLUMN_MANAGE")
     @PutMapping("/{columnId}")
     public ResponseEntity<ApiResponse<BoardColumnResponse>> updateBoardColumn(
             @PathVariable String columnId,
@@ -69,6 +75,7 @@ public class BoardColumnController {
         return ResponseFactory.ok("Board column updated successfully.", boardColumnService.update(columnId, request));
     }
 
+    @RequirePermission("BOARD_COLUMN_MANAGE")
     @DeleteMapping("/{columnId}")
     public ResponseEntity<ApiResponse<Void>> deleteBoardColumn(@PathVariable String columnId) {
         boardColumnService.delete(columnId);

@@ -1,90 +1,88 @@
 package com.fluxboard.board.task.entity;
 
+import com.fluxboard.board.task.enums.TaskPriority;
 import com.fluxboard.common.entity.BaseDocument;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "tasks")
-@CompoundIndex(name = "idx_project_task_code", def = "{'project_id': 1, 'task_code': 1}")
-@CompoundIndex(name = "idx_board_list_position", def = "{'board_id': 1, 'list_id': 1, 'position': 1}")
+@CompoundIndex(
+        name = "uniq_column_parent_order_active",
+        def = "{'column_id': 1, 'parent_task_id': 1, 'order': 1, 'is_deleted': 1}",
+        unique = true
+)
 public class TaskEntity extends BaseDocument {
 
-    @Field("task_code")
-    private String taskCode;
+    @Field("title")
+    private String title;
 
-    @Field("project_id")
-    private String projectId;
+    @Field("description")
+    private String description;
 
-    @Field("board_id")
-    private String boardId;
-
-    @Field("list_id")
-    private String listId;
-
-    @Field("sprint_id")
-    private String sprintId;
+    @Field("column_id")
+    private String columnId;
 
     @Field("parent_task_id")
     private String parentTaskId;
 
-    @Field("reporter_user_id")
-    private String reporterUserId;
+    @Field("assignees_user_id")
+    private List<String> assigneesUserId;
 
-    @Field("assignee_ids")
-    private List<String> assigneeIds;
+    @Field("priority")
+    private TaskPriority priority;
 
-    @Field("label_ids")
-    private List<String> labelIds;
+    @Field("start_date")
+    private Instant startDate;
+
+    @Field("due_date")
+    private Instant dueDate;
 
     @Field("status")
     private String status;
 
-    @Field("priority")
-    private String priority;
+    @Field("story_point")
+    private Integer storyPoint;
 
-    @Field("position")
-    private int position;
+    @Field("estimated_date")
+    private Instant estimatedDate;
 
-    public String getTaskCode() {
-        return taskCode;
+    @Field("order")
+    private int order;
+
+    @Field("ai_suggested_point")
+    private Integer aiSuggestedPoint;
+
+    @Field("ai_estimated_reason")
+    private String aiEstimatedReason;
+
+    @Field("author_user_id")
+    private String authorUserId;
+
+    public String getTitle() {
+        return title;
     }
 
-    public void setTaskCode(String taskCode) {
-        this.taskCode = taskCode;
+    public void setTitle(String title) {
+        this.title = title;
     }
 
-    public String getProjectId() {
-        return projectId;
+    public String getDescription() {
+        return description;
     }
 
-    public void setProjectId(String projectId) {
-        this.projectId = projectId;
+    public void setDescription(String description) {
+        this.description = description;
     }
 
-    public String getBoardId() {
-        return boardId;
+    public String getColumnId() {
+        return columnId;
     }
 
-    public void setBoardId(String boardId) {
-        this.boardId = boardId;
-    }
-
-    public String getListId() {
-        return listId;
-    }
-
-    public void setListId(String listId) {
-        this.listId = listId;
-    }
-
-    public String getSprintId() {
-        return sprintId;
-    }
-
-    public void setSprintId(String sprintId) {
-        this.sprintId = sprintId;
+    public void setColumnId(String columnId) {
+        this.columnId = columnId;
     }
 
     public String getParentTaskId() {
@@ -95,28 +93,36 @@ public class TaskEntity extends BaseDocument {
         this.parentTaskId = parentTaskId;
     }
 
-    public String getReporterUserId() {
-        return reporterUserId;
+    public List<String> getAssigneesUserId() {
+        return assigneesUserId;
     }
 
-    public void setReporterUserId(String reporterUserId) {
-        this.reporterUserId = reporterUserId;
+    public void setAssigneesUserId(List<String> assigneesUserId) {
+        this.assigneesUserId = assigneesUserId;
     }
 
-    public List<String> getAssigneeIds() {
-        return assigneeIds;
+    public TaskPriority getPriority() {
+        return priority;
     }
 
-    public void setAssigneeIds(List<String> assigneeIds) {
-        this.assigneeIds = assigneeIds;
+    public void setPriority(TaskPriority priority) {
+        this.priority = priority;
     }
 
-    public List<String> getLabelIds() {
-        return labelIds;
+    public Instant getStartDate() {
+        return startDate;
     }
 
-    public void setLabelIds(List<String> labelIds) {
-        this.labelIds = labelIds;
+    public void setStartDate(Instant startDate) {
+        this.startDate = startDate;
+    }
+
+    public Instant getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(Instant dueDate) {
+        this.dueDate = dueDate;
     }
 
     public String getStatus() {
@@ -127,19 +133,51 @@ public class TaskEntity extends BaseDocument {
         this.status = status;
     }
 
-    public String getPriority() {
-        return priority;
+    public Integer getStoryPoint() {
+        return storyPoint;
     }
 
-    public void setPriority(String priority) {
-        this.priority = priority;
+    public void setStoryPoint(Integer storyPoint) {
+        this.storyPoint = storyPoint;
     }
 
-    public int getPosition() {
-        return position;
+    public Instant getEstimatedDate() {
+        return estimatedDate;
     }
 
-    public void setPosition(int position) {
-        this.position = position;
+    public void setEstimatedDate(Instant estimatedDate) {
+        this.estimatedDate = estimatedDate;
+    }
+
+    public int getOrder() {
+        return order;
+    }
+
+    public void setOrder(int order) {
+        this.order = order;
+    }
+
+    public Integer getAiSuggestedPoint() {
+        return aiSuggestedPoint;
+    }
+
+    public void setAiSuggestedPoint(Integer aiSuggestedPoint) {
+        this.aiSuggestedPoint = aiSuggestedPoint;
+    }
+
+    public String getAiEstimatedReason() {
+        return aiEstimatedReason;
+    }
+
+    public void setAiEstimatedReason(String aiEstimatedReason) {
+        this.aiEstimatedReason = aiEstimatedReason;
+    }
+
+    public String getAuthorUserId() {
+        return authorUserId;
+    }
+
+    public void setAuthorUserId(String authorUserId) {
+        this.authorUserId = authorUserId;
     }
 }

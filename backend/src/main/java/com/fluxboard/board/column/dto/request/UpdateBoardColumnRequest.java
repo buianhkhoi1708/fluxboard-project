@@ -9,9 +9,7 @@ public record UpdateBoardColumnRequest(
         @Size(max = 100, message = "Column name must be at most 100 characters.")
         String name,
 
-        @Min(value = 1, message = "Position must be at least 1.")
-        Integer position,
-
-        Boolean isDoneColumn
+        @Min(value = 1, message = "Order must be at least 1.")
+        Integer order
 ) {
 }

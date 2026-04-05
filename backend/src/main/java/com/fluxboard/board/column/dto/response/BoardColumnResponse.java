@@ -6,8 +6,7 @@ public record BoardColumnResponse(
         String id,
         String boardId,
         String name,
-        int position,
-        boolean isDoneColumn,
+        int order,
         Instant createdAt,
         Instant updatedAt
 ) {

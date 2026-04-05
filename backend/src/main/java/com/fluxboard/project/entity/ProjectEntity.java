@@ -23,9 +23,6 @@ public class ProjectEntity extends BaseDocument {
     @Field("department_id")
     private String departmentId;
 
-    @Field("default_board_id")
-    private String defaultBoardId;
-
     @Field("status")
     private String status;
 
@@ -59,14 +56,6 @@ public class ProjectEntity extends BaseDocument {
 
     public void setDepartmentId(String departmentId) {
         this.departmentId = departmentId;
-    }
-
-    public String getDefaultBoardId() {
-        return defaultBoardId;
-    }
-
-    public void setDefaultBoardId(String defaultBoardId) {
-        this.defaultBoardId = defaultBoardId;
     }
 
     public String getStatus() {

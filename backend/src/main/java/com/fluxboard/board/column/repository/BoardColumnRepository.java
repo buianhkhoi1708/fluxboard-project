@@ -15,23 +15,21 @@ public interface BoardColumnRepository extends MongoRepository<BoardColumnEntity
 
     Page<BoardColumnEntity> findByBoardIdAndDeletedFalse(String boardId, Pageable pageable);
 
-    List<BoardColumnEntity> findByBoardIdAndDeletedFalseOrderByPositionAsc(String boardId);
+    List<BoardColumnEntity> findByBoardIdAndDeletedFalseOrderByOrderAsc(String boardId);
 
-    List<BoardColumnEntity> findByBoardIdAndDeletedFalseAndPositionGreaterThanEqualOrderByPositionAsc(
+    List<BoardColumnEntity> findByBoardIdAndDeletedFalseAndOrderGreaterThanEqualOrderByOrderAsc(
             String boardId,
-            int position
+            int order
     );
 
-    List<BoardColumnEntity> findByBoardIdAndDeletedFalseAndPositionGreaterThanOrderByPositionAsc(
+    List<BoardColumnEntity> findByBoardIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(
             String boardId,
-            int position
+            int order
     );
 
     boolean existsByBoardIdAndNameAndDeletedFalse(String boardId, String name);
 
     boolean existsByBoardIdAndNameAndIdNotAndDeletedFalse(String boardId, String name, String id);
 
-    List<BoardColumnEntity> findByBoardIdAndDeletedFalseAndDoneColumnTrue(String boardId);
-
-    List<BoardColumnEntity> findByBoardIdInAndDeletedFalseOrderByBoardIdAscPositionAsc(List<String> boardIds);
+    List<BoardColumnEntity> findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(List<String> boardIds);
 }

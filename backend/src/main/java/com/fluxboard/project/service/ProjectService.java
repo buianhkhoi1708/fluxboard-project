@@ -1,11 +1,13 @@
 package com.fluxboard.project.service;
 
-import com.fluxboard.board.dto.response.BoardResponse;
 import com.fluxboard.board.column.dto.response.BoardColumnResponse;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
+import com.fluxboard.board.dto.response.BoardResponse;
 import com.fluxboard.board.entity.BoardEntity;
 import com.fluxboard.board.repository.BoardRepository;
+import com.fluxboard.board.task.entity.TaskEntity;
+import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
@@ -17,6 +19,7 @@ import com.fluxboard.project.dto.response.ProjectOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectResponse;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
+import com.fluxboard.user.repository.UserRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +27,6 @@ import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 @Service
 public class ProjectService
@@ -33,37 +35,37 @@ public class ProjectService
     private final ProjectRepository projectRepository;
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
+    private final TaskRepository taskRepository;
+    private final UserRepository userRepository;
 
     public ProjectService(
             ProjectRepository projectRepository,
             BoardRepository boardRepository,
-            BoardColumnRepository boardColumnRepository
+            BoardColumnRepository boardColumnRepository,
+            TaskRepository taskRepository,
+            UserRepository userRepository
     ) {
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
+        this.taskRepository = taskRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
     public ProjectResponse create(CreateProjectRequest request) {
-        // String code = normalizeText(request.code());
-        // if (projectRepository.existsByCodeAndDeletedFalse(code)) {
-        // throw new AppException(ErrorCode.CONFLICT, "Project code already exists.");
-        // }
+        return create(request, null);
+    }
 
-        if (StringUtils.hasText(request.defaultBoardId())) {
-            throw new AppException(
-                    ErrorCode.BAD_REQUEST,
-                    "defaultBoardId is not allowed when creating project. Set it in update after board is created.");
-        }
+    public ProjectResponse create(CreateProjectRequest request, String ownerUserId) {
+        String normalizedOwnerId = requireAuthenticatedUserId(ownerUserId);
+        validateUserExists(normalizedOwnerId, "Owner user does not exist.");
 
         ProjectEntity entity = new ProjectEntity();
-        // entity.setCode(code);
         entity.setName(TextUtils.trim(request.name()));
-        entity.setOwnerId(TextUtils.trim(request.ownerId()));
+        entity.setOwnerId(normalizedOwnerId);
         entity.setDepartmentId(TextUtils.trim(request.departmentId()));
         entity.setStatus(TextUtils.trim(request.status()));
-        entity.setDefaultBoardId(null);
 
         return toResponse(projectRepository.save(entity));
     }
@@ -88,8 +90,7 @@ public class ProjectService
         List<BoardEntity> boards = boardRepository.findByProjectIdAndDeletedFalse(project.getId());
 
         boards.sort(
-                Comparator.comparing(BoardEntity::isDefaultBoard).reversed()
-                        .thenComparing(BoardEntity::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                Comparator.comparing(BoardEntity::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
         );
 
         List<String> boardIds = boards.stream()
@@ -101,7 +102,7 @@ public class ProjectService
             columnsByBoardId = Map.of();
         } else {
             List<BoardColumnEntity> boardColumns = boardColumnRepository
-                    .findByBoardIdInAndDeletedFalseOrderByBoardIdAscPositionAsc(boardIds);
+                    .findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(boardIds);
 
             columnsByBoardId = boardColumns.stream()
                     .collect(Collectors.groupingBy(
@@ -123,22 +124,13 @@ public class ProjectService
     @Override
     public ProjectResponse update(String id, UpdateProjectRequest request) {
         ProjectEntity entity = findProjectById(id);
-        // String code = normalizeText(request.code());
-        // if (projectRepository.existsByCodeAndIdNotAndDeletedFalse(code, id)) {
-        // throw new AppException(ErrorCode.CONFLICT, "Project code already exists.");
-        // }
+        String ownerId = TextUtils.trim(request.ownerId());
+        validateUserExists(ownerId, "Owner user does not exist.");
 
-        // entity.setCode(code);
         entity.setName(TextUtils.trim(request.name()));
-        entity.setOwnerId(TextUtils.trim(request.ownerId()));
+        entity.setOwnerId(ownerId);
         entity.setDepartmentId(TextUtils.trim(request.departmentId()));
         entity.setStatus(TextUtils.trim(request.status()));
-
-        String defaultBoardId = TextUtils.trimToNull(request.defaultBoardId());
-        if (defaultBoardId != null) {
-            validateDefaultBoard(defaultBoardId, entity.getId());
-        }
-        entity.setDefaultBoardId(defaultBoardId);
 
         return toResponse(projectRepository.save(entity));
     }
@@ -146,8 +138,40 @@ public class ProjectService
     @Override
     public void delete(String id) {
         ProjectEntity entity = findProjectById(id);
+        List<BoardEntity> boards = boardRepository.findByProjectIdAndDeletedFalse(entity.getId());
+
+        if (!boards.isEmpty()) {
+            List<String> boardIds = boards.stream()
+                    .map(BoardEntity::getId)
+                    .toList();
+
+            List<BoardColumnEntity> boardColumns = boardColumnRepository
+                    .findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(boardIds);
+
+            if (!boardColumns.isEmpty()) {
+                List<String> columnIds = boardColumns.stream()
+                        .map(BoardColumnEntity::getId)
+                        .toList();
+
+                List<TaskEntity> tasks = taskRepository.findByColumnIdInAndDeletedFalse(columnIds);
+                for (TaskEntity task : tasks) {
+                    task.markDeleted();
+                }
+                taskRepository.saveAll(tasks);
+
+                for (BoardColumnEntity boardColumn : boardColumns) {
+                    boardColumn.markDeleted();
+                }
+                boardColumnRepository.saveAll(boardColumns);
+            }
+
+            for (BoardEntity board : boards) {
+                board.markDeleted();
+            }
+            boardRepository.saveAll(boards);
+        }
+
         entity.markDeleted();
-        entity.setDefaultBoardId(null);
         projectRepository.save(entity);
     }
 
@@ -156,26 +180,30 @@ public class ProjectService
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Project not found."));
     }
 
-    private void validateDefaultBoard(String boardId, String projectId) {
-        BoardEntity board = boardRepository.findByIdAndDeletedFalse(boardId)
-                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Default board does not exist."));
+    private String requireAuthenticatedUserId(String ownerUserId) {
+        String normalizedOwnerUserId = TextUtils.trimToNull(ownerUserId);
+        if (normalizedOwnerUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Authenticated user is required.");
+        }
+        return normalizedOwnerUserId;
+    }
 
-        if (!projectId.equals(board.getProjectId())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Default board must belong to the same project.");
+    private void validateUserExists(String userId, String message) {
+        if (!userRepository.existsByIdAndDeletedFalse(userId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, message);
         }
     }
 
     private ProjectResponse toResponse(ProjectEntity entity) {
         return new ProjectResponse(
                 entity.getId(),
-                // entity.getCode(),
                 entity.getName(),
                 entity.getOwnerId(),
                 entity.getDepartmentId(),
-                entity.getDefaultBoardId(),
                 entity.getStatus(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt()
+        );
     }
 
     private BoardResponse toBoardResponse(BoardEntity entity) {
@@ -183,8 +211,6 @@ public class ProjectService
                 entity.getId(),
                 entity.getProjectId(),
                 entity.getName(),
-                entity.getType(),
-                entity.isDefaultBoard(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -195,8 +221,7 @@ public class ProjectService
                 entity.getId(),
                 entity.getBoardId(),
                 entity.getName(),
-                entity.getPosition(),
-                entity.isDoneColumn(),
+                entity.getOrder(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

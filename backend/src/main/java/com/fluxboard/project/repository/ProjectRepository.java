@@ -10,6 +10,8 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
 
     Optional<ProjectEntity> findByIdAndDeletedFalse(String id);
 
+    boolean existsByIdAndDeletedFalse(String id);
+
     Page<ProjectEntity> findByDeletedFalse(Pageable pageable);
 
     Page<ProjectEntity> findByDepartmentIdAndDeletedFalse(String departmentId, Pageable pageable);

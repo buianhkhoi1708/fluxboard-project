@@ -13,24 +13,18 @@ public interface TaskRepository extends MongoRepository<TaskEntity, String> {
 
     Page<TaskEntity> findByDeletedFalse(Pageable pageable);
 
-    Page<TaskEntity> findByProjectIdAndDeletedFalse(String projectId, Pageable pageable);
+    Page<TaskEntity> findByColumnIdAndDeletedFalse(String columnId, Pageable pageable);
 
-    Page<TaskEntity> findByBoardIdAndDeletedFalse(String boardId, Pageable pageable);
+    Page<TaskEntity> findByColumnIdInAndDeletedFalse(List<String> columnIds, Pageable pageable);
 
-    Page<TaskEntity> findByListIdAndDeletedFalse(String listId, Pageable pageable);
+    List<TaskEntity> findByColumnIdInAndDeletedFalse(List<String> columnIds);
 
-    List<TaskEntity> findByBoardIdAndDeletedFalse(String boardId);
+    List<TaskEntity> findByColumnIdAndDeletedFalseOrderByOrderAsc(String columnId);
 
-    List<TaskEntity> findByListIdAndDeletedFalseOrderByPositionAsc(String listId);
-
-    List<TaskEntity> findByListIdAndDeletedFalseAndPositionGreaterThanEqualOrderByPositionAsc(
-            String listId,
-            int position
+    List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanEqualOrderByOrderAsc(
+            String columnId,
+            int order
     );
 
-    List<TaskEntity> findByListIdAndDeletedFalseAndPositionGreaterThanOrderByPositionAsc(String listId, int position);
-
-    boolean existsByProjectIdAndTaskCodeAndDeletedFalse(String projectId, String taskCode);
-
-    boolean existsByProjectIdAndTaskCodeAndIdNotAndDeletedFalse(String projectId, String taskCode, String id);
+    List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(String columnId, int order);
 }
