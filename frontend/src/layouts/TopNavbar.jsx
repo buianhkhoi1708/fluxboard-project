@@ -1,4 +1,5 @@
 import React from 'react';
+import Logo from '../../src/assets/icon.svg';
 import { Bell, ChevronDown, CircleUser, Search } from 'lucide-react';
 
 const TopNavbar = ({ apiStatus }) => {
@@ -6,7 +7,11 @@ const TopNavbar = ({ apiStatus }) => {
     <nav className="flex justify-between items-center px-5 h-[60px] border-b border-mac-border bg-white sticky top-0 z-50">
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-2.5 w-[220px]">
-          <div className="text-xl">💠</div>
+          <img 
+            src={Logo}
+            alt="Fluxboard" 
+            className="h-8 w-auto object-contain" 
+          />
           <span className="font-bold text-lg tracking-tight">TaskHub</span>
         </div>
         
