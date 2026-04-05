@@ -6,7 +6,6 @@ import lombok.Data;
 public class AiPromptRequest {
     private String prompt;
 
-    // Viết sẵn Getter/Setter để fix cứng lỗi "cannot find symbol" của Maven
     public String getPrompt() {
         return prompt;
     }
