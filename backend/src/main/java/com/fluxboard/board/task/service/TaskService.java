@@ -30,6 +30,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
@@ -222,40 +224,51 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return toResponse(saved, users);
     }
 
+    @Transactional
     public TaskResponse moveTask(String id, TaskMoveRequest request) {
-        TaskEntity entity = findTaskById(id);
-        
-        String newColumnId = TextUtils.trim(request.newColumnId());
-        findBoardColumnById(newColumnId); // Xác thực column mới tồn tại
-
-        String currentColumnId = entity.getColumnId();
-        String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
-        int currentOrder = entity.getOrder();
-
-        boolean sameGroup = currentColumnId.equals(newColumnId);
-        
-        int targetOrder = resolveUpdateOrder(
-                newColumnId,
-                parentTaskId,
-                request.newOrder(),
-                sameGroup ? currentOrder : null
-        );
-
-        if (sameGroup) {
-            if (targetOrder != currentOrder) {
-                moveInsideColumnGroup(newColumnId, parentTaskId, currentOrder, targetOrder, entity.getId());
+        try {
+            TaskEntity entity = findTaskById(id);
+            
+            String newColumnId = TextUtils.trim(request.newColumnId());
+            BoardColumnEntity newColumn = findBoardColumnById(newColumnId);
+            
+            BoardColumnEntity currentColumn = findBoardColumnById(entity.getColumnId());
+            if (!currentColumn.getBoardId().equals(newColumn.getBoardId())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Validation Error: Cannot move task to a different board.");
             }
-        } else {
-            shiftOrdersForInsert(newColumnId, parentTaskId, targetOrder, null);
-            shiftOrdersAfterDelete(currentColumnId, parentTaskId, currentOrder, entity.getId());
+
+            String currentColumnId = entity.getColumnId();
+            String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
+            int currentOrder = entity.getOrder();
+
+            boolean sameGroup = currentColumnId.equals(newColumnId);
+            
+            int targetOrder = resolveUpdateOrder(
+                    newColumnId,
+                    parentTaskId,
+                    request.newOrder(),
+                    sameGroup ? currentOrder : null
+            );
+
+            if (sameGroup) {
+                if (targetOrder != currentOrder) {
+                    moveInsideColumnGroup(newColumnId, parentTaskId, currentOrder, targetOrder, entity.getId());
+                }
+            } else {
+                shiftOrdersForInsert(newColumnId, parentTaskId, targetOrder, null);
+                shiftOrdersAfterDelete(currentColumnId, parentTaskId, currentOrder, entity.getId());
+            }
+
+            entity.setColumnId(newColumnId);
+            entity.setOrder(targetOrder);
+
+            TaskEntity saved = taskRepository.save(entity);
+            Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+            return toResponse(saved, users);
+            
+        } catch (DuplicateKeyException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Conflict: Another move operation is in progress. Please try again.");
         }
-
-        entity.setColumnId(newColumnId);
-        entity.setOrder(targetOrder);
-
-        TaskEntity saved = taskRepository.save(entity);
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
-        return toResponse(saved, users);
     }
 
     @Override
