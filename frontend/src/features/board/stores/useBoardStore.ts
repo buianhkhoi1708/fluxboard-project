@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { IBoard, IList, ICard, ISubtask } from '../types';
+import { IBoard, IList, ICard, ISubtask } from '../types/index';
+import { boardApi } from '../api/boardApi'; // Import boardApi vào đây
 
 interface IBoardState {
   board: IBoard | null;
+  isLoading: boolean; // Thêm trạng thái Loading
   
   fetchBoardData: (boardId: string) => void;
   setBoard: (newBoard: IBoard) => void; 
@@ -15,24 +17,40 @@ interface IBoardState {
   deleteCard: (listId: string, cardId: string) => void;
   updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
   toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
+  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>; // Hàm kéo thả
 
   getColumnTotalPoints: (listId: string) => number;
   getBoardTotalPoints: () => number;
 }
 
-// Giữ lại Mock Data tĩnh ở đây để UI có cái render tạm
-const initialState: IBoard = {
-  "id": "board_eng_flux_01",
-  "board_name": "App Học Tiếng Anh Flux",
-  "description": "Phát triển ứng dụng di động hỗ trợ người dùng học tiếng Anh...",
-  "lists": [] // Khôi tự dán lại mock data list vào nhé
-};
-
 export const useBoardStore = create<IBoardState>((set, get) => ({
-  board: initialState, 
+  // Xóa bỏ hoàn toàn Mock Data cứng, khởi tạo bằng null
+  board: null, 
+  isLoading: false,
 
-  fetchBoardData: (boardId: string) => {
-    console.log(`Tiến hành fetch data từ BE cho board: ${boardId}`);
+  // Gọi API GET và Xử lý UX Loading
+  fetchBoardData: async (boardId: string) => {
+    set({ isLoading: true });
+    try {
+      const data = await boardApi.getBoard(boardId);
+      set({ board: data, isLoading: false });
+    } catch (error) {
+      console.error(`Lỗi khi tải dữ liệu bảng ${boardId}:`, error);
+      set({ isLoading: false });
+    }
+  },
+
+  // Gọi API PATCH khi kéo thả thẻ
+  updateCardPositionApi: async (cardId: string, newColumnId: string, newOrder: number) => {
+    try {
+      await boardApi.moveCard(cardId, newColumnId, newOrder);
+      console.log("Đã cập nhật vị trí thẻ trên Database!");
+    } catch (error) {
+      console.error("Lỗi khi lưu vị trí kéo thả:", error);
+      // Nếu kéo thả bị lỗi mạng, load lại data cũ từ DB để UI không bị sai lệch
+      const currentBoardId = get().board?.id;
+      if (currentBoardId) get().fetchBoardData(currentBoardId);
+    }
   },
 
   setBoard: (newBoard) => set({ board: newBoard }),
