@@ -5,6 +5,7 @@ import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.entity.BoardEntity;
 import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
+import com.fluxboard.board.task.dto.request.TaskMoveRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
 import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
@@ -215,6 +216,42 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setOrder(targetOrder);
         entity.setAiSuggestedPoint(request.aiSuggestedPoint());
         entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
+
+        TaskEntity saved = taskRepository.save(entity);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+        return toResponse(saved, users);
+    }
+
+    public TaskResponse moveTask(String id, TaskMoveRequest request) {
+        TaskEntity entity = findTaskById(id);
+        
+        String newColumnId = TextUtils.trim(request.newColumnId());
+        findBoardColumnById(newColumnId); // Xác thực column mới tồn tại
+
+        String currentColumnId = entity.getColumnId();
+        String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
+        int currentOrder = entity.getOrder();
+
+        boolean sameGroup = currentColumnId.equals(newColumnId);
+        
+        int targetOrder = resolveUpdateOrder(
+                newColumnId,
+                parentTaskId,
+                request.newOrder(),
+                sameGroup ? currentOrder : null
+        );
+
+        if (sameGroup) {
+            if (targetOrder != currentOrder) {
+                moveInsideColumnGroup(newColumnId, parentTaskId, currentOrder, targetOrder, entity.getId());
+            }
+        } else {
+            shiftOrdersForInsert(newColumnId, parentTaskId, targetOrder, null);
+            shiftOrdersAfterDelete(currentColumnId, parentTaskId, currentOrder, entity.getId());
+        }
+
+        entity.setColumnId(newColumnId);
+        entity.setOrder(targetOrder);
 
         TaskEntity saved = taskRepository.save(entity);
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
