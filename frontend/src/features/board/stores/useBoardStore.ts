@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { IBoard, IList, ICard, ISubtask } from '../types/index';
-import { boardApi } from '../api/boardApi'; // Import boardApi vào đây
+import { IBoard, IList, ICard, ISubtask } from '../types';
+import { boardApi } from '../api/boardApi'; 
 
 interface IBoardState {
   board: IBoard | null;
-  isLoading: boolean; // Thêm trạng thái Loading
+  isLoading: boolean; 
   
-  fetchBoardData: (boardId: string) => void;
+  fetchBoardData: (boardId: string) => Promise<void>;
   setBoard: (newBoard: IBoard) => void; 
   setBoardFromAI: (aiJsonString: string) => void; 
 
@@ -17,39 +17,76 @@ interface IBoardState {
   deleteCard: (listId: string, cardId: string) => void;
   updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
   toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
-  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>; // Hàm kéo thả
+  
+  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>;
 
   getColumnTotalPoints: (listId: string) => number;
   getBoardTotalPoints: () => number;
 }
 
 export const useBoardStore = create<IBoardState>((set, get) => ({
-  // Xóa bỏ hoàn toàn Mock Data cứng, khởi tạo bằng null
   board: null, 
   isLoading: false,
 
-  // Gọi API GET và Xử lý UX Loading
   fetchBoardData: async (boardId: string) => {
     set({ isLoading: true });
     try {
-      const data = await boardApi.getBoard(boardId);
-      set({ board: data, isLoading: false });
+      console.log(`Đang tải dữ liệu từ DB cho Board: ${boardId}...`);
+      
+      // 1. Lấy rawData từ API do Chấn viết
+      const rawData = await boardApi.getBoard(boardId);
+
+      // 2. LÕI MAPPING (Chuyển columns -> lists, tasks -> cards)
+      const mappedBoard: IBoard = {
+        id: rawData.id,
+        board_name: rawData.board_name,
+        description: rawData.description || '', 
+        
+        lists: (rawData.columns || []).map((col: any) => ({
+          id: col.id,
+          list_name: col.list_name,
+          order: col.order,
+          
+          cards: (col.tasks || []).map((task: any) => ({
+            id: task.id,
+            title: task.title,
+            description: task.description || '',
+            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : 'Unassigned',
+            priority: task.priority || 'Medium',
+            start_date: task.start_date || new Date().toISOString().split('T')[0],
+            due_date: task.due_date || null,
+            estimated_days: task.estimated_days || 0,
+            story_points: task.story_points || 0,
+            ai_suggested_points: task.ai_suggested_points || 0,
+            ai_estimation_reason: task.ai_estimation_reason || '',
+            tags: task.tags || [], 
+            subtasks: (task.subtasks || []).map((st: any) => ({
+              id: st.id,
+              title: st.title,
+              is_done: st.status === 'DONE' 
+            }))
+          }))
+        }))
+      };
+
+      // 3. Nạp data ĐÃ MAP vào store
+      set({ board: mappedBoard, isLoading: false });
+      console.log("🟢 Nạp dữ liệu vào UI thành công!");
+
     } catch (error) {
-      console.error(`Lỗi khi tải dữ liệu bảng ${boardId}:`, error);
+      console.error(`🔴 Lỗi khi tải dữ liệu bảng ${boardId}:`, error);
       set({ isLoading: false });
     }
   },
 
-  // Gọi API PATCH khi kéo thả thẻ
   updateCardPositionApi: async (cardId: string, newColumnId: string, newOrder: number) => {
     try {
       await boardApi.moveCard(cardId, newColumnId, newOrder);
       console.log("Đã cập nhật vị trí thẻ trên Database!");
     } catch (error) {
       console.error("Lỗi khi lưu vị trí kéo thả:", error);
-      // Nếu kéo thả bị lỗi mạng, load lại data cũ từ DB để UI không bị sai lệch
       const currentBoardId = get().board?.id;
-      if (currentBoardId) get().fetchBoardData(currentBoardId);
+      if (currentBoardId) get().fetchBoardData(currentBoardId); // Rollback nếu lỗi
     }
   },
 
@@ -105,7 +142,7 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
       story_points: Number(cardData.story_points) || 0, 
       ai_suggested_points: 0, 
       ai_estimation_reason: '', 
-      tags: cardData.tags || [], 
+      tags: Array.isArray(cardData.tags) ? cardData.tags : [], 
       subtasks: []
     };
 
