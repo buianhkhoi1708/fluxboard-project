@@ -31,50 +31,55 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
   fetchBoardData: async (boardId: string) => {
     set({ isLoading: true });
     try {
-      console.log(`Đang tải dữ liệu từ DB cho Board: ${boardId}...`);
+      const rawResponse = await boardApi.getBoard(boardId);
       
-      // 1. Lấy rawData từ API do Chấn viết
-      const rawData = await boardApi.getBoard(boardId);
+      // 1. Lột vỏ tìm lõi
+      let coreData = rawResponse;
+      while (coreData && coreData.data && coreData.board_name === undefined && coreData.columns === undefined) {
+        coreData = coreData.data;
+      }
 
-      // 2. LÕI MAPPING (Chuyển columns -> lists, tasks -> cards)
+      console.log("🎯 Đã chạm đáy dữ liệu:", coreData);
+
+      // 2. Mapping chuẩn xác từ Schema của Mạnh sang Schema của Frontend
       const mappedBoard: IBoard = {
-        id: rawData.id,
-        board_name: rawData.board_name,
-        description: rawData.description || '', 
+        id: coreData.id || coreData._id,
+        board_name: coreData.board_name || "Bảng không tên",
+        description: coreData.description || "",
         
-        lists: (rawData.columns || []).map((col: any) => ({
-          id: col.id,
-          list_name: col.list_name,
-          order: col.order,
+        // 👉 ĐÃ FIX: Map 'columns' từ DB sang 'lists' của FE
+        lists: (coreData.columns || []).map((col: any) => ({
+          id: col.id || col._id,
+          list_name: col.list_name || "Cột không tên",
+          order: col.order || 0,
           
+          // 👉 ĐÃ FIX: Map 'tasks' từ DB sang 'cards' của FE
           cards: (col.tasks || []).map((task: any) => ({
-            id: task.id,
-            title: task.title,
-            description: task.description || '',
-            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : 'Unassigned',
-            priority: task.priority || 'Medium',
-            start_date: task.start_date || new Date().toISOString().split('T')[0],
-            due_date: task.due_date || null,
-            estimated_days: task.estimated_days || 0,
+            id: task.id || task._id,
+            title: task.title || "Chưa có tiêu đề",
+            description: task.description || "",
+            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : "Chưa phân công",
+            priority: task.priority || "Medium",
+            start_date: task.start_date || "",
+            due_date: task.due_date || "",
             story_points: task.story_points || 0,
             ai_suggested_points: task.ai_suggested_points || 0,
-            ai_estimation_reason: task.ai_estimation_reason || '',
-            tags: task.tags || [], 
+            ai_estimation_reason: task.ai_estimation_reason || "",
+            status: task.status || "TODO",
             subtasks: (task.subtasks || []).map((st: any) => ({
-              id: st.id,
+              id: st.id || st._id,
               title: st.title,
-              is_done: st.status === 'DONE' 
+              is_done: st.status === 'DONE'
             }))
           }))
         }))
       };
 
-      // 3. Nạp data ĐÃ MAP vào store
       set({ board: mappedBoard, isLoading: false });
-      console.log("🟢 Nạp dữ liệu vào UI thành công!");
+      console.log("✅ Mapping thành công! Board đã sẵn sàng render.");
 
     } catch (error) {
-      console.error(`🔴 Lỗi khi tải dữ liệu bảng ${boardId}:`, error);
+      console.error(`❌ Lỗi mapping dữ liệu:`, error);
       set({ isLoading: false });
     }
   },

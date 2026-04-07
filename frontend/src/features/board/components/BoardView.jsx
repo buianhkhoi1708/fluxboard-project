@@ -1,19 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // 👉 ĐÃ BỔ SUNG: import useEffect
 import Column from './Column';
 import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore'; 
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { X, Plus, Target, Save, Sparkles, Users, Filter } from 'lucide-react'; 
+import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
 
 const BoardView = () => {
-  const { board, setBoard, getBoardTotalPoints, addList } = useBoardStore();
+
+  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData } = useBoardStore();
+  console.log("💎 DỮ LIỆU BOARD TRONG UI:", board);
   const [activeCard, setActiveCard] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // 👉 ĐÃ BỔ SUNG: Gọi API ngay khi trang vừa load xong
+  useEffect(() => {
+    // Truyền cái ID bảng trong DB của Khôi vào đây
+    fetchBoardData('69d22692ef24ae604f65ae89'); 
+  }, [fetchBoardData]);
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
@@ -91,27 +99,22 @@ const BoardView = () => {
 
         <AiGeneratorPanel />
 
-        {/* 👉 ĐÃ CHỈNH SỬA HEADER CỦA BẢNG TẠI ĐÂY */}
         <div className="px-6 py-4 bg-white/70 backdrop-blur-xl border-b border-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 z-10 sticky top-0">
           
-          {/* Thông tin dự án bên trái */}
           <div className="flex items-center gap-3.5">
-            {/* Logo dự án (Lấy chữ cái đầu) */}
             <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-xl shadow-md shrink-0">
-              {board.board_name.charAt(0)}
+              {board.board_name?.charAt(0) || 'F'}
             </div>
             <div className="flex flex-col">
-              <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                {board.board_name}
-              </h2>
+            <h2 className="text-xl font-black !text-black tracking-tight flex items-center gap-2">
+  {board.board_name}
+</h2>
               {board.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 font-medium max-w-lg">{board.description}</p>}
             </div>
           </div>
           
-          {/* Công cụ & Hành động bên phải */}
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
             
-            {/* Cụm Avatars (Giả lập thành viên team) */}
             <div className="hidden sm:flex -space-x-2 mr-1 shrink-0">
               <div className="w-8 h-8 rounded-full border-2 border-white bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold z-30" title="Khôi">K</div>
               <div className="w-8 h-8 rounded-full border-2 border-white bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold z-20" title="Mạnh">M</div>
@@ -121,13 +124,11 @@ const BoardView = () => {
 
             <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0"></div>
 
-            {/* Nút Filter (Trang trí) */}
             <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
               <Filter size={16} />
               <span className="hidden sm:inline">Lọc</span>
             </button>
 
-            {/* Điểm Story Points */}
             {getBoardTotalPoints && (
               <div className="flex items-center gap-1.5 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg text-sm font-bold text-indigo-600 shadow-sm shrink-0 cursor-default">
                 <Target size={16} className="text-indigo-500" />
@@ -136,7 +137,6 @@ const BoardView = () => {
               </div>
             )}
             
-            {/* Nút Lưu Bảng */}
             <button 
               onClick={handleSaveBoard}
               className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shrink-0"
@@ -147,11 +147,9 @@ const BoardView = () => {
           </div>
         </div>
 
-        {/* KHU VỰC CHỨA CÁC CỘT KANBAN */}
         <div className="flex-1 w-full p-6 pb-8 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-6 items-start custom-scrollbar">
           {board.lists?.map((list) => <Column key={list.id} list={list} />)}
           
-          {/* NÚT THÊM DANH SÁCH MỚI */}
           {isAddingCol ? (
             <div className="w-[300px] shrink-0 bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl shadow-xl border border-white flex flex-col gap-3 ring-2 ring-indigo-100/50 transition-all animate-in fade-in zoom-in-95 duration-200">
               <input 

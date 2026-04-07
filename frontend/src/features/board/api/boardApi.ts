@@ -14,7 +14,7 @@ export const boardApi = {
   // Lấy dữ liệu Bảng (GET)
   getBoard: async (boardId: string): Promise<IBoard> => {
     const response: IApiResponse<IBoard> = await axiosClient.get(`/boards/${boardId}`);
-    return response.data; 
+    return  response.data || response; 
   },
 
   // Cập nhật vị trí thẻ (PATCH)
@@ -23,6 +23,6 @@ export const boardApi = {
       new_column_id: newColumnId,
       new_order: newOrder
     });
-    return response.data;
+    return response.data || response;
   }
 };
