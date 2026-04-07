@@ -13,9 +13,11 @@ axiosClient.interceptors.request.use(
     // Tự động cấu hình header Content-Type
     config.headers['Content-Type'] = 'application/json';
     
-    // Sau này có thể nhét thêm Token đăng nhập (Authorization)
-    // const token = localStorage.getItem('token');
-    // if (token) config.headers.Authorization = `Bearer ${token}`;
+    // 👉 ĐÃ MỞ KHÓA: Lấy Token từ LocalStorage và nhét vào Header (Bearer Token)
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     
     return config;
   },
@@ -35,6 +37,15 @@ axiosClient.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       console.error(`[API Error ${status}]:`, error.response.data || 'Đã có lỗi xảy ra từ máy chủ');
+      
+      // 👉 MẸO PRO ENTERPRISE: Bắt lỗi 401 để Auto Logout
+      if (status === 401) {
+        console.warn("🔴 Token không hợp lệ hoặc đã hết hạn. Đang đăng xuất...");
+        // Khôi bảo Long mở 2 dòng dưới ra khi làm xong trang Login nhé:
+        // localStorage.removeItem('token');
+        // window.location.href = '/login'; 
+      }
+      
     } else if (error.request) {
       // Lỗi không có phản hồi từ server (sập server, rớt mạng)
       console.error('[Network Error]: Không thể kết nối tới máy chủ');
