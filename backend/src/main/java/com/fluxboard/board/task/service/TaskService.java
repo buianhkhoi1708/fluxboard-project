@@ -5,6 +5,7 @@ import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.entity.BoardEntity;
 import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
+import com.fluxboard.board.task.dto.request.TaskMoveRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
 import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
@@ -29,6 +30,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
@@ -219,6 +222,53 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         TaskEntity saved = taskRepository.save(entity);
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
         return toResponse(saved, users);
+    }
+
+    @Transactional
+    public TaskResponse moveTask(String id, TaskMoveRequest request) {
+        try {
+            TaskEntity entity = findTaskById(id);
+            
+            String newColumnId = TextUtils.trim(request.newColumnId());
+            BoardColumnEntity newColumn = findBoardColumnById(newColumnId);
+            
+            BoardColumnEntity currentColumn = findBoardColumnById(entity.getColumnId());
+            if (!currentColumn.getBoardId().equals(newColumn.getBoardId())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Validation Error: Cannot move task to a different board.");
+            }
+
+            String currentColumnId = entity.getColumnId();
+            String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
+            int currentOrder = entity.getOrder();
+
+            boolean sameGroup = currentColumnId.equals(newColumnId);
+            
+            int targetOrder = resolveUpdateOrder(
+                    newColumnId,
+                    parentTaskId,
+                    request.newOrder(),
+                    sameGroup ? currentOrder : null
+            );
+
+            if (sameGroup) {
+                if (targetOrder != currentOrder) {
+                    moveInsideColumnGroup(newColumnId, parentTaskId, currentOrder, targetOrder, entity.getId());
+                }
+            } else {
+                shiftOrdersForInsert(newColumnId, parentTaskId, targetOrder, null);
+                shiftOrdersAfterDelete(currentColumnId, parentTaskId, currentOrder, entity.getId());
+            }
+
+            entity.setColumnId(newColumnId);
+            entity.setOrder(targetOrder);
+
+            TaskEntity saved = taskRepository.save(entity);
+            Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+            return toResponse(saved, users);
+            
+        } catch (DuplicateKeyException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Conflict: Another move operation is in progress. Please try again.");
+        }
     }
 
     @Override
