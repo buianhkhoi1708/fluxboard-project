@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { IBoard, IList, ICard, ISubtask } from '../types';
+import { boardApi } from '../api/boardApi'; 
 
 interface IBoardState {
   board: IBoard | null;
+  isLoading: boolean; 
   
-  fetchBoardData: (boardId: string) => void;
+  fetchBoardData: (boardId: string) => Promise<void>;
   setBoard: (newBoard: IBoard) => void; 
   setBoardFromAI: (aiJsonString: string) => void; 
 
@@ -15,24 +17,82 @@ interface IBoardState {
   deleteCard: (listId: string, cardId: string) => void;
   updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
   toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
+  
+  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>;
 
   getColumnTotalPoints: (listId: string) => number;
   getBoardTotalPoints: () => number;
 }
 
-// Giữ lại Mock Data tĩnh ở đây để UI có cái render tạm
-const initialState: IBoard = {
-  "id": "board_eng_flux_01",
-  "board_name": "App Học Tiếng Anh Flux",
-  "description": "Phát triển ứng dụng di động hỗ trợ người dùng học tiếng Anh...",
-  "lists": [] // Khôi tự dán lại mock data list vào nhé
-};
-
 export const useBoardStore = create<IBoardState>((set, get) => ({
-  board: initialState, 
+  board: null, 
+  isLoading: false,
 
-  fetchBoardData: (boardId: string) => {
-    console.log(`Tiến hành fetch data từ BE cho board: ${boardId}`);
+  fetchBoardData: async (boardId: string) => {
+    set({ isLoading: true });
+    try {
+      const rawResponse = await boardApi.getBoard(boardId);
+      
+      // 1. Lột vỏ tìm lõi
+      let coreData = rawResponse;
+      while (coreData && coreData.data && coreData.board_name === undefined && coreData.columns === undefined) {
+        coreData = coreData.data;
+      }
+
+      console.log("🎯 Đã chạm đáy dữ liệu:", coreData);
+
+      // 2. Mapping chuẩn xác từ Schema của Mạnh sang Schema của Frontend
+      const mappedBoard: IBoard = {
+        id: coreData.id || coreData._id,
+        board_name: coreData.board_name || "Bảng không tên",
+        description: coreData.description || "",
+        
+        // 👉 ĐÃ FIX: Map 'columns' từ DB sang 'lists' của FE
+        lists: (coreData.columns || []).map((col: any) => ({
+          id: col.id || col._id,
+          list_name: col.list_name || "Cột không tên",
+          order: col.order || 0,
+          
+          // 👉 ĐÃ FIX: Map 'tasks' từ DB sang 'cards' của FE
+          cards: (col.tasks || []).map((task: any) => ({
+            id: task.id || task._id,
+            title: task.title || "Chưa có tiêu đề",
+            description: task.description || "",
+            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : "Chưa phân công",
+            priority: task.priority || "Medium",
+            start_date: task.start_date || "",
+            due_date: task.due_date || "",
+            story_points: task.story_points || 0,
+            ai_suggested_points: task.ai_suggested_points || 0,
+            ai_estimation_reason: task.ai_estimation_reason || "",
+            status: task.status || "TODO",
+            subtasks: (task.subtasks || []).map((st: any) => ({
+              id: st.id || st._id,
+              title: st.title,
+              is_done: st.status === 'DONE'
+            }))
+          }))
+        }))
+      };
+
+      set({ board: mappedBoard, isLoading: false });
+      console.log("✅ Mapping thành công! Board đã sẵn sàng render.");
+
+    } catch (error) {
+      console.error(`❌ Lỗi mapping dữ liệu:`, error);
+      set({ isLoading: false });
+    }
+  },
+
+  updateCardPositionApi: async (cardId: string, newColumnId: string, newOrder: number) => {
+    try {
+      await boardApi.moveCard(cardId, newColumnId, newOrder);
+      console.log("Đã cập nhật vị trí thẻ trên Database!");
+    } catch (error) {
+      console.error("Lỗi khi lưu vị trí kéo thả:", error);
+      const currentBoardId = get().board?.id;
+      if (currentBoardId) get().fetchBoardData(currentBoardId); // Rollback nếu lỗi
+    }
   },
 
   setBoard: (newBoard) => set({ board: newBoard }),
@@ -87,7 +147,7 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
       story_points: Number(cardData.story_points) || 0, 
       ai_suggested_points: 0, 
       ai_estimation_reason: '', 
-      tags: cardData.tags || [], 
+      tags: Array.isArray(cardData.tags) ? cardData.tags : [], 
       subtasks: []
     };
 
