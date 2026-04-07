@@ -3,30 +3,27 @@ import Column from './Column';
 import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore'; 
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable'; // 👉 IMPORT THÊM HÀM NÀY ĐỂ KÉO THẢ TRONG CÙNG CỘT
 import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
-import { ICard } from '../types'; // Import ICard để định nghĩa kiểu cho activeCard
+import { ICard } from '../types';
 
 const BoardView = () => {
-  // Lấy thêm fetchBoardData từ Store ra
-  const { board, getBoardTotalPoints, addList, moveCardPosition, isLoading, fetchBoardData } = useBoardStore();
+  // Lấy các hàm phù hợp với Store MỚI (đã bỏ isLoading và moveCardPosition, lấy lại setBoard)
+  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData } = useBoardStore();
   
-  // Khai báo kiểu <ICard | null> cho activeCard
   const [activeCard, setActiveCard] = useState<ICard | null>(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // 👉 THÊM MỚI: Tự động gọi API lấy dữ liệu khi vừa vào trang
   useEffect(() => {
-    // Tạm thời hardcode ID. Khi có React Router, bạn có thể lấy ID này từ useParams()
-    const currentBoardId = "YOUR_BOARD_ID_HERE"; 
-    fetchBoardData(currentBoardId);
+    fetchBoardData("board_eng_flux_01");
   }, [fetchBoardData]);
 
-  // Cập nhật điều kiện Loading: Hiện màn hình chờ nếu isLoading = true hoặc chưa có board
-  if (isLoading || !board) return (
+  // Điều kiện Loading rút gọn lại vì Store không còn biến isLoading
+  if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
       <div className="relative flex items-center justify-center">
         <div className="absolute w-16 h-16 bg-indigo-400/20 rounded-full animate-ping"></div>
@@ -35,8 +32,7 @@ const BoardView = () => {
         </div>
       </div>
       <div className="flex flex-col items-center gap-1">
-        <span className="text-base font-bold text-slate-700 tracking-tight">Đang đồng bộ không gian làm việc...</span>
-        <span className="text-xs font-medium text-slate-400">Vui lòng chờ trong giây lát</span>
+        <span className="text-base font-bold text-slate-700 tracking-tight">Đang tải không gian làm việc...</span>
       </div>
     </div>
   );
@@ -45,32 +41,53 @@ const BoardView = () => {
     if (e.active.data.current?.type === 'Card') setActiveCard(e.active.data.current.card);
   };
 
-  // TỐI ƯU HÓA handleDragEnd: Đẩy toàn bộ việc tính toán mảng cho Zustand Store
+  // 👉 ĐƯA LOGIC XỬ LÝ MẢNG TRỞ LẠI VÌ STORE ĐÃ BỎ MOVECARDPOSITION
   const handleDragEnd = (e: DragEndEvent) => {
     setActiveCard(null);
     const { active, over } = e;
-    
-    // Nếu kéo thả ra ngoài hoặc không có điểm rơi -> Bỏ qua
     if (!over) return;
 
-    const taskId = String(active.id);
-    const overId = String(over.id);
+    const activeListId = active.data.current?.listId;
+    const overListId = over.data.current?.listId || over.id;
+    if (!activeListId || !overListId) return;
 
-    // Lấy ID cột nguồn và ID cột đích (Hỗ trợ cả fallback listId cũ của bạn)
-    const sourceColId = active.data.current?.sortable?.containerId || active.data.current?.listId;
-    const destColId = over.data.current?.sortable?.containerId || over.data.current?.listId || overId;
+    const sourceListIndex = board.lists.findIndex(l => l.id === activeListId);
+    const destListIndex = board.lists.findIndex(l => l.id === overListId);
+    
+    if (sourceListIndex === -1 || destListIndex === -1) return;
 
-    if (!sourceColId || !destColId) return;
+    const newLists = [...board.lists];
 
-    // Kéo thẻ thả lại đúng vị trí ban đầu -> Bỏ qua
-    if (sourceColId === destColId && active.id === over.id) return;
+    if (activeListId === overListId) {
+      // Kéo thả trong cùng 1 cột
+      const list = newLists[sourceListIndex];
+      const oldIndex = list.cards.findIndex(c => c.id === active.id);
+      const newIndex = list.cards.findIndex(c => c.id === over.id);
+      newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
+    } else {
+      // Kéo thả khác cột
+      const sourceList = newLists[sourceListIndex];
+      const destList = newLists[destListIndex];
+      const movedCard = sourceList.cards.find(c => c.id === active.id);
+      
+      if (!movedCard) return;
 
-    // Tính toán thứ tự mới (Backend đếm order từ 1 nên ta lấy index + 1)
-    const dropIndex = over.data.current?.sortable?.index ?? 0;
-    const newOrder = dropIndex + 1;
-
-    // Gọi hàm từ Store (nó sẽ tự động update UI và gọi API Backend ngầm)
-    moveCardPosition(taskId, String(sourceColId), String(destColId), newOrder);
+      const newSourceCards = sourceList.cards.filter(c => c.id !== active.id);
+      const newDestCards = [...(destList.cards || [])];
+      
+      if (over.data.current?.type === 'Card') {
+        const newIndex = destList.cards.findIndex(c => c.id === over.id);
+        newDestCards.splice(newIndex, 0, movedCard);
+      } else {
+        newDestCards.push(movedCard);
+      }
+      
+      newLists[sourceListIndex] = { ...sourceList, cards: newSourceCards };
+      newLists[destListIndex] = { ...destList, cards: newDestCards };
+    }
+    
+    // Cập nhật lại board bằng State thay vì gọi hàm API ngầm
+    setBoard({ ...board, lists: newLists });
   };
 
   const handleAddListClick = () => {

@@ -1,28 +1,28 @@
-// Định nghĩa URL gốc, nhớ đổi port nếu BE của bạn dùng port khác
-const BASE_URL = 'http://localhost:8080';
+import axiosClient from '../../../lib/axiosClient';
+import { IBoard } from '../types/index';
 
-// 1. API lấy dữ liệu Board 
-export const fetchBoardAPI = async (boardId: string) => {
-  const response = await fetch(`${BASE_URL}/boards/${boardId}`);
-  if (!response.ok) throw new Error('Lỗi khi lấy dữ liệu Bảng');
-  
-  const json = await response.json();
-  // Dựa vào code BE, bọc data trong ApiResponse
-  return json.data; 
-};
+export interface IApiResponse<T> {
+  success: boolean;
+  code: string;
+  message: string;
+  data: T;          // Là phần lõi chứa dữ liệu (Board, Card...)
+  meta?: any;       // Dùng optional (?) vì BE có hàm set null cho meta
+  timestamp: string; // Java Instant khi parse sang JSON sẽ biến thành chuỗi ISO string
+}
 
-// 2. API Cập nhật vị trí thẻ khi kéo thả
-export const moveTaskAPI = async (taskId: string, newColumnId: string, newOrder: number) => {
+export const boardApi = {
+  // Lấy dữ liệu Bảng (GET)
+  getBoard: async (boardId: string): Promise<IBoard> => {
+    const response: IApiResponse<IBoard> = await axiosClient.get(`/boards/${boardId}`);
+    return  response.data || response; 
+  },
 
-  const response = await fetch(`${BASE_URL}/tasks/${taskId}/move`, {
-    method: 'PATCH', // Checklist yêu cầu PATCH
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      newColumnId: newColumnId, 
-      newOrder: newOrder 
-    }),
-  });
-
-  if (!response.ok) throw new Error('Lỗi khi lưu vị trí kéo thả');
-  return response.json();
+  // Cập nhật vị trí thẻ (PATCH)
+  moveCard: async (cardId: string, newColumnId: string, newOrder: number) => {
+    const response: IApiResponse<any> = await axiosClient.patch(`/cards/${cardId}/move`, {
+      new_column_id: newColumnId,
+      new_order: newOrder
+    });
+    return response.data || response;
+  }
 };
