@@ -9,7 +9,7 @@ import AiGeneratorPanel from './AiGeneratorPanel';
 
 const BoardView = () => {
 
-  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData } = useBoardStore();
+  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateCardPositionApi } = useBoardStore();
   console.log("💎 DỮ LIỆU BOARD TRONG UI:", board);
   const [activeCard, setActiveCard] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
@@ -54,13 +54,19 @@ const BoardView = () => {
     const sourceListIndex = board.lists.findIndex(l => l.id === activeListId);
     const destListIndex = board.lists.findIndex(l => l.id === overListId);
     const newLists = [...board.lists];
+    
+    let newOrder = 1; // Khởi tạo vị trí mới
 
     if (activeListId === overListId) {
+      // 1. Kéo thả trong CÙNG MỘT CỘT
       const list = newLists[sourceListIndex];
       const oldIndex = list.cards.findIndex(c => c.id === active.id);
       const newIndex = list.cards.findIndex(c => c.id === over.id);
       newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
+      
+      newOrder = newIndex + 1; // Order cho DB thường đếm từ 1
     } else {
+      // 2. Kéo thả sang CỘT KHÁC
       const sourceList = newLists[sourceListIndex];
       const destList = newLists[destListIndex];
       const movedCard = sourceList.cards.find(c => c.id === active.id);
@@ -68,15 +74,24 @@ const BoardView = () => {
       const newDestCards = [...(destList.cards || [])];
       
       if (over.data.current?.type === 'Card') {
+        // Thả chèn vào giữa các thẻ khác
         const newIndex = destList.cards.findIndex(c => c.id === over.id);
         newDestCards.splice(newIndex, 0, movedCard);
+        newOrder = newIndex + 1;
       } else {
+        // Thả vào khoảng trống của cột (xuống cuối cùng)
         newDestCards.push(movedCard);
+        newOrder = newDestCards.length;
       }
       newLists[sourceListIndex] = { ...sourceList, cards: newSourceCards };
       newLists[destListIndex] = { ...destList, cards: newDestCards };
     }
+
+    // Cập nhật UI ngay lập tức cho mượt
     setBoard({ ...board, lists: newLists });
+
+    // 🚀 BẮN API LƯU XUỐNG DATABASE Ở ĐÂY NÈ KHÔI:
+    updateCardPositionApi(active.id, overListId, newOrder);
   };
 
   const handleAddListClick = () => {

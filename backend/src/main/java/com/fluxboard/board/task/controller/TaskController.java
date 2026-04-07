@@ -6,6 +6,7 @@ import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
+import com.fluxboard.board.task.dto.request.TaskMoveRequest; // 👉 ĐÃ THÊM IMPORT NÀY
 import com.fluxboard.board.task.dto.response.TaskResponse;
 import com.fluxboard.board.task.service.TaskService;
 import com.fluxboard.rbac.annotation.RequirePermission;
@@ -18,6 +19,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping; // 👉 ĐÃ THÊM IMPORT NÀY
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -103,6 +105,16 @@ public class TaskController {
             @Valid @RequestBody UpdateTaskRequest request
     ) {
         return ResponseFactory.ok("Task updated successfully.", taskService.update(taskId, request));
+    }
+
+    // 👉 ĐÃ THÊM HÀM KÉO THẢ VÀO ĐÂY
+    @RequirePermission("TASK_UPDATE")
+    @PatchMapping("/{taskId}/move")
+    public ResponseEntity<ApiResponse<TaskResponse>> moveTask(
+            @PathVariable String taskId,
+            @Valid @RequestBody TaskMoveRequest request
+    ) {
+        return ResponseFactory.ok("Task moved successfully.", taskService.moveTask(taskId, request));
     }
 
     @RequirePermission("TASK_DELETE")
