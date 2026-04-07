@@ -3,25 +3,38 @@ import { Trash2, Edit2, Check, X, AlignLeft, Flag, CheckSquare, Square, Plus, Ta
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../stores/useBoardStore';
+// Import các interface từ file types của bạn
+import { ICard, ISubtask } from '../types'; 
 
-const priorityColors = { 
+// Định nghĩa kiểu cho Priority để TypeScript kiểm tra chặt chẽ
+type PriorityType = 'Low' | 'Medium' | 'High' | 'Critical';
+
+const priorityColors: Record<PriorityType, string> = { 
   Low: 'bg-blue-100 text-blue-700', 
   Medium: 'bg-yellow-100 text-yellow-700', 
   High: 'bg-orange-100 text-orange-700', 
   Critical: 'bg-red-100 text-red-700' 
 };
 
-// 👉 TỐI ƯU 1: Bọc toàn bộ component bằng React.memo
-const CardItem = memo(({ card, listId, isOverlay }) => {
+// Khai báo Props mà CardItem sẽ nhận
+interface CardItemProps {
+  card: ICard;
+  listId: string;
+  isOverlay?: boolean;
+}
+
+// 👉 TỐI ƯU 1: Bọc toàn bộ component bằng React.memo kèm khai báo kiểu
+const CardItem = memo(({ card, listId, isOverlay }: CardItemProps) => {
   const { updateCard, deleteCard, toggleSubtask } = useBoardStore();
   const [isEditing, setIsEditing] = useState(false);
   
-  const [editTitle, setEditTitle] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editPriority, setEditPriority] = useState('Medium');
-  const [editTags, setEditTags] = useState('');
-  const [editStoryPoints, setEditStoryPoints] = useState(0);
-  const [editSubtasks, setEditSubtasks] = useState([]);
+  // Thêm kiểu dữ liệu cho các State
+  const [editTitle, setEditTitle] = useState(card.title);
+  const [editDesc, setEditDesc] = useState(card.description || '');
+  const [editPriority, setEditPriority] = useState<PriorityType>((card.priority as PriorityType) || 'Medium');
+  const [editTags, setEditTags] = useState(card.tags ? card.tags.join(', ') : '');
+  const [editStoryPoints, setEditStoryPoints] = useState<number | string>(card.story_points || 0);
+  const [editSubtasks, setEditSubtasks] = useState<ISubtask[]>(card.subtasks || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -34,24 +47,24 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
     opacity: isDragging ? 0.4 : 1 
   };
 
-  const handleOpenEdit = (e) => {
+  const handleOpenEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditTitle(card.title); 
     setEditDesc(card.description || '');
-    setEditPriority(card.priority || 'Medium'); 
+    setEditPriority((card.priority as PriorityType) || 'Medium'); 
     setEditTags(card.tags ? card.tags.join(', ') : '');
     setEditStoryPoints(card.story_points || 0);
     setEditSubtasks(card.subtasks || []);
     setIsEditing(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = (e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.stopPropagation();
     updateCard(listId, card.id, { 
       title: editTitle.trim() || 'Thẻ không tên', // Fallback tránh lưu title rỗng
       description: editDesc, 
       priority: editPriority,
-      story_points: Number(editStoryPoints),
+      story_points: Number(editStoryPoints) || 0,
       tags: editTags.split(',').map(t => t.trim()).filter(Boolean), 
       subtasks: editSubtasks
     });
@@ -59,18 +72,23 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
   };
 
   // 👉 TỐI ƯU 2: Bắt sự kiện bàn phím (Ctrl+Enter để lưu)
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       handleSave(e);
     }
   };
 
-  const handleAddSubtask = (e) => {
+  const handleAddSubtask = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newSubtaskTitle.trim()) {
       e.preventDefault(); 
       e.stopPropagation();
-      setEditSubtasks([...editSubtasks, { id: `st-${Date.now()}`, title: newSubtaskTitle.trim(), is_done: false }]);
+      const newSubtask: ISubtask = { 
+        id: `st-${Date.now()}`, 
+        title: newSubtaskTitle.trim(), 
+        is_done: false 
+      };
+      setEditSubtasks([...editSubtasks, newSubtask]);
       setNewSubtaskTitle('');
     }
   };
@@ -108,8 +126,8 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
         <div className="flex gap-2 items-center">
           <div className="flex-1 relative">
              <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Flag size={12} className="text-slate-400" /></div>
-            <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-medium text-slate-700 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all appearance-none cursor-pointer">
-              {Object.keys(priorityColors).map(p => <option key={p} value={p}>{p}</option>)}
+            <select value={editPriority} onChange={(e) => setEditPriority(e.target.value as PriorityType)} className="w-full text-xs border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 outline-none font-medium text-slate-700 bg-white hover:border-indigo-300 focus:border-indigo-400 transition-all appearance-none cursor-pointer">
+              {(Object.keys(priorityColors) as PriorityType[]).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
 
@@ -171,7 +189,7 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
       {...listeners} 
       className={`group relative flex flex-col bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 cursor-grab active:cursor-grabbing hover:border-indigo-300 hover:shadow-md transition-all ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
     >
-      {card.tags?.length > 0 && (
+      {(card.tags && card.tags.length > 0) && (
         <div className="flex flex-wrap gap-1 mb-1.5">
           {card.tags.map((tag, idx) => <span key={idx} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase rounded">{tag}</span>)}
         </div>
@@ -186,7 +204,7 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
         </div>
       )}
 
-      {card.subtasks?.length > 0 && (
+      {(card.subtasks && card.subtasks.length > 0) && (
         <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2 cursor-default">
           {card.subtasks.map(st => (
             <div key={st.id} onClick={(e) => { e.stopPropagation(); toggleSubtask(listId, card.id, st.id); }} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors">
@@ -199,9 +217,9 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
 
       <div className="mt-3 flex items-center justify-between text-xs font-medium border-t border-slate-100 pt-2.5">
         <div className="flex items-center gap-2">
-          {card.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[card.priority] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{card.priority}</span></span>}
+          {card.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[card.priority as PriorityType] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{card.priority}</span></span>}
         </div>
-        {card.story_points > 0 && (
+        {(card.story_points ?? 0) > 0 && (
           <span className="min-w-[24px] h-6 px-1.5 flex items-center justify-center rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-extrabold border border-indigo-100 shadow-sm" title="Story Points">
             {card.story_points}
           </span>
@@ -214,6 +232,6 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
       </div>
     </div>
   );
-}); // Đóng React.memo
+}); 
 
 export default CardItem;

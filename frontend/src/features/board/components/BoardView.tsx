@@ -1,21 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Column from './Column';
 import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore'; 
-import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
-import { X, Plus, Target, Save, Sparkles, Users, Filter } from 'lucide-react'; 
+import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
+import { ICard } from '../types'; // Import ICard để định nghĩa kiểu cho activeCard
 
 const BoardView = () => {
-  const { board, setBoard, getBoardTotalPoints, addList } = useBoardStore();
-  const [activeCard, setActiveCard] = useState(null);
+  // Lấy thêm fetchBoardData từ Store ra
+  const { board, getBoardTotalPoints, addList, moveCardPosition, isLoading, fetchBoardData } = useBoardStore();
+  
+  // Khai báo kiểu <ICard | null> cho activeCard
+  const [activeCard, setActiveCard] = useState<ICard | null>(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  if (!board) return (
+  // 👉 THÊM MỚI: Tự động gọi API lấy dữ liệu khi vừa vào trang
+  useEffect(() => {
+    // Tạm thời hardcode ID. Khi có React Router, bạn có thể lấy ID này từ useParams()
+    const currentBoardId = "YOUR_BOARD_ID_HERE"; 
+    fetchBoardData(currentBoardId);
+  }, [fetchBoardData]);
+
+  // Cập nhật điều kiện Loading: Hiện màn hình chờ nếu isLoading = true hoặc chưa có board
+  if (isLoading || !board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
       <div className="relative flex items-center justify-center">
         <div className="absolute w-16 h-16 bg-indigo-400/20 rounded-full animate-ping"></div>
@@ -30,45 +41,36 @@ const BoardView = () => {
     </div>
   );
 
-  const handleDragStart = (e) => {
+  const handleDragStart = (e: DragStartEvent) => {
     if (e.active.data.current?.type === 'Card') setActiveCard(e.active.data.current.card);
   };
 
-  const handleDragEnd = (e) => {
+  // TỐI ƯU HÓA handleDragEnd: Đẩy toàn bộ việc tính toán mảng cho Zustand Store
+  const handleDragEnd = (e: DragEndEvent) => {
     setActiveCard(null);
     const { active, over } = e;
+    
+    // Nếu kéo thả ra ngoài hoặc không có điểm rơi -> Bỏ qua
     if (!over) return;
 
-    const activeListId = active.data.current?.listId;
-    const overListId = over.data.current?.listId || over.id;
-    if (!activeListId || !overListId) return;
+    const taskId = String(active.id);
+    const overId = String(over.id);
 
-    const sourceListIndex = board.lists.findIndex(l => l.id === activeListId);
-    const destListIndex = board.lists.findIndex(l => l.id === overListId);
-    const newLists = [...board.lists];
+    // Lấy ID cột nguồn và ID cột đích (Hỗ trợ cả fallback listId cũ của bạn)
+    const sourceColId = active.data.current?.sortable?.containerId || active.data.current?.listId;
+    const destColId = over.data.current?.sortable?.containerId || over.data.current?.listId || overId;
 
-    if (activeListId === overListId) {
-      const list = newLists[sourceListIndex];
-      const oldIndex = list.cards.findIndex(c => c.id === active.id);
-      const newIndex = list.cards.findIndex(c => c.id === over.id);
-      newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
-    } else {
-      const sourceList = newLists[sourceListIndex];
-      const destList = newLists[destListIndex];
-      const movedCard = sourceList.cards.find(c => c.id === active.id);
-      const newSourceCards = sourceList.cards.filter(c => c.id !== active.id);
-      const newDestCards = [...(destList.cards || [])];
-      
-      if (over.data.current?.type === 'Card') {
-        const newIndex = destList.cards.findIndex(c => c.id === over.id);
-        newDestCards.splice(newIndex, 0, movedCard);
-      } else {
-        newDestCards.push(movedCard);
-      }
-      newLists[sourceListIndex] = { ...sourceList, cards: newSourceCards };
-      newLists[destListIndex] = { ...destList, cards: newDestCards };
-    }
-    setBoard({ ...board, lists: newLists });
+    if (!sourceColId || !destColId) return;
+
+    // Kéo thẻ thả lại đúng vị trí ban đầu -> Bỏ qua
+    if (sourceColId === destColId && active.id === over.id) return;
+
+    // Tính toán thứ tự mới (Backend đếm order từ 1 nên ta lấy index + 1)
+    const dropIndex = over.data.current?.sortable?.index ?? 0;
+    const newOrder = dropIndex + 1;
+
+    // Gọi hàm từ Store (nó sẽ tự động update UI và gọi API Backend ngầm)
+    moveCardPosition(taskId, String(sourceColId), String(destColId), newOrder);
   };
 
   const handleAddListClick = () => {
@@ -91,14 +93,12 @@ const BoardView = () => {
 
         <AiGeneratorPanel />
 
-        {/* 👉 ĐÃ CHỈNH SỬA HEADER CỦA BẢNG TẠI ĐÂY */}
+        {/* HEADER CỦA BẢNG */}
         <div className="px-6 py-4 bg-white/70 backdrop-blur-xl border-b border-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 z-10 sticky top-0">
           
-          {/* Thông tin dự án bên trái */}
           <div className="flex items-center gap-3.5">
-            {/* Logo dự án (Lấy chữ cái đầu) */}
             <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-xl shadow-md shrink-0">
-              {board.board_name.charAt(0)}
+              {board.board_name?.charAt(0) || 'B'}
             </div>
             <div className="flex flex-col">
               <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -108,10 +108,8 @@ const BoardView = () => {
             </div>
           </div>
           
-          {/* Công cụ & Hành động bên phải */}
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
             
-            {/* Cụm Avatars (Giả lập thành viên team) */}
             <div className="hidden sm:flex -space-x-2 mr-1 shrink-0">
               <div className="w-8 h-8 rounded-full border-2 border-white bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold z-30" title="Khôi">K</div>
               <div className="w-8 h-8 rounded-full border-2 border-white bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold z-20" title="Mạnh">M</div>
@@ -121,13 +119,11 @@ const BoardView = () => {
 
             <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0"></div>
 
-            {/* Nút Filter (Trang trí) */}
             <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
               <Filter size={16} />
               <span className="hidden sm:inline">Lọc</span>
             </button>
 
-            {/* Điểm Story Points */}
             {getBoardTotalPoints && (
               <div className="flex items-center gap-1.5 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg text-sm font-bold text-indigo-600 shadow-sm shrink-0 cursor-default">
                 <Target size={16} className="text-indigo-500" />
@@ -136,7 +132,6 @@ const BoardView = () => {
               </div>
             )}
             
-            {/* Nút Lưu Bảng */}
             <button 
               onClick={handleSaveBoard}
               className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shrink-0"

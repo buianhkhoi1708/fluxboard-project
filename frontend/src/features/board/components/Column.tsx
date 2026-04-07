@@ -4,15 +4,22 @@ import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+// Import interface từ file types của bạn
+import { IList } from '../types';
+
+// Định nghĩa Props cho component
+interface ColumnProps {
+  list: IList;
+}
 
 // 👉 TỐI ƯU 1: Bọc React.memo để chống re-render vô ích toàn bộ các cột
-const Column = memo(({ list }) => {
+const Column: React.FC<ColumnProps> = memo(({ list }) => {
   const { getColumnTotalPoints, addCard, deleteList } = useBoardStore();
   
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [newPriority, setNewPriority] = useState('Medium');
+  const [newPriority, setNewPriority] = useState<"Low" | "Medium" | "High" | "Critical">('Medium');
   const [newAssignee, setNewAssignee] = useState('');
   const [newPoints, setNewPoints] = useState('');
   const [newTags, setNewTags] = useState('');
@@ -33,8 +40,8 @@ const Column = memo(({ list }) => {
         description: newDesc.trim(),
         priority: newPriority,
         assignee: newAssignee.trim(),
-        story_points: newPoints,
-        tags: newTags
+        story_points: Number(newPoints) || 0, // Đảm bảo parse sang số
+        tags: newTags ? newTags.split(',').map(t => t.trim()) : [] // Tách tag bằng dấu phẩy thành mảng
       });
 
       setNewTitle(''); setNewDesc(''); setNewAssignee(''); 
@@ -43,8 +50,16 @@ const Column = memo(({ list }) => {
     }
   };
 
+  // Hàm xử lý khi nhấn Enter ở input Title
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddCardClick();
+    }
+  };
+
   return (
-    // 👉 TỐI ƯU 2: Giao diện Glassmorphism (Kính mờ) viền nổi
+    // TỐI ƯU 2: Giao diện Glassmorphism (Kính mờ) viền nổi
     <div className="w-[300px] shrink-0 flex flex-col bg-slate-100/80 backdrop-blur-md rounded-2xl max-h-full relative border border-white/60 shadow-sm">
       {isMenuOpen && <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)}></div>}
       
@@ -94,7 +109,7 @@ const Column = memo(({ list }) => {
               autoFocus 
               value={newTitle} 
               onChange={e => setNewTitle(e.target.value)} 
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAddCardClick()} 
+              onKeyDown={handleKeyDown} 
               placeholder="Tên thẻ mới..." 
               className="text-sm font-bold bg-transparent border-none p-1 outline-none w-full text-slate-800 placeholder:text-slate-400 focus:ring-0" 
             />
@@ -123,12 +138,16 @@ const Column = memo(({ list }) => {
             <div className="flex gap-2 items-center">
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Flag size={12} className="text-slate-400" /></div>
-                <select value={newPriority} onChange={e => setNewPriority(e.target.value)} className="text-xs border border-slate-200 rounded-lg pl-6 pr-2 py-1.5 outline-none w-full font-medium focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 appearance-none bg-white transition-all">
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
-                </select>
+               <select 
+                value={newPriority} 
+                onChange={e => setNewPriority(e.target.value as "Low" | "Medium" | "High" | "Critical")} 
+                className="text-xs border border-slate-200 rounded-lg pl-6 pr-2 py-1.5 outline-none w-full font-medium focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 appearance-none bg-white transition-all"
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+              </select>
               </div>
               <div className="relative flex-[1.5]">
                 <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Tag size={12} className="text-slate-400" /></div>
