@@ -2,31 +2,15 @@ import { create } from 'zustand';
 
 import { IBoard, IList, ICard, ISubtask } from '../types';
 
-// Import các hàm API của bạn tại đây (ví dụ)
-
-// import { fetchBoardDataAPI, updateCardAPI, addCardAPI, deleteCardAPI } from '../features/board/api/boardApi';
-
 
 
 interface IBoardState {
 
   board: IBoard | null;
 
-  // Bổ sung các trạng thái để quản lý UI (Loading & Error)
-
-  isLoading: boolean;
-
-  error: string | null;
-
   
 
-  // Các action bất đồng bộ (gọi API)
-
-  fetchBoardData: (boardId: string) => Promise<void>;
-
-  
-
-  // Các action đồng bộ (có thể cần tích hợp API sau)
+  fetchBoardData: (boardId: string) => void;
 
   setBoard: (newBoard: IBoard) => void; 
 
@@ -58,53 +42,31 @@ interface IBoardState {
 
 
 
+// Giữ lại Mock Data tĩnh ở đây để UI có cái render tạm
+
+const initialState: IBoard = {
+
+  "id": "board_eng_flux_01",
+
+  "board_name": "App Học Tiếng Anh Flux",
+
+  "description": "Phát triển ứng dụng di động hỗ trợ người dùng học tiếng Anh...",
+
+  "lists": [] // Khôi tự dán lại mock data list vào nhé
+
+};
+
+
+
 export const useBoardStore = create<IBoardState>((set, get) => ({
 
-  // [x] Xóa bỏ hoàn toàn Mock Data, khởi tạo bằng null
-
-  board: null, 
-
-  isLoading: false,
-
-  error: null,
+  board: initialState, 
 
 
 
-  // [x] Hàm gọi API lấy dữ liệu Bảng
+  fetchBoardData: (boardId: string) => {
 
-  fetchBoardData: async (boardId: string) => {
-
-    set({ isLoading: true, error: null });
-
-    try {
-
-      // Mô phỏng gọi API GET từ Backend
-
-      console.log(`Đang gọi API GET tới /api/boards/${boardId}...`);
-
-      
-
-      // const response = await fetchBoardDataAPI(boardId);
-
-      // set({ board: response.data, isLoading: false });
-
-
-
-      // Tạm thời set timeout để bạn thấy được trạng thái Loading (Spinner)
-
-      setTimeout(() => {
-
-        set({ board: { id: boardId, board_name: "Bảng từ API", description: "", lists: [] }, isLoading: false });
-
-      }, 1000);
-
-
-
-    } catch (err: any) {
-
-      set({ error: err.message || "Lỗi khi tải dữ liệu", isLoading: false });
-
-    }
+    console.log(`Tiến hành fetch data từ BE cho board: ${boardId}`);
 
   },
 
@@ -170,8 +132,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
 
     const newList: IList = { id: `list-${Date.now()}`, list_name: listName, order: state.board.lists.length + 1, cards: [] };
 
-    // TODO: Cần gọi API POST tạo Cột ở đây
-
     return { board: { ...state.board, lists: [...state.board.lists, newList] } };
 
   }),
@@ -181,8 +141,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
   deleteList: (listId) => set((state) => {
 
     if (!state.board) return state;
-
-    // TODO: Cần gọi API DELETE xóa Cột ở đây
 
     return { board: { ...state.board, lists: state.board.lists.filter(l => l.id !== listId) } };
 
@@ -224,7 +182,7 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
 
     };
 
-    // TODO: Cần gọi API POST tạo Thẻ ở đây
+
 
     return {
 
@@ -240,8 +198,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
 
     if (!state.board) return state;
 
-    // TODO: Cần gọi API DELETE xóa Thẻ ở đây
-
     return {
 
       board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }
@@ -255,8 +211,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
   updateCard: (listId, cardId, updates) => set((state) => {
 
     if (!state.board) return state;
-
-    // TODO: Cần gọi API PATCH/PUT cập nhật Thẻ ở đây (dùng cho cả việc cập nhật vị trí kéo thả)
 
     return {
 
