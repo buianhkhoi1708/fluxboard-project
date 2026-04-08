@@ -192,7 +192,12 @@ addCard: async (listId: string, cardData: any) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
 
-    // 1. Optimistic Update (Cập nhật UI ngay lập tức)
+    // 1. Tìm thẻ hiện tại để lấy lại các dữ liệu gốc (tránh bị thiếu trường khi gửi PUT)
+    const list = board.lists.find(l => l.id === listId);
+    const card = list?.cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    // 2. Optimistic Update (Cập nhật UI ngay lập tức cho mượt)
     set((state) => {
       if (!state.board) return state;
       return {
@@ -200,22 +205,34 @@ addCard: async (listId: string, cardData: any) => {
       };
     });
 
-    // 2. Chuyển đổi tên biến (Mapping) cho khớp với Backend
-    const backendUpdates: any = {};
-    if (updates.title !== undefined) backendUpdates.title = updates.title;
-    if (updates.description !== undefined) backendUpdates.description = updates.description;
-    if (updates.priority !== undefined) backendUpdates.priority = updates.priority.toUpperCase();
-    if (updates.story_points !== undefined) backendUpdates.storyPoint = Number(updates.story_points);
-    if (updates.assignee !== undefined) backendUpdates.assigneesUserId = [updates.assignee]; // BE cần mảng
+    // 3. Gom TOÀN BỘ dữ liệu của thẻ (Dữ liệu cũ + Dữ liệu vừa sửa) để thỏa mãn BE
+    const backendUpdates = {
+      title: (updates.title !== undefined ? updates.title : card.title).trim(),
+      description: updates.description !== undefined ? updates.description : card.description,
+      priority: (updates.priority !== undefined ? updates.priority : card.priority).toUpperCase(),
+      storyPoint: Number(updates.story_points !== undefined ? updates.story_points : card.story_points) || 0,
+      
+      // Xử lý assignee: BE cần mảng ID, nếu là Unassigned thì gửi mảng rỗng
+      assigneesUserId: (() => {
+        const currentAssignee = updates.assignee !== undefined ? updates.assignee : card.assignee;
+        if (!currentAssignee || currentAssignee === "Unassigned" || currentAssignee === "Chưa phân công") {
+          return [];
+        }
+        return [currentAssignee];
+      })(),
+      
+      // Gửi kèm columnId phòng trường hợp BE bắt buộc (thường DTO Update cần)
+      columnId: listId 
+    };
 
-    // 3. Gọi API chạy ngầm với data đã chuẩn hóa
+    // 4. Gọi API ngầm lên Server bằng method PUT
     try {
-      console.log("📤 Đang gửi dữ liệu cập nhật lên BE:", backendUpdates);
+      console.log("📤 Đang gửi dữ liệu PUT (Full) lên BE:", backendUpdates);
       await boardApi.updateTask(cardId, backendUpdates);
       console.log(`🚀 Đã cập nhật thành công task ${cardId} trên Database!`);
     } catch (error) {
-      console.error("❌ Lỗi khi cập nhật task, đang khôi phục lại UI...", error);
-      fetchBoardData(board.id); // Rollback nếu API lỗi
+      console.error("❌ Lỗi khi cập nhật task (BE từ chối), đang khôi phục lại UI...", error);
+      fetchBoardData(board.id); // Rollback nếu Backend vẫn báo lỗi
     }
   },
   toggleSubtask: (listId, cardId, subtaskId) => set((state) => {

@@ -47,7 +47,7 @@ createTask: async (taskData: any) => {
   },
   // Cập nhật Task (PATCH)
   updateTask: async (taskId: string, updates: any) => {
-    const response: any = await axiosClient.patch(`/tasks/${taskId}`, updates);
+    const response: any = await axiosClient.put(`/tasks/${taskId}`, updates);
     return response.data || response;
   },
 };
