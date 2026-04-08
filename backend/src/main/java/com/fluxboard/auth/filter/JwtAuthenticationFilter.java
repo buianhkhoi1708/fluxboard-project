@@ -38,7 +38,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String servletPath = request.getServletPath();
         return "/health-check".equals(servletPath)
                 || "/auth/login".equals(servletPath)
-                || "/error".equals(servletPath);
+                || "/error".equals(servletPath)
+                || servletPath.startsWith("/api/v1/ws-fluxboard")
+                || servletPath.startsWith("/ws-fluxboard");
     }
 
     @Override

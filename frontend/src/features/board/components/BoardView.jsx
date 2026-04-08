@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // 👉 ĐÃ BỔ SUNG: import useEffect
+import React, { useState, useEffect } from 'react'; 
 import Column from './Column';
 import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore'; 
@@ -6,6 +6,7 @@ import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerS
 import { arrayMove } from '@dnd-kit/sortable';
 import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
+import { useRealtime } from '../hooks/useRealtime'; 
 
 const BoardView = () => {
 
@@ -17,11 +18,16 @@ const BoardView = () => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // 👉 ĐÃ BỔ SUNG: Gọi API ngay khi trang vừa load xong
+  // 👉 Lấy ID của bảng (có thể lấy từ URL useParams() nếu Khôi làm Router, ở đây tui đang fix cứng theo code cũ của ông)
+  const boardId = '69d22692ef24ae604f65ae89';
+
+  // 👉 ĐÃ BỔ SUNG: KÍCH HOẠT REAL-TIME LẮNG NGHE SỰ KIỆN TỪ MẠNH
+  useRealtime(boardId);
+
+  // 👉 Gọi API ngay khi trang vừa load xong
   useEffect(() => {
-    // Truyền cái ID bảng trong DB của Khôi vào đây
-    fetchBoardData('69d22692ef24ae604f65ae89'); 
-  }, [fetchBoardData]);
+    fetchBoardData(boardId); 
+  }, [fetchBoardData, boardId]);
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
@@ -55,18 +61,16 @@ const BoardView = () => {
     const destListIndex = board.lists.findIndex(l => l.id === overListId);
     const newLists = [...board.lists];
     
-    let newOrder = 1; // Khởi tạo vị trí mới
+    let newOrder = 1; 
 
     if (activeListId === overListId) {
-      // 1. Kéo thả trong CÙNG MỘT CỘT
       const list = newLists[sourceListIndex];
       const oldIndex = list.cards.findIndex(c => c.id === active.id);
       const newIndex = list.cards.findIndex(c => c.id === over.id);
       newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
       
-      newOrder = newIndex + 1; // Order cho DB thường đếm từ 1
+      newOrder = newIndex + 1; 
     } else {
-      // 2. Kéo thả sang CỘT KHÁC
       const sourceList = newLists[sourceListIndex];
       const destList = newLists[destListIndex];
       const movedCard = sourceList.cards.find(c => c.id === active.id);
@@ -74,12 +78,10 @@ const BoardView = () => {
       const newDestCards = [...(destList.cards || [])];
       
       if (over.data.current?.type === 'Card') {
-        // Thả chèn vào giữa các thẻ khác
         const newIndex = destList.cards.findIndex(c => c.id === over.id);
         newDestCards.splice(newIndex, 0, movedCard);
         newOrder = newIndex + 1;
       } else {
-        // Thả vào khoảng trống của cột (xuống cuối cùng)
         newDestCards.push(movedCard);
         newOrder = newDestCards.length;
       }
@@ -87,10 +89,8 @@ const BoardView = () => {
       newLists[destListIndex] = { ...destList, cards: newDestCards };
     }
 
-    // Cập nhật UI ngay lập tức cho mượt
     setBoard({ ...board, lists: newLists });
 
-    // 🚀 BẮN API LƯU XUỐNG DATABASE Ở ĐÂY NÈ KHÔI:
     updateCardPositionApi(active.id, overListId, newOrder);
   };
 
