@@ -33,6 +33,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate; // 👉 ĐÃ THÊM IMPORT NÀY
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
@@ -284,10 +285,6 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             entity.setOrder(targetOrder);
 
             TaskEntity saved = taskRepository.save(entity);
-            
-            // 👉 PHÁT LOA SAU KHI KÉO THẢ XONG
-            broadcastBoardChange(newColumn.getBoardId());
-
             Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
             return toResponse(saved, users);
             
