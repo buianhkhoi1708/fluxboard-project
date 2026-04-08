@@ -7,4 +7,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    // Chỉ định dùng terser để nén code thay vì mặc định
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        // Tự động xóa sạch console.log và debugger khi build Production
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+  },
 })

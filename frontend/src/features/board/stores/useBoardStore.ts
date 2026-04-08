@@ -1,115 +1,98 @@
 import { create } from 'zustand';
+import { IBoard, IList, ICard, ISubtask } from '../types';
+import { boardApi } from '../api/boardApi'; 
 
-// ==========================================
-// 1. ĐỊNH NGHĨA TYPE/INTERFACE (CHUẨN CỦA CHẤN)
-// ==========================================
-export interface ISubtask {
-  id: string;
-  title: string;
-  is_done: boolean;
-}
-
-export interface ICard {
-  id: string;
-  title: string;
-  description: string;
-  assignee: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Critical'; 
-  start_date: string; 
-  due_date: string | null; 
-  estimated_days: number;
-  story_points: number;
-  ai_suggested_points: number;
-  ai_estimation_reason: string;
-  tags: string[];
-  subtasks: ISubtask[];
-}
-
-export interface IList {
-  id: string;
-  list_name: string;
-  order: number;
-  wip_limit?: number; // AI có thể không trả về wip_limit nên để tuỳ chọn (?)
-  cards: ICard[];
-}
-
-export interface IBoard {
-  id: string;
-  board_name: string;
-  description: string;
-  lists: IList[];
-}
-
-// ==========================================
-// 2. INTERFACE STATE (ĐÃ BỔ SUNG FULL CRUD + AI)
-// ==========================================
 interface IBoardState {
   board: IBoard | null;
+  isLoading: boolean; 
   
-  // API Call
-  fetchBoardData: (boardId: string) => void;
-  setBoard: (newBoard: IBoard) => void; // Nạp lại toàn bộ bảng (Kéo thả)
-  setBoardFromAI: (aiJsonString: string) => void; // Nạp data từ AI
+  fetchBoardData: (boardId: string) => Promise<void>;
+  setBoard: (newBoard: IBoard) => void; 
+  setBoardFromAI: (aiJsonString: string) => void; 
 
-  // Thao tác Danh sách (Lists)
   addList: (listName: string) => void;
   deleteList: (listId: string) => void;
 
-  // Thao tác Thẻ (Cards)
-  addCard: (listId: string, title: string, description?: string) => void;
+  addCard: (listId: string, cardData: Partial<ICard>) => void;
   deleteCard: (listId: string, cardId: string) => void;
   updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
   toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
+  
+  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>;
 
-  // Tính toán
   getColumnTotalPoints: (listId: string) => number;
   getBoardTotalPoints: () => number;
 }
 
-// ==========================================
-// 3. MOCK DATA (CỦA CHẤN)
-// ==========================================
-const initialState: IBoard = {
-  "id": "board_eng_flux_01",
-  "board_name": "App Học Tiếng Anh Flux",
-  "description": "Phát triển ứng dụng di động hỗ trợ người dùng học tiếng Anh, tập trung vào giao tiếp và từ vựng thông minh.",
-  "lists": [
-    {
-      "id": "list_todo_111",
-      "list_name": "To Do",
-      "order": 1,
-      "wip_limit": 5, 
-      "cards": [
-        {
-          "id": "card_res_999",
-          "title": "Nghiên cứu thị trường và đối tượng người dùng",
-          "description": "Xác định nhu cầu và phân tích đối tượng mục tiêu. Phân tích điểm mạnh/yếu của Duolingo và Elsa Speak để tìm ngách thị trường.",
-          "assignee": "Khôi",
-          "priority": "High",
-          "start_date": "2024-05-10",
-          "due_date": "2024-05-15",
-          "estimated_days": 3,
-          "story_points": 5, 
-          "ai_suggested_points": 5, 
-          "ai_estimation_reason": "Task bao gồm phân tích đối thủ lớn và yêu cầu tổng hợp báo cáo chi tiết, mức độ phức tạp trung bình (Medium).",
-          "tags": ["Research", "Market Analysis"],
-          "subtasks": [
-            { "id": "sub_res_1", "title": "Phân tích 5 đối thủ cạnh tranh chính", "is_done": false }
-          ]
-        }
-      ]
-    }
-  ]
-};
-
-// ==========================================
-// 4. KHỞI TẠO STORE
-// ==========================================
 export const useBoardStore = create<IBoardState>((set, get) => ({
-  board: initialState, 
+  board: null, 
+  isLoading: false,
 
-  fetchBoardData: (boardId: string) => {
-    console.log(`Tiến hành fetch data từ BE cho board: ${boardId}`);
+  fetchBoardData: async (boardId: string) => {
+    set({ isLoading: true });
+    try {
+      const rawResponse = await boardApi.getBoard(boardId);
+      
+      // 1. Lột vỏ tìm lõi
+      let coreData = rawResponse;
+      while (coreData && coreData.data && coreData.board_name === undefined && coreData.columns === undefined) {
+        coreData = coreData.data;
+      }
+
+      console.log("🎯 Đã chạm đáy dữ liệu:", coreData);
+
+      // 2. Mapping chuẩn xác từ Schema của Mạnh sang Schema của Frontend
+      const mappedBoard: IBoard = {
+        id: coreData.id || coreData._id,
+        board_name: coreData.board_name || "Bảng không tên",
+        description: coreData.description || "",
+        
+        // 👉 ĐÃ FIX: Map 'columns' từ DB sang 'lists' của FE
+        lists: (coreData.columns || []).map((col: any) => ({
+          id: col.id || col._id,
+          list_name: col.list_name || "Cột không tên",
+          order: col.order || 0,
+          
+          // 👉 ĐÃ FIX: Map 'tasks' từ DB sang 'cards' của FE
+          cards: (col.tasks || []).map((task: any) => ({
+            id: task.id || task._id,
+            title: task.title || "Chưa có tiêu đề",
+            description: task.description || "",
+            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : "Chưa phân công",
+            priority: task.priority || "Medium",
+            start_date: task.start_date || "",
+            due_date: task.due_date || "",
+            story_points: task.story_points || 0,
+            ai_suggested_points: task.ai_suggested_points || 0,
+            ai_estimation_reason: task.ai_estimation_reason || "",
+            status: task.status || "TODO",
+            subtasks: (task.subtasks || []).map((st: any) => ({
+              id: st.id || st._id,
+              title: st.title,
+              is_done: st.status === 'DONE'
+            }))
+          }))
+        }))
+      };
+
+      set({ board: mappedBoard, isLoading: false });
+      console.log("✅ Mapping thành công! Board đã sẵn sàng render.");
+
+    } catch (error) {
+      console.error(`❌ Lỗi mapping dữ liệu:`, error);
+      set({ isLoading: false });
+    }
+  },
+
+  updateCardPositionApi: async (cardId: string, newColumnId: string, newOrder: number) => {
+    try {
+      await boardApi.moveCard(cardId, newColumnId, newOrder);
+      console.log("Đã cập nhật vị trí thẻ trên Database!");
+    } catch (error) {
+      console.error("Lỗi khi lưu vị trí kéo thả:", error);
+      const currentBoardId = get().board?.id;
+      if (currentBoardId) get().fetchBoardData(currentBoardId); // Rollback nếu lỗi
+    }
   },
 
   setBoard: (newBoard) => set({ board: newBoard }),
@@ -120,13 +103,13 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
       const boardWithIds: IBoard = {
         ...parsedData,
         id: parsedData.id || `board-ai-${Date.now()}`,
-        lists: parsedData.lists?.map((list: any, lIndex: number) => ({
+        lists: parsedData.lists?.map((list: Partial<IList>, lIndex: number) => ({
           ...list,
           id: list.id || `list-ai-${Date.now()}-${lIndex}`,
-          cards: list.cards?.map((card: any, cIndex: number) => ({
+          cards: list.cards?.map((card: Partial<ICard>, cIndex: number) => ({
             ...card,
             id: card.id || `card-ai-${Date.now()}-${lIndex}-${cIndex}`,
-            subtasks: card.subtasks?.map((st: any, stIndex: number) => ({
+            subtasks: card.subtasks?.map((st: Partial<ISubtask>, stIndex: number) => ({
               ...st,
               id: st.id || `subtask-ai-${Date.now()}-${stIndex}`
             })) || []
@@ -139,7 +122,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
     }
   },
 
-  // --- CRUD DANH SÁCH ---
   addList: (listName) => set((state) => {
     if (!state.board) return state;
     const newList: IList = { id: `list-${Date.now()}`, list_name: listName, order: state.board.lists.length + 1, cards: [] };
@@ -151,14 +133,11 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
     return { board: { ...state.board, lists: state.board.lists.filter(l => l.id !== listId) } };
   }),
 
-  // --- CRUD THẺ ---
-addCard: (listId, cardData) => set((state) => {
+  addCard: (listId, cardData) => set((state) => {
     if (!state.board) return state;
-    
-    // Nạp toàn bộ dữ liệu từ UI gửi lên, cái nào không có thì lấy mặc định
     const newCard: ICard = {
       id: `card-${Date.now()}`, 
-      title: cardData.title, 
+      title: cardData.title || 'Thẻ mới', 
       description: cardData.description || '', 
       assignee: cardData.assignee || 'Unassigned', 
       priority: cardData.priority || 'Medium', 
@@ -168,7 +147,7 @@ addCard: (listId, cardData) => set((state) => {
       story_points: Number(cardData.story_points) || 0, 
       ai_suggested_points: 0, 
       ai_estimation_reason: '', 
-      tags: cardData.tags ? cardData.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [], 
+      tags: Array.isArray(cardData.tags) ? cardData.tags : [], 
       subtasks: []
     };
 
@@ -202,7 +181,6 @@ addCard: (listId, cardData) => set((state) => {
     };
   }),
 
-  // --- TÍNH TOÁN ---
   getColumnTotalPoints: (listId) => {
     const board = get().board;
     if (!board) return 0;

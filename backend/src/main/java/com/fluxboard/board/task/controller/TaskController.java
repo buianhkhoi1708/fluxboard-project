@@ -8,9 +8,12 @@ import com.fluxboard.board.task.dto.request.CreateTaskRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
 import com.fluxboard.board.task.service.TaskService;
+import com.fluxboard.board.task.dto.request.TaskMoveRequest;
 import com.fluxboard.rbac.annotation.RequirePermission;
+
 import jakarta.validation.Valid;
 import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -25,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.PatchMapping;
 @RestController
 @RequestMapping("/tasks")
 public class TaskController {
@@ -110,5 +113,14 @@ public class TaskController {
     public ResponseEntity<ApiResponse<Void>> deleteTask(@PathVariable String taskId) {
         taskService.delete(taskId);
         return ResponseFactory.ok("Task deleted successfully.");
+    }
+    
+    @RequirePermission("TASK_UPDATE")
+    @PatchMapping("/{taskId}/move")
+    public ResponseEntity<ApiResponse<TaskResponse>> moveTask(
+            @PathVariable String taskId,
+            @Valid @RequestBody TaskMoveRequest request
+    ) {
+        return ResponseFactory.ok("Task moved successfully.", taskService.moveTask(taskId, request));
     }
 }
