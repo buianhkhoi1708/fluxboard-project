@@ -18,34 +18,37 @@ const Column = memo(({ list }) => {
   const [newTags, setNewTags] = useState('');
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const totalPoints = getColumnTotalPoints ? getColumnTotalPoints(list.id) : 0;
-  const cards = list.cards || [];
+  
+  // 👉 ĐÃ FIX: Lấy id hoặc _id (phòng hờ MongoDB)
+  const listId = list.id || list._id;
+  
+  const totalPoints = getColumnTotalPoints ? getColumnTotalPoints(listId) : 0;
+  
+  // 🚀 ĐÃ FIX CHÍ TỬ Ở ĐÂY: Lấy tasks thay vì cards
+  const cards = list.tasks || [];
 
   const { setNodeRef } = useDroppable({
-    id: list.id,
-    data: { type: 'List', listId: list.id }
+    id: listId,
+    data: { type: 'List', listId: listId }
   });
 
-const handleAddCardClick = async () => {
-  if (newTitle.trim()) {
-    // Truyền Object chứa tất cả các State mà Khôi đã khai báo ở trên
-    await addCard(list.id, {
-      title: newTitle,
-      description: newDesc,
-      priority: newPriority,
-      assignee: newAssignee,
-      story_points: newPoints,
-      tags: newTags
-    });
+  const handleAddCardClick = async () => {
+    if (newTitle.trim()) {
+      await addCard(listId, {
+        title: newTitle,
+        description: newDesc,
+        priority: newPriority,
+        assignee: newAssignee,
+        story_points: newPoints,
+        tags: newTags
+      });
 
-    // Reset Form...
-    setIsAdding(false);
-    setNewTitle('');
-  }
-};
+      setIsAdding(false);
+      setNewTitle('');
+    }
+  };
 
   return (
-    // 👉 TỐI ƯU 2: Giao diện Glassmorphism (Kính mờ) viền nổi
     <div className="w-[300px] shrink-0 flex flex-col bg-slate-100/80 backdrop-blur-md rounded-2xl max-h-full relative border border-white/60 shadow-sm">
       {isMenuOpen && <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)}></div>}
       
@@ -72,7 +75,7 @@ const handleAddCardClick = async () => {
           </button>
           {isMenuOpen && (
             <div className="absolute right-0 top-8 w-44 bg-white/90 backdrop-blur-xl rounded-xl shadow-xl border border-slate-100 py-1 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
-              <button onClick={() => { if(window.confirm(`Xóa danh sách "${list.list_name}"?`)) deleteList(list.id); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors">
+              <button onClick={() => { if(window.confirm(`Xóa danh sách "${list.list_name}"?`)) deleteList(listId); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors">
                 <Trash2 size={14} /> Xóa danh sách
               </button>
             </div>
@@ -82,12 +85,13 @@ const handleAddCardClick = async () => {
 
       {/* VÙNG THẢ THẺ (DRAG & DROP AREA) */}
       <div ref={setNodeRef} className="flex-1 overflow-y-auto flex flex-col gap-2.5 px-2 pb-2 custom-scrollbar min-h-[50px]">
-        <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
-          {cards.map((card) => <CardItem key={card.id} card={card} listId={list.id} />)}
+        {/* 👉 ĐÃ FIX: Map c.id hoặc c._id */}
+        <SortableContext items={cards.map(c => c.id || c._id)} strategy={verticalListSortingStrategy}>
+          {cards.map((card) => <CardItem key={card.id || card._id} card={card} listId={listId} />)}
         </SortableContext>
       </div>
 
-      {/* TỐI ƯU 3: FORM THÊM THẺ MỞ RỘNG (SANG TRỌNG) */}
+      {/* FORM THÊM THẺ MỞ RỘNG */}
       <div className="p-2 pt-0">
         {isAdding ? (
           <div className="bg-white p-3 rounded-xl shadow-lg border border-slate-200 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150 relative z-10">

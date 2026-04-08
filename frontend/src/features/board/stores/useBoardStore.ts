@@ -1,26 +1,19 @@
 import { create } from 'zustand';
-import { IBoard, IList, ICard, ISubtask } from '../types';
-import { boardApi } from '../api/boardApi'; 
+import { boardApi } from '../api/boardApi'; // 👉 Nhập đúng từ file api
 
 interface IBoardState {
-  board: IBoard | null;
+  board: any | null; 
   isLoading: boolean; 
-  
   fetchBoardData: (boardId: string) => Promise<void>;
-  setBoard: (newBoard: IBoard) => void; 
-  setBoardFromAI: (aiJsonString: string) => void; 
-
+  setBoard: (newBoard: any) => void; 
   addList: (listName: string) => void;
-  deleteList: (listId: string) => void;
-
-  addCard: (listId: string, title: string) => Promise<void>;
-  deleteCard: (listId: string, cardId: string) => void;
-  updateCard: (listId: string, cardId: string, updates: Partial<ICard>) => void;
-  toggleSubtask: (listId: string, cardId: string, subtaskId: string) => void;
-  
-  updateCardPositionApi: (cardId: string, newColumnId: string, newOrder: number) => Promise<void>;
-
-  getColumnTotalPoints: (listId: string) => number;
+  deleteList: (columnId: string) => void;
+  addCard: (columnId: string, taskData: any) => Promise<void>;
+  deleteCard: (columnId: string, taskId: string) => void;
+  updateCard: (columnId: string, taskId: string, updates: any) => void;
+  toggleSubtask: (columnId: string, taskId: string, subtaskId: string) => void;
+  updateCardPositionApi: (taskId: string, newColumnId: string, newOrder: number) => Promise<void>;
+  getColumnTotalPoints: (columnId: string) => number;
   getBoardTotalPoints: () => number;
 }
 
@@ -31,230 +24,136 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
   fetchBoardData: async (boardId: string) => {
     set({ isLoading: true });
     try {
-      console.log(`Đang tải dữ liệu từ DB cho Board: ${boardId}...`);
-      
       const rawResponse = await boardApi.getBoard(boardId);
-      
-      // 1. Lột vỏ tìm lõi
       let coreData = rawResponse;
       while (coreData && coreData.data && coreData.board_name === undefined && coreData.columns === undefined) {
         coreData = coreData.data;
       }
-
-      console.log("🎯 Đã chạm đáy dữ liệu:", coreData);
-
-      // 2. Mapping chuẩn xác từ Schema của Mạnh sang Schema của Frontend
-      const mappedBoard: IBoard = {
-        id: coreData.id || coreData._id,
-        board_name: coreData.board_name || "Bảng không tên",
-        description: coreData.description || "",
-        
-        // 👉 Map 'columns' từ DB sang 'lists' của FE
-        lists: (coreData.columns || []).map((col: any) => ({
-          id: col.id || col._id,
-          list_name: col.list_name || "Cột không tên",
-          order: col.order || 0,
-          
-          // 👉 Map 'tasks' từ DB sang 'cards' của FE
-          cards: (col.tasks || []).map((task: any) => ({
-            id: task.id || task._id,
-            title: task.title || "Chưa có tiêu đề",
-            description: task.description || "",
-            assignee: (task.assignees && task.assignees.length > 0) ? task.assignees[0] : "Chưa phân công",
-            priority: task.priority || "Medium",
-            start_date: task.start_date || "",
-            due_date: task.due_date || "",
-            story_points: task.story_points || 0,
-            ai_suggested_points: task.ai_suggested_points || 0,
-            ai_estimation_reason: task.ai_estimation_reason || "",
-            status: task.status || "TODO",
-            subtasks: (task.subtasks || []).map((st: any) => ({
-              id: st.id || st._id,
-              title: st.title,
-              is_done: st.status === 'DONE'
-            }))
-          }))
-        }))
-      };
-
-      set({ board: mappedBoard, isLoading: false });
-      console.log("✅ Mapping thành công! Board đã sẵn sàng render.");
-
+      set({ board: coreData, isLoading: false });
     } catch (error) {
-      console.error(`❌ Lỗi mapping dữ liệu:`, error);
       set({ isLoading: false });
     }
   },
 
-  // 👉 ĐÃ FIX: Nối vào api moveTask (dùng camelCase của Mạnh)
-  updateCardPositionApi: async (cardId: string, newColumnId: string, newOrder: number) => {
+  updateCardPositionApi: async (taskId: string, newColumnId: string, newOrder: number) => {
     try {
-      // Gọi api boardApi.moveTask (cái hàm có body: { newColumnId, newOrder })
-      await boardApi.moveTask(cardId, newColumnId, newOrder);
-      console.log(`🚀 Đã lưu vị trí kéo thả cho task ${cardId} lên Database!`);
+      const board = get().board;
+      const boardId = board?.id || board?._id; // Lấy ID của Board hiện tại
+
+      if (!boardId) {
+        console.error("Không tìm thấy Board ID để thực hiện move!");
+        return;
+      }
+
+      // Gọi API với ĐỦ 4 tham số như anh em mình đã thống nhất ở boardApi.ts
+      await boardApi.moveTask(taskId, newColumnId, newOrder, boardId);
+      
     } catch (error) {
-      console.error("❌ Lỗi khi lưu vị trí kéo thả:", error);
-      // Rollback: Gọi lại fetch để reset UI về đúng trạng thái trên DB nếu bị lỗi
-      const currentBoardId = get().board?.id;
+      console.error("Lỗi khi kéo thả:", error);
+      // Nếu lỗi thì load lại dữ liệu để đảm bảo giao diện khớp với DB
+      const currentBoardId = get().board?.id || get().board?._id;
       if (currentBoardId) get().fetchBoardData(currentBoardId); 
     }
   },
 
   setBoard: (newBoard) => set({ board: newBoard }),
 
-  setBoardFromAI: (aiJsonString: string) => {
-    try {
-      const parsedData = JSON.parse(aiJsonString);
-      const boardWithIds: IBoard = {
-        ...parsedData,
-        id: parsedData.id || `board-ai-${Date.now()}`,
-        lists: parsedData.lists?.map((list: Partial<IList>, lIndex: number) => ({
-          ...list,
-          id: list.id || `list-ai-${Date.now()}-${lIndex}`,
-          cards: list.cards?.map((card: Partial<ICard>, cIndex: number) => ({
-            ...card,
-            id: card.id || `card-ai-${Date.now()}-${lIndex}-${cIndex}`,
-            subtasks: card.subtasks?.map((st: Partial<ISubtask>, stIndex: number) => ({
-              ...st,
-              id: st.id || `subtask-ai-${Date.now()}-${stIndex}`
-            })) || []
-          })) || []
-        })) || []
-      };
-      set({ board: boardWithIds });
-    } catch (error) {
-      console.error("Lỗi khi parse dữ liệu AI:", error);
-    }
-  },
-
   addList: (listName) => set((state) => {
     if (!state.board) return state;
-    const newList: IList = { id: `list-${Date.now()}`, list_name: listName, order: state.board.lists.length + 1, cards: [] };
-    return { board: { ...state.board, lists: [...state.board.lists, newList] } };
+    const newColumn = { id: `col-${Date.now()}`, list_name: listName, order: state.board.columns?.length || 0 + 1, tasks: [] };
+    return { board: { ...state.board, columns: [...(state.board.columns || []), newColumn] } };
   }),
 
-addCard: async (listId: string, cardData: any) => {
-  const { board, fetchBoardData } = get();
-  if (!board) return;
-
-  try {
-    // Mapping từ Form của Khôi sang DTO của Mạnh
-    const taskRequest = {
-      title: cardData.title.trim(),
-      description: cardData.description || "",
-      columnId: listId,
-      // Backend của Mạnh cần String VIẾT HOA cho Enum Priority
-      priority: cardData.priority.toUpperCase() || "MEDIUM", 
-      status: "TODO",
-      assigneesUserId: cardData.assignee ? [cardData.assignee] : [],
-      storyPoint: Number(cardData.story_points) || 0,
-      parentTaskId: null,
-      // Nếu Khôi có thêm field Tags, hãy xử lý chuỗi thành mảng ở đây
-    };
-
-    console.log("📤 Gửi Payload đầy đủ lên Mạnh:", taskRequest);
-    await boardApi.createTask(taskRequest);
-    
-    // Refresh để lấy ID thật từ MongoDB và các field khác
-    await fetchBoardData(board.id);
-  } catch (error) {
-    console.error("❌ Lỗi khi tạo task đầy đủ:", error);
-  }
-},
-  deleteList: (listId) => set((state) => {
-    if (!state.board) return state;
-    return { board: { ...state.board, lists: state.board.lists.filter(l => l.id !== listId) } };
-  }),
-
- deleteCard: async (listId, cardId) => {
+  addCard: async (columnId: string, taskData: any) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
+    
+    try {
+      const boardId = board.id || board._id;
+      
+      const taskRequest = {
+        title: taskData.title.trim(),
+        description: taskData.description || "",
+        column_id: columnId,         // snake_case
+        board_id: boardId,           // 👉 THÊM DÒNG NÀY ĐỂ MẠNH NHẬN ĐƯỢC
+        priority: taskData.priority?.toUpperCase() || "MEDIUM", 
+        status: "TODO",
+        assignees_user_id: taskData.assignee ? [taskData.assignee] : [],
+        story_point: Number(taskData.story_points) || 0,
+        parent_task_id: null,
+      };
 
-    // 1. Optimistic Update (Xóa trên UI ngay lập tức cho mượt)
+      await boardApi.createTask(taskRequest);
+      // Không cần fetch lại ở đây vì useRealtime sẽ tự động fetch khi nhận tín hiệu "CHANGED"
+    } catch (error) {
+      console.error("Lỗi khi tạo task:", error);
+    }
+  },
+  deleteList: (columnId) => set((state) => {
+    if (!state.board) return state;
+    return { board: { ...state.board, columns: state.board.columns.filter((c: any) => c.id !== columnId && c._id !== columnId) } };
+  }),
+
+  deleteCard: async (columnId, taskId) => {
+    const { board, fetchBoardData } = get();
+    if (!board) return;
     set((state) => {
       if (!state.board) return state;
-      return {
-        board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }
-      };
+      return { board: { ...state.board, columns: state.board.columns.map((col: any) => (col.id === columnId || col._id === columnId) ? { ...col, tasks: col.tasks.filter((t: any) => t.id !== taskId && t._id !== taskId) } : col) } };
     });
-
-    // 2. Gọi API chạy ngầm
     try {
-      await boardApi.deleteTask(cardId);
-      console.log(`🚀 Đã xóa thành công task ${cardId} trên Database!`);
+      await boardApi.deleteTask(taskId);
     } catch (error) {
-      console.error("❌ Lỗi khi xóa task, đang khôi phục lại UI...", error);
-      fetchBoardData(board.id); // Rollback nếu API lỗi
+      fetchBoardData(board.id || board._id); 
     }
   },
 
-  updateCard: async (listId, cardId, updates) => {
+  updateCard: async (columnId, taskId, updates) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
+    const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
+    const task = col?.tasks?.find((t: any) => t.id === taskId || t._id === taskId);
+    if (!task) return;
 
-    // 1. Tìm thẻ hiện tại để lấy lại các dữ liệu gốc (tránh bị thiếu trường khi gửi PUT)
-    const list = board.lists.find(l => l.id === listId);
-    const card = list?.cards.find(c => c.id === cardId);
-    if (!card) return;
-
-    // 2. Optimistic Update (Cập nhật UI ngay lập tức cho mượt)
     set((state) => {
       if (!state.board) return state;
-      return {
-        board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.map(c => c.id === cardId ? { ...c, ...updates } : c) } : l) }
-      };
+      return { board: { ...state.board, columns: state.board.columns.map((c: any) => (c.id === columnId || c._id === columnId) ? { ...c, tasks: c.tasks.map((t: any) => (t.id === taskId || t._id === taskId) ? { ...t, ...updates } : t) } : c) } };
     });
 
-    // 3. Gom TOÀN BỘ dữ liệu của thẻ (Dữ liệu cũ + Dữ liệu vừa sửa) để thỏa mãn BE
     const backendUpdates = {
-      title: (updates.title !== undefined ? updates.title : card.title).trim(),
-      description: updates.description !== undefined ? updates.description : card.description,
-      priority: (updates.priority !== undefined ? updates.priority : card.priority).toUpperCase(),
-      storyPoint: Number(updates.story_points !== undefined ? updates.story_points : card.story_points) || 0,
-      
-      // Xử lý assignee: BE cần mảng ID, nếu là Unassigned thì gửi mảng rỗng
-      assigneesUserId: (() => {
-        const currentAssignee = updates.assignee !== undefined ? updates.assignee : card.assignee;
-        if (!currentAssignee || currentAssignee === "Unassigned" || currentAssignee === "Chưa phân công") {
-          return [];
-        }
+      title: (updates.title !== undefined ? updates.title : task.title).trim(),
+      description: updates.description !== undefined ? updates.description : task.description,
+      priority: (updates.priority !== undefined ? updates.priority : task.priority)?.toUpperCase(),
+      story_point: Number(updates.story_points !== undefined ? updates.story_points : task.story_points) || 0,
+      assignees_user_id: (() => {
+        const currentAssignee = updates.assignee !== undefined ? updates.assignee : (task.assignees?.[0] || task.assignee);
+        if (!currentAssignee || currentAssignee === "Unassigned" || currentAssignee === "Chưa phân công") return [];
         return [currentAssignee];
       })(),
-      
-      // Gửi kèm columnId phòng trường hợp BE bắt buộc (thường DTO Update cần)
-      columnId: listId 
+      column_id: columnId
     };
 
-    // 4. Gọi API ngầm lên Server bằng method PUT
     try {
-      console.log("📤 Đang gửi dữ liệu PUT (Full) lên BE:", backendUpdates);
-      await boardApi.updateTask(cardId, backendUpdates);
-      console.log(`🚀 Đã cập nhật thành công task ${cardId} trên Database!`);
+      await boardApi.updateTask(taskId, backendUpdates);
     } catch (error) {
-      console.error("❌ Lỗi khi cập nhật task (BE từ chối), đang khôi phục lại UI...", error);
-      fetchBoardData(board.id); // Rollback nếu Backend vẫn báo lỗi
+      fetchBoardData(board.id || board._id); 
     }
   },
-  toggleSubtask: (listId, cardId, subtaskId) => set((state) => {
+
+  toggleSubtask: (columnId, taskId, subtaskId) => set((state) => {
     if (!state.board) return state;
-    return {
-      board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.map(c => {
-        if (c.id !== cardId) return c;
-        const subtasks = c.subtasks || [];
-        return { ...c, subtasks: subtasks.map(st => st.id === subtaskId ? { ...st, is_done: !st.is_done } : st) };
-      })} : l)}
-    };
+    return { board: { ...state.board, columns: state.board.columns.map((col: any) => (col.id === columnId || col._id === columnId) ? { ...col, tasks: col.tasks.map((t: any) => { if (t.id !== taskId && t._id !== taskId) return t; const subtasks = t.subtasks || []; return { ...t, subtasks: subtasks.map((st: any) => (st.id === subtaskId || st._id === subtaskId) ? { ...st, status: st.status === 'DONE' ? 'TODO' : 'DONE' } : st) }; })} : col) } };
   }),
 
-  getColumnTotalPoints: (listId) => {
+  getColumnTotalPoints: (columnId) => {
     const board = get().board;
     if (!board) return 0;
-    const list = board.lists.find(l => l.id === listId);
-    return list ? (list.cards || []).reduce((sum, card) => sum + (card.story_points || 0), 0) : 0;
+    const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
+    return col ? (col.tasks || []).reduce((sum: number, task: any) => sum + (task.story_points || task.story_point || 0), 0) : 0;
   },
 
   getBoardTotalPoints: () => {
     const board = get().board;
-    return board ? board.lists.reduce((sum, list) => sum + (list.cards || []).reduce((s, c) => s + (c.story_points || 0), 0), 0) : 0;
+    return board ? (board.columns || []).reduce((sum: number, col: any) => sum + (col.tasks || []).reduce((s: number, t: any) => s + (t.story_points || t.story_point || 0), 0), 0) : 0;
   }
 }));

@@ -44,5 +44,6 @@ public record CreateTaskRequest(
 
         @Size(max = 2000, message = "AI estimated reason must be at most 2000 characters.")
         String aiEstimatedReason
+
 ) {
 }

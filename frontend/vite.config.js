@@ -7,12 +7,22 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      // Bắt mọi request bắt đầu bằng /ws-fluxboard
+      '/ws-fluxboard': {
+        target: 'http://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+        // Vite 6 đôi khi cần tường minh việc giữ nguyên path
+        rewrite: (path) => path 
+      }
+    }
+  },
   build: {
-    // Chỉ định dùng terser để nén code thay vì mặc định
     minify: 'terser',
     terserOptions: {
       compress: {
-        // Tự động xóa sạch console.log và debugger khi build Production
         drop_console: true,
         drop_debugger: true,
       },

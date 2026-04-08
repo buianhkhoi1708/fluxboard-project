@@ -1,4 +1,4 @@
-package com.fluxboard.common.config; // 👉 MẠNH LƯU Ý: Sửa lại tên package này cho khớp với thư mục của ông nha (ví dụ: com.fluxboard.common.config)
+package com.fluxboard.common.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -19,7 +19,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws-fluxboard")
-                .setAllowedOrigins("http://localhost:5173")
+                .setAllowedOriginPatterns("*") 
                 .withSockJS();
     }
 }

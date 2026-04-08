@@ -30,15 +30,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 @RestController
 @RequestMapping("/tasks")
 public class TaskController {
-
     private final TaskService taskService;
 
-    public TaskController(TaskService taskService) {
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public TaskController(TaskService taskService, SimpMessagingTemplate messagingTemplate) {
         this.taskService = taskService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @RequirePermission("TASK_CREATE")
@@ -113,26 +115,22 @@ public class TaskController {
     // 👉 ĐÃ THÊM HÀM KÉO THẢ VÀO ĐÂY
     @RequirePermission("TASK_UPDATE")
     @PatchMapping("/{taskId}/move")
-    public ResponseEntity<ApiResponse<TaskResponse>> moveTask(
-            @PathVariable String taskId,
-            @Valid @RequestBody TaskMoveRequest request
-    ) {
-        return ResponseFactory.ok("Task moved successfully.", taskService.moveTask(taskId, request));
-    }
+public ResponseEntity<ApiResponse<TaskResponse>> moveTask(
+        @PathVariable String taskId,
+        @Valid @RequestBody TaskMoveRequest request
+) {
+    TaskResponse response = taskService.moveTask(taskId, request);
+    
+    // ✅ Lấy boardId từ request gửi lên để báo cho các máy khác
+    messagingTemplate.convertAndSend("/topic/board/" + request.boardId(), "CHANGED");
+    
+    return ResponseFactory.ok("Task moved successfully.", response);
+}
 
     @RequirePermission("TASK_DELETE")
     @DeleteMapping("/{taskId}")
     public ResponseEntity<ApiResponse<Void>> deleteTask(@PathVariable String taskId) {
         taskService.delete(taskId);
         return ResponseFactory.ok("Task deleted successfully.");
-    }
-    
-    @RequirePermission("TASK_UPDATE")
-    @PatchMapping("/{taskId}/move")
-    public ResponseEntity<ApiResponse<TaskResponse>> moveTask(
-            @PathVariable String taskId,
-            @Valid @RequestBody TaskMoveRequest request
-    ) {
-        return ResponseFactory.ok("Task moved successfully.", taskService.moveTask(taskId, request));
     }
 }

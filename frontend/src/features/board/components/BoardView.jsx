@@ -6,28 +6,30 @@ import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerS
 import { arrayMove } from '@dnd-kit/sortable';
 import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
-import { useRealtime } from '../hooks/useRealtime'; 
+import { useRealtimeEvent } from '../../../hooks/useRealtimeEvent'
+import { useParams } from 'react-router-dom';
 
 const BoardView = () => {
 
   const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateCardPositionApi } = useBoardStore();
-  console.log("💎 DỮ LIỆU BOARD TRONG UI:", board);
   const [activeCard, setActiveCard] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const { id } = useParams();
 
-  // 👉 Lấy ID của bảng (có thể lấy từ URL useParams() nếu Khôi làm Router, ở đây tui đang fix cứng theo code cũ của ông)
-  const boardId = '69d22692ef24ae604f65ae89';
+  const currentBoardId = id || '69d22692ef24ae604f65ae89'; // Dự phòng ID cũ nếu ko có URL
 
-  // 👉 ĐÃ BỔ SUNG: KÍCH HOẠT REAL-TIME LẮNG NGHE SỰ KIỆN TỪ MẠNH
-  useRealtime(boardId);
 
-  // 👉 Gọi API ngay khi trang vừa load xong
+  useRealtimeEvent(`/topic/board/${currentBoardId}`, () => {
+    console.log("🔔 [Real-time Module] Board changed, fetching new data...");
+    fetchBoardData(currentBoardId);
+  });
+
   useEffect(() => {
-    fetchBoardData(boardId); 
-  }, [fetchBoardData, boardId]);
+    fetchBoardData(currentBoardId); 
+  }, [fetchBoardData, currentBoardId]);
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
@@ -48,50 +50,58 @@ const BoardView = () => {
     if (e.active.data.current?.type === 'Card') setActiveCard(e.active.data.current.card);
   };
 
+  // 👉 ĐÃ SỬA: Logic kéo thả giờ dùng "columns" và "tasks" thay vì "lists" và "cards"
   const handleDragEnd = (e) => {
     setActiveCard(null);
     const { active, over } = e;
     if (!over) return;
 
-    const activeListId = active.data.current?.listId;
-    const overListId = over.data.current?.listId || over.id;
-    if (!activeListId || !overListId) return;
+    // Lấy ID cột gốc và cột đích (Hỗ trợ cả trường hợp thư viện đang lưu tên cũ là listId hoặc columnId)
+    const activeColId = active.data.current?.columnId || active.data.current?.listId;
+    const overColId = over.data.current?.columnId || over.data.current?.listId || over.id;
+    if (!activeColId || !overColId) return;
 
-    const sourceListIndex = board.lists.findIndex(l => l.id === activeListId);
-    const destListIndex = board.lists.findIndex(l => l.id === overListId);
-    const newLists = [...board.lists];
+    const sourceColIndex = board.columns.findIndex(c => c.id === activeColId || c._id === activeColId);
+    const destColIndex = board.columns.findIndex(c => c.id === overColId || c._id === overColId);
     
+    if (sourceColIndex === -1 || destColIndex === -1) return;
+
+    const newColumns = [...board.columns];
     let newOrder = 1; 
 
-    if (activeListId === overListId) {
-      const list = newLists[sourceListIndex];
-      const oldIndex = list.cards.findIndex(c => c.id === active.id);
-      const newIndex = list.cards.findIndex(c => c.id === over.id);
-      newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
+    // Kéo thả TRONG CÙNG 1 CỘT
+    if (activeColId === overColId) {
+      const col = newColumns[sourceColIndex];
+      const oldIndex = col.tasks.findIndex(t => t.id === active.id || t._id === active.id);
+      const newIndex = col.tasks.findIndex(t => t.id === over.id || t._id === over.id);
       
+      newColumns[sourceColIndex] = { ...col, tasks: arrayMove(col.tasks, oldIndex, newIndex) };
       newOrder = newIndex + 1; 
+      
+    // Kéo thả SANG CỘT KHÁC
     } else {
-      const sourceList = newLists[sourceListIndex];
-      const destList = newLists[destListIndex];
-      const movedCard = sourceList.cards.find(c => c.id === active.id);
-      const newSourceCards = sourceList.cards.filter(c => c.id !== active.id);
-      const newDestCards = [...(destList.cards || [])];
+      const sourceCol = newColumns[sourceColIndex];
+      const destCol = newColumns[destColIndex];
+      
+      const movedTask = sourceCol.tasks.find(t => t.id === active.id || t._id === active.id);
+      const newSourceTasks = sourceCol.tasks.filter(t => t.id !== active.id && t._id !== active.id);
+      const newDestTasks = [...(destCol.tasks || [])];
       
       if (over.data.current?.type === 'Card') {
-        const newIndex = destList.cards.findIndex(c => c.id === over.id);
-        newDestCards.splice(newIndex, 0, movedCard);
+        const newIndex = destCol.tasks.findIndex(t => t.id === over.id || t._id === over.id);
+        newDestTasks.splice(newIndex, 0, movedTask);
         newOrder = newIndex + 1;
       } else {
-        newDestCards.push(movedCard);
-        newOrder = newDestCards.length;
+        newDestTasks.push(movedTask);
+        newOrder = newDestTasks.length;
       }
-      newLists[sourceListIndex] = { ...sourceList, cards: newSourceCards };
-      newLists[destListIndex] = { ...destList, cards: newDestCards };
+      
+      newColumns[sourceColIndex] = { ...sourceCol, tasks: newSourceTasks };
+      newColumns[destColIndex] = { ...destCol, tasks: newDestTasks };
     }
 
-    setBoard({ ...board, lists: newLists });
-
-    updateCardPositionApi(active.id, overListId, newOrder);
+    setBoard({ ...board, columns: newColumns });
+    updateCardPositionApi(active.id, overColId, newOrder);
   };
 
   const handleAddListClick = () => {
@@ -122,8 +132,8 @@ const BoardView = () => {
             </div>
             <div className="flex flex-col">
             <h2 className="text-xl font-black !text-black tracking-tight flex items-center gap-2">
-  {board.board_name}
-</h2>
+              {board.board_name}
+            </h2>
               {board.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 font-medium max-w-lg">{board.description}</p>}
             </div>
           </div>
@@ -163,7 +173,9 @@ const BoardView = () => {
         </div>
 
         <div className="flex-1 w-full p-6 pb-8 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-6 items-start custom-scrollbar">
-          {board.lists?.map((list) => <Column key={list.id} list={list} />)}
+          
+          {/* 👉 ĐÃ SỬA: Lặp qua board.columns thay vì board.lists */}
+          {board.columns?.map((col) => <Column key={col.id || col._id} list={col} />)}
           
           {isAddingCol ? (
             <div className="w-[300px] shrink-0 bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl shadow-xl border border-white flex flex-col gap-3 ring-2 ring-indigo-100/50 transition-all animate-in fade-in zoom-in-95 duration-200">

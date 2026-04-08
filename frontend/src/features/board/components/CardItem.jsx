@@ -34,13 +34,16 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
     opacity: isDragging ? 0.4 : 1 
   };
 
-  const handleOpenEdit = (e) => {
+ const handleOpenEdit = (e) => {
     e.stopPropagation();
     setEditTitle(card.title); 
     setEditDesc(card.description || '');
     setEditPriority(card.priority || 'Medium'); 
     setEditTags(card.tags ? card.tags.join(', ') : '');
-    setEditStoryPoints(card.story_points || 0);
+    
+    // ĐÃ SỬA: Bắt cả 'story_points' và 'story_point' để đảm bảo không rớt dữ liệu
+    setEditStoryPoints(card.story_points || card.story_point || 0); 
+    
     setEditSubtasks(card.subtasks || []);
     setIsEditing(true);
   };
@@ -189,9 +192,13 @@ const CardItem = memo(({ card, listId, isOverlay }) => {
       {card.subtasks?.length > 0 && (
         <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2 cursor-default">
           {card.subtasks.map(st => (
-            <div key={st.id} onClick={(e) => { e.stopPropagation(); toggleSubtask(listId, card.id, st.id); }} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors">
-              {st.is_done ? <CheckSquare size={13} className="text-emerald-500" /> : <Square size={13} className="text-slate-300" />}
-              <span className={`text-[11px] ${st.is_done ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`}>{st.title}</span>
+            // ĐÃ SỬA: Đổi listId thành columnId (thực chất prop truyền vào vẫn tên là listId, nhưng ý tui là ông nên check lại store)
+            // Vì Store bây giờ nhận: toggleSubtask(columnId, taskId, subtaskId)
+            <div key={st.id || st._id} onClick={(e) => { e.stopPropagation(); toggleSubtask(listId, card.id || card._id, st.id || st._id); }} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors">
+              
+              {/* ĐÃ SỬA: Check is_done hoặc status === 'DONE' */}
+              {st.is_done || st.status === 'DONE' ? <CheckSquare size={13} className="text-emerald-500" /> : <Square size={13} className="text-slate-300" />}
+              <span className={`text-[11px] ${st.is_done || st.status === 'DONE' ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`}>{st.title}</span>
             </div>
           ))}
         </div>
