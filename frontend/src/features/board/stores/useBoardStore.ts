@@ -166,20 +166,58 @@ addCard: async (listId: string, cardData: any) => {
     return { board: { ...state.board, lists: state.board.lists.filter(l => l.id !== listId) } };
   }),
 
-  deleteCard: (listId, cardId) => set((state) => {
-    if (!state.board) return state;
-    return {
-      board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }
-    };
-  }),
+ deleteCard: async (listId, cardId) => {
+    const { board, fetchBoardData } = get();
+    if (!board) return;
 
-  updateCard: (listId, cardId, updates) => set((state) => {
-    if (!state.board) return state;
-    return {
-      board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.map(c => c.id === cardId ? { ...c, ...updates } : c) } : l) }
-    };
-  }),
+    // 1. Optimistic Update (Xóa trên UI ngay lập tức cho mượt)
+    set((state) => {
+      if (!state.board) return state;
+      return {
+        board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }
+      };
+    });
 
+    // 2. Gọi API chạy ngầm
+    try {
+      await boardApi.deleteTask(cardId);
+      console.log(`🚀 Đã xóa thành công task ${cardId} trên Database!`);
+    } catch (error) {
+      console.error("❌ Lỗi khi xóa task, đang khôi phục lại UI...", error);
+      fetchBoardData(board.id); // Rollback nếu API lỗi
+    }
+  },
+
+  updateCard: async (listId, cardId, updates) => {
+    const { board, fetchBoardData } = get();
+    if (!board) return;
+
+    // 1. Optimistic Update (Cập nhật UI ngay lập tức)
+    set((state) => {
+      if (!state.board) return state;
+      return {
+        board: { ...state.board, lists: state.board.lists.map(l => l.id === listId ? { ...l, cards: l.cards.map(c => c.id === cardId ? { ...c, ...updates } : c) } : l) }
+      };
+    });
+
+    // 2. Chuyển đổi tên biến (Mapping) cho khớp với Backend
+    const backendUpdates: any = {};
+    if (updates.title !== undefined) backendUpdates.title = updates.title;
+    if (updates.description !== undefined) backendUpdates.description = updates.description;
+    if (updates.priority !== undefined) backendUpdates.priority = updates.priority.toUpperCase();
+    if (updates.story_points !== undefined) backendUpdates.storyPoint = Number(updates.story_points);
+    if (updates.assignee !== undefined) backendUpdates.assigneesUserId = [updates.assignee]; // BE cần mảng
+
+    // 3. Gọi API chạy ngầm với data đã chuẩn hóa
+    try {
+      console.log("📤 Đang gửi dữ liệu cập nhật lên BE:", backendUpdates);
+      await boardApi.updateTask(cardId, backendUpdates);
+      console.log(`🚀 Đã cập nhật thành công task ${cardId} trên Database!`);
+    } catch (error) {
+      console.error("❌ Lỗi khi cập nhật task, đang khôi phục lại UI...", error);
+      fetchBoardData(board.id); // Rollback nếu API lỗi
+    }
+  },
   toggleSubtask: (listId, cardId, subtaskId) => set((state) => {
     if (!state.board) return state;
     return {

@@ -40,4 +40,14 @@ createTask: async (taskData: any) => {
   const response: any = await axiosClient.post('/tasks', taskData);
   return response.data || response;
 },
+// Xóa Task (DELETE)
+  deleteTask: async (taskId: string) => {
+    const response: any = await axiosClient.delete(`/tasks/${taskId}`);
+    return response.data || response;
+  },
+  // Cập nhật Task (PATCH)
+  updateTask: async (taskId: string, updates: any) => {
+    const response: any = await axiosClient.patch(`/tasks/${taskId}`, updates);
+    return response.data || response;
+  },
 };
