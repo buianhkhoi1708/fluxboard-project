@@ -9,11 +9,14 @@ interface IBoardState {
   addList: (listName: string) => void;
   deleteList: (columnId: string) => void;
   
-  // 👉 ĐÃ CHUẨN HÓA SANG TASK
   addTask: (columnId: string, taskData: any) => Promise<void>;
   deleteTask: (columnId: string, taskId: string) => void;
   updateTask: (columnId: string, taskId: string, updates: any) => void;
-  toggleSubtask: (columnId: string, taskId: string, subtaskId: string) => void;
+  
+  // 👉 ĐÃ BỔ SUNG KHAI BÁO HÀM NÀY CHO TYPESCRIPT HẾT KÊU
+  addSubtask: (columnId: string, parentTaskId: string, title: string) => Promise<void>; 
+  toggleSubtask: (columnId: string, parentTaskId: string, subtaskId: string) => void;
+  
   updateTaskPositionApi: (taskId: string, newColumnId: string, newOrder: number) => Promise<void>;
   
   getColumnTotalPoints: (columnId: string) => number;
@@ -62,37 +65,42 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
     return { board: { ...state.board, columns: [...(state.board.columns || []), newColumn] } };
   }),
 
-  // 👉 HÀM ADD TASK CHUẨN
-  addTask: async (columnId: string, taskData: any) => {
-    const { board } = get();
-    if (!board) return;
-    
-    try {
-      const boardId = board.id || board._id;
-      
-      const taskRequest = {
-  title: taskData.title.trim(),
-  description: taskData.description || "",
-  column_id: columnId,         
-  priority: taskData.priority?.toUpperCase() || "MEDIUM", 
-  status: "TODO",
-  assignees_user_id: [], // 👉 Bỏ trống để không dính lỗi ép kiểu ID (400)
-  story_point: Number(taskData.story_points) || 0, 
-  parent_task_id: null,
-};
-
-      await boardApi.createTask(taskRequest);
-    } catch (error) {
-      console.error("Lỗi khi tạo task:", error);
-    }
-  },
-
   deleteList: (columnId) => set((state) => {
     if (!state.board) return state;
     return { board: { ...state.board, columns: state.board.columns.filter((c: any) => c.id !== columnId && c._id !== columnId) } };
   }),
 
-  // 👉 HÀM DELETE TASK CHUẨN
+  // ==============================================================
+  // 1. TẠO TASK CHÍNH
+  // ==============================================================
+  addTask: async (columnId: string, taskData: any) => {
+    const { board } = get();
+    if (!board) return;
+    
+    try {
+      const taskRequest = {
+        title: taskData.title.trim(),
+        description: taskData.description || "",
+        column_id: columnId,         
+        priority: taskData.priority?.toUpperCase() || "MEDIUM", 
+        status: "TODO",
+        assignees_user_id: [], 
+        story_point: Number(taskData.story_points) || 0,
+        // ❌ KHÔNG GỬI estimated_days LÊN SERVER NỮA
+        start_date: taskData.start_date ? new Date(taskData.start_date).toISOString() : null,
+        due_date: taskData.due_date ? new Date(taskData.due_date).toISOString() : null,
+        parent_task_id: null,
+      };
+
+      await boardApi.createTask(taskRequest);
+    } catch (error) {
+      console.error("❌ Lỗi khi tạo task:", error);
+    }
+  },
+
+  // ==============================================================
+  // 2. XÓA TASK
+  // ==============================================================
   deleteTask: async (columnId, taskId) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
@@ -109,6 +117,46 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
     }
   },
 
+  // ==============================================================
+  // 3. CẬP NHẬT TASK CHÍNH
+  // ==============================================================
+  updateTask: async (columnId, taskId, updates) => {
+    const { board, fetchBoardData } = get();
+    if (!board) return;
+    const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
+    const task = col?.tasks?.find((t: any) => t.id === taskId || t._id === taskId);
+    if (!task) return;
+
+    set((state) => {
+      if (!state.board) return state;
+      return { board: { ...state.board, columns: state.board.columns.map((c: any) => (c.id === columnId || c._id === columnId) ? { ...c, tasks: c.tasks.map((t: any) => (t.id === taskId || t._id === taskId) ? { ...t, ...updates } : t) } : c) } };
+    });
+
+    const backendUpdates = {
+      title: (updates.title !== undefined ? updates.title : task.title).trim(),
+      description: updates.description !== undefined ? updates.description : task.description,
+      priority: (updates.priority !== undefined ? updates.priority : task.priority)?.toUpperCase() || "MEDIUM",
+      story_point: Number(updates.story_points !== undefined ? updates.story_points : task.story_points) || 0,
+      // ❌ ĐÃ XÓA DÒNG `estimated_days:` Ở ĐÂY ĐỂ TRÁNH LỖI 400
+      start_date: updates.start_date !== undefined ? (updates.start_date ? new Date(updates.start_date).toISOString() : null) : task.start_date,
+      due_date: updates.due_date !== undefined ? (updates.due_date ? new Date(updates.due_date).toISOString() : null) : task.due_date,
+      assignees_user_id: [],
+      column_id: columnId,
+      status: task.status || "TODO",
+      parent_task_id: task.parent_task_id || null
+    };
+
+    try {
+      await boardApi.updateTask(taskId, backendUpdates);
+    } catch (error) {
+      console.error("❌ Lỗi update task:", error);
+      fetchBoardData(board.id || board._id); 
+    }
+  },
+
+  // ==============================================================
+  // 4. TẠO SUBTASK 
+  // ==============================================================
   addSubtask: async (columnId: string, parentTaskId: string, title: string) => {
     const { board } = get();
     if (!board) return;
@@ -118,25 +166,25 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
         title: title.trim(),
         description: "",
         column_id: columnId,         
-        priority: "MEDIUM", // Subtask mặc định
+        priority: "MEDIUM", 
         status: "TODO",
         assignees_user_id: [], 
         story_point: 0, 
-        parent_task_id: parentTaskId, // 👉 ĐIỂM ĂN TIỀN LÀ ĐÂY: Gắn ID của cha vào!
+        parent_task_id: parentTaskId, 
       };
-      // Gọi chung API createTask là xong
       await boardApi.createTask(taskRequest);
     } catch (error) {
       console.error("❌ Lỗi khi tạo subtask:", error);
     }
   },
 
-  // 🚀 2. HÀM CHECK/UNCHECK SUBTASK GỌI THẲNG API
+  // ==============================================================
+  // 5. CHECK/UNCHECK SUBTASK
+  // ==============================================================
   toggleSubtask: async (columnId: string, parentTaskId: string, subtaskId: string) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
 
-    // Tìm subtask hiện tại để lấy dữ liệu cũ
     const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
     const parent = col?.tasks?.find((t: any) => t.id === parentTaskId || t._id === parentTaskId);
     const subtask = parent?.subtasks?.find((st: any) => st.id === subtaskId || st._id === subtaskId);
@@ -144,7 +192,6 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
 
     const newStatus = (subtask.status === 'DONE' || subtask.is_done) ? 'TODO' : 'DONE';
 
-    // Cập nhật UI tạm thời cho mượt
     set((state) => {
       if (!state.board) return state;
       return { 
@@ -161,15 +208,15 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
       };
     });
 
-    // Gọi API để lưu trạng thái
     const subtaskUpdates = {
-      title: subtask.title,
+      title: subtask.title || "Subtask",
       description: subtask.description || "",
-      priority: subtask.priority || "MEDIUM",
-      story_point: subtask.story_point || 0,
+      // 👉 FIX CHÍ MẠNG: ĐÃ THÊM toUpperCase() ĐỂ TRÁNH LỖI MALFORMED JSON
+      priority: subtask.priority?.toUpperCase() || "MEDIUM", 
+      story_point: subtask.story_point || subtask.story_points || 0,
       assignees_user_id: [],
       column_id: columnId,
-      parent_task_id: parentTaskId, // Báo cho DB biết tui vẫn là con của ông này
+      parent_task_id: parentTaskId, 
       status: newStatus
     };
 
@@ -177,52 +224,13 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
       await boardApi.updateTask(subtaskId, subtaskUpdates);
     } catch (error) {
       console.error("❌ Lỗi update subtask:", error);
-      fetchBoardData(board.id || board._id); // Lỗi thì rollback UI
+      fetchBoardData(board.id || board._id); 
     }
   },
 
-  // 👉 HÀM UPDATE TASK CHUẨN (ĐÃ FIX LỖI THIẾU BOARD_ID)
-  updateTask: async (columnId, taskId, updates) => {
-    const { board, fetchBoardData } = get();
-    if (!board) return;
-    
-    const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
-    const task = col?.tasks?.find((t: any) => t.id === taskId || t._id === taskId);
-    if (!task) return;
-
-    set((state) => {
-      if (!state.board) return state;
-      return { board: { ...state.board, columns: state.board.columns.map((c: any) => (c.id === columnId || c._id === columnId) ? { ...c, tasks: c.tasks.map((t: any) => (t.id === taskId || t._id === taskId) ? { ...t, ...updates } : t) } : c) } };
-    });
-
-    const boardId = board.id || board._id;
-
-    const backendUpdates = {
-      title: (updates.title !== undefined ? updates.title : task.title).trim(),
-      description: updates.description !== undefined ? updates.description : task.description,
-      priority: (updates.priority !== undefined ? updates.priority : task.priority)?.toUpperCase(),
-      story_point: Number(updates.story_points !== undefined ? updates.story_points : task.story_points) || 0,
-      assignees_user_id: (() => {
-        const currentAssignee = updates.assignee !== undefined ? updates.assignee : (task.assignees?.[0] || task.assignee);
-        if (!currentAssignee || currentAssignee === "Unassigned" || currentAssignee === "Chưa phân công") return [];
-        return [currentAssignee];
-      })(),
-      column_id: columnId,
-      status: task.status || "TODO"
-    };
-
-    try {
-      await boardApi.updateTask(taskId, backendUpdates);
-    } catch (error) {
-      fetchBoardData(boardId); 
-    }
-  },
-
-  toggleSubtask: (columnId, taskId, subtaskId) => set((state) => {
-    if (!state.board) return state;
-    return { board: { ...state.board, columns: state.board.columns.map((col: any) => (col.id === columnId || col._id === columnId) ? { ...col, tasks: col.tasks.map((t: any) => { if (t.id !== taskId && t._id !== taskId) return t; const subtasks = t.subtasks || []; return { ...t, subtasks: subtasks.map((st: any) => (st.id === subtaskId || st._id === subtaskId) ? { ...st, status: st.status === 'DONE' ? 'TODO' : 'DONE' } : st) }; })} : col) } };
-  }),
-
+  // ==============================================================
+  // TIỆN ÍCH TÍNH ĐIỂM
+  // ==============================================================
   getColumnTotalPoints: (columnId) => {
     const board = get().board;
     if (!board) return 0;
