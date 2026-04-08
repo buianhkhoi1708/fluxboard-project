@@ -26,22 +26,23 @@ const Column = memo(({ list }) => {
     data: { type: 'List', listId: list.id }
   });
 
-  const handleAddCardClick = () => {
-    if (newTitle.trim()) {
-      addCard(list.id, {
-        title: newTitle.trim(),
-        description: newDesc.trim(),
-        priority: newPriority,
-        assignee: newAssignee.trim(),
-        story_points: newPoints,
-        tags: newTags
-      });
+const handleAddCardClick = async () => {
+  if (newTitle.trim()) {
+    // Truyền Object chứa tất cả các State mà Khôi đã khai báo ở trên
+    await addCard(list.id, {
+      title: newTitle,
+      description: newDesc,
+      priority: newPriority,
+      assignee: newAssignee,
+      story_points: newPoints,
+      tags: newTags
+    });
 
-      setNewTitle(''); setNewDesc(''); setNewAssignee(''); 
-      setNewPoints(''); setNewTags(''); setNewPriority('Medium');
-      setIsAdding(false);
-    }
-  };
+    // Reset Form...
+    setIsAdding(false);
+    setNewTitle('');
+  }
+};
 
   return (
     // 👉 TỐI ƯU 2: Giao diện Glassmorphism (Kính mờ) viền nổi

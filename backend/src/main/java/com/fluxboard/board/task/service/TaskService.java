@@ -26,9 +26,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate; // 👉 ĐÃ THÊM IMPORT NÀY
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -41,19 +43,31 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final UserRepository userRepository;
+    
+    // 👉 ĐÃ THÊM: Cái loa phát thanh của WebSocket
+    private final SimpMessagingTemplate messagingTemplate; 
 
     public TaskService(
             TaskRepository taskRepository,
             ProjectRepository projectRepository,
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            SimpMessagingTemplate messagingTemplate // 👉 Bơm cái loa vào Constructor
     ) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
         this.userRepository = userRepository;
+        this.messagingTemplate = messagingTemplate; 
+    }
+
+    // 👉 HÀM PHỤ TRỢ: Rút gọn việc phát thông báo
+    private void broadcastBoardChange(String boardId) {
+        if (boardId != null) {
+            messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
+        }
     }
 
     @Override
@@ -95,6 +109,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAuthorUserId(normalizedAuthorUserId);
 
         TaskEntity saved = taskRepository.save(entity);
+        
+        // 👉 PHÁT LOA SAU KHI TẠO XONG
+        broadcastBoardChange(boardId);
+        
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
         return toResponse(saved, users);
     }
@@ -220,6 +238,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
 
         TaskEntity saved = taskRepository.save(entity);
+        
+        // 👉 PHÁT LOA SAU KHI CẬP NHẬT XONG
+        broadcastBoardChange(boardId);
+
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
         return toResponse(saved, users);
     }
@@ -275,6 +297,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     public void delete(String id) {
         TaskEntity entity = findTaskById(id);
         String columnId = entity.getColumnId();
+        
+        // Lấy boardId trước khi xóa để tý còn phát loa
+        BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
+        String boardId = columnForBoardId.getBoardId();
 
         List<TaskEntity> columnTasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(columnId);
         Map<String, List<TaskEntity>> childrenByParentId = buildChildrenByParentId(columnTasks);
@@ -301,6 +327,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!toResequence.isEmpty()) {
             taskRepository.saveAll(toResequence);
         }
+        
+        // 👉 PHÁT LOA SAU KHI XÓA XONG
+        broadcastBoardChange(boardId);
     }
 
     public void softDeleteByBoardId(String boardId) {
@@ -321,9 +350,15 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             task.markDeleted();
         }
         taskRepository.saveAll(tasks);
+        
+        // 👉 Phát loa
+        broadcastBoardChange(boardId);
     }
 
     public void softDeleteByColumnId(String columnId) {
+        BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
+        String boardId = columnForBoardId.getBoardId();
+        
         List<TaskEntity> tasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(columnId));
         if (tasks.isEmpty()) {
             return;
@@ -333,6 +368,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             task.markDeleted();
         }
         taskRepository.saveAll(tasks);
+        
+        // 👉 Phát loa
+        broadcastBoardChange(boardId);
     }
 
     private TaskEntity findTaskById(String taskId) {

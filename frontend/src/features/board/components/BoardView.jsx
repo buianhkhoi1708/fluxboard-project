@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // 👉 ĐÃ BỔ SUNG: import useEffect
+import React, { useState, useEffect } from 'react'; 
 import Column from './Column';
 import CardItem from './CardItem';
 import { useBoardStore } from '../stores/useBoardStore'; 
@@ -6,10 +6,11 @@ import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerS
 import { arrayMove } from '@dnd-kit/sortable';
 import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
+import { useRealtime } from '../hooks/useRealtime'; 
 
 const BoardView = () => {
 
-  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData } = useBoardStore();
+  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateCardPositionApi } = useBoardStore();
   console.log("💎 DỮ LIỆU BOARD TRONG UI:", board);
   const [activeCard, setActiveCard] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
@@ -17,11 +18,16 @@ const BoardView = () => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // 👉 ĐÃ BỔ SUNG: Gọi API ngay khi trang vừa load xong
+  // 👉 Lấy ID của bảng (có thể lấy từ URL useParams() nếu Khôi làm Router, ở đây tui đang fix cứng theo code cũ của ông)
+  const boardId = '69d22692ef24ae604f65ae89';
+
+  // 👉 ĐÃ BỔ SUNG: KÍCH HOẠT REAL-TIME LẮNG NGHE SỰ KIỆN TỪ MẠNH
+  useRealtime(boardId);
+
+  // 👉 Gọi API ngay khi trang vừa load xong
   useEffect(() => {
-    // Truyền cái ID bảng trong DB của Khôi vào đây
-    fetchBoardData('69d22692ef24ae604f65ae89'); 
-  }, [fetchBoardData]);
+    fetchBoardData(boardId); 
+  }, [fetchBoardData, boardId]);
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full">
@@ -54,12 +60,16 @@ const BoardView = () => {
     const sourceListIndex = board.lists.findIndex(l => l.id === activeListId);
     const destListIndex = board.lists.findIndex(l => l.id === overListId);
     const newLists = [...board.lists];
+    
+    let newOrder = 1; 
 
     if (activeListId === overListId) {
       const list = newLists[sourceListIndex];
       const oldIndex = list.cards.findIndex(c => c.id === active.id);
       const newIndex = list.cards.findIndex(c => c.id === over.id);
       newLists[sourceListIndex] = { ...list, cards: arrayMove(list.cards, oldIndex, newIndex) };
+      
+      newOrder = newIndex + 1; 
     } else {
       const sourceList = newLists[sourceListIndex];
       const destList = newLists[destListIndex];
@@ -70,13 +80,18 @@ const BoardView = () => {
       if (over.data.current?.type === 'Card') {
         const newIndex = destList.cards.findIndex(c => c.id === over.id);
         newDestCards.splice(newIndex, 0, movedCard);
+        newOrder = newIndex + 1;
       } else {
         newDestCards.push(movedCard);
+        newOrder = newDestCards.length;
       }
       newLists[sourceListIndex] = { ...sourceList, cards: newSourceCards };
       newLists[destListIndex] = { ...destList, cards: newDestCards };
     }
+
     setBoard({ ...board, lists: newLists });
+
+    updateCardPositionApi(active.id, overListId, newOrder);
   };
 
   const handleAddListClick = () => {
