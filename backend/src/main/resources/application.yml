@@ -7,6 +7,7 @@ spring:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/fluxboard_db}
   jackson:
+    property-naming-strategy: SNAKE_CASE
     deserialization:
       fail-on-unknown-properties: true
   mvc:
