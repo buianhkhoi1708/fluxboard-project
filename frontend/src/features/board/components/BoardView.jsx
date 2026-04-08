@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'; 
 import Column from './Column';
-import CardItem from './CardItem';
+import TaskItem from './TaskItem'; // 👉 Đổi từ CardItem
 import { useBoardStore } from '../stores/useBoardStore'; 
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
@@ -11,8 +11,11 @@ import { useParams } from 'react-router-dom';
 
 const BoardView = () => {
 
-  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateCardPositionApi } = useBoardStore();
-  const [activeCard, setActiveCard] = useState(null);
+  // 👉 Đổi updateCardPositionApi thành updateTaskPositionApi
+  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateTaskPositionApi } = useBoardStore();
+  
+  // 👉 Đổi state activeCard thành activeTask
+  const [activeTask, setActiveTask] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
@@ -20,7 +23,6 @@ const BoardView = () => {
   const { id } = useParams();
 
   const currentBoardId = id || '69d22692ef24ae604f65ae89'; // Dự phòng ID cũ nếu ko có URL
-
 
   useRealtimeEvent(`/topic/board/${currentBoardId}`, () => {
     console.log("🔔 [Real-time Module] Board changed, fetching new data...");
@@ -47,16 +49,15 @@ const BoardView = () => {
   );
 
   const handleDragStart = (e) => {
-    if (e.active.data.current?.type === 'Card') setActiveCard(e.active.data.current.card);
+    // 👉 Đổi type 'Card' thành 'Task'
+    if (e.active.data.current?.type === 'Task') setActiveTask(e.active.data.current.task);
   };
 
-  // 👉 ĐÃ SỬA: Logic kéo thả giờ dùng "columns" và "tasks" thay vì "lists" và "cards"
   const handleDragEnd = (e) => {
-    setActiveCard(null);
+    setActiveTask(null); // 👉 Đổi từ setActiveCard
     const { active, over } = e;
     if (!over) return;
 
-    // Lấy ID cột gốc và cột đích (Hỗ trợ cả trường hợp thư viện đang lưu tên cũ là listId hoặc columnId)
     const activeColId = active.data.current?.columnId || active.data.current?.listId;
     const overColId = over.data.current?.columnId || over.data.current?.listId || over.id;
     if (!activeColId || !overColId) return;
@@ -87,7 +88,8 @@ const BoardView = () => {
       const newSourceTasks = sourceCol.tasks.filter(t => t.id !== active.id && t._id !== active.id);
       const newDestTasks = [...(destCol.tasks || [])];
       
-      if (over.data.current?.type === 'Card') {
+      // 👉 Đổi type 'Card' thành 'Task'
+      if (over.data.current?.type === 'Task') {
         const newIndex = destCol.tasks.findIndex(t => t.id === over.id || t._id === over.id);
         newDestTasks.splice(newIndex, 0, movedTask);
         newOrder = newIndex + 1;
@@ -101,7 +103,9 @@ const BoardView = () => {
     }
 
     setBoard({ ...board, columns: newColumns });
-    updateCardPositionApi(active.id, overColId, newOrder);
+    
+    // 👉 Gọi đúng hàm mới
+    updateTaskPositionApi(active.id, overColId, newOrder);
   };
 
   const handleAddListClick = () => {
@@ -174,7 +178,6 @@ const BoardView = () => {
 
         <div className="flex-1 w-full p-6 pb-8 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-6 items-start custom-scrollbar">
           
-          {/* 👉 ĐÃ SỬA: Lặp qua board.columns thay vì board.lists */}
           {board.columns?.map((col) => <Column key={col.id || col._id} list={col} />)}
           
           {isAddingCol ? (
@@ -220,7 +223,8 @@ const BoardView = () => {
           duration: 250,
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
-        {activeCard ? <CardItem card={activeCard} isOverlay listId="overlay" /> : null}
+        {/* 👉 Đổi component thành TaskItem và prop thành task */}
+        {activeTask ? <TaskItem task={activeTask} isOverlay listId="overlay" /> : null}
       </DragOverlay>
     </DndContext>
   );
