@@ -2,6 +2,9 @@ package com.fluxboard.user.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fluxboard.common.entity.BaseDocument;
+
+import java.time.Instant;
+
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -31,6 +34,14 @@ public class User extends BaseDocument {
 
     @Field("team_id")
     private String teamId;
+
+    @JsonIgnore
+    @Field("reset_token")
+    private String resetToken;
+
+    @JsonIgnore
+    @Field("reset_token_expiry")
+    private Instant resetTokenExpiry;
 
     public String getEmail() {
         return email;
@@ -86,5 +97,21 @@ public class User extends BaseDocument {
 
     public void setTeamId(String teamId) {
         this.teamId = teamId;
+    }
+
+    public String getResetToken() {
+        return resetToken;
+    }
+
+    public void setResetToken(String resetToken) {
+        this.resetToken = resetToken;
+    }
+
+    public Instant getResetTokenExpiry() {
+        return resetTokenExpiry;
+    }
+
+    public void setResetTokenExpiry(Instant resetTokenExpiry) {
+        this.resetTokenExpiry = resetTokenExpiry;
     }
 }
