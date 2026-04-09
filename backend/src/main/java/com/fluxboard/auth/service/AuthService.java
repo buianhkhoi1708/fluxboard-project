@@ -22,6 +22,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -31,14 +33,19 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtTokenService jwtTokenService;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final JavaMailSender javaMailSender;
     private final Map<String, Bucket> rateLimitCache = new ConcurrentHashMap<>();
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    public AuthService(UserRepository userRepository, JwtTokenService jwtTokenService) {
+    @Value("${spring.mail.username}")
+    private String senderEmail;
+
+    public AuthService(UserRepository userRepository, JwtTokenService jwtTokenService, JavaMailSender javaMailSender) {
         this.userRepository = userRepository;
         this.jwtTokenService = jwtTokenService;
+        this.javaMailSender = javaMailSender;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -114,9 +121,19 @@ public class AuthService {
         userRepository.save(user);
 
         String resetLink = frontendUrl + "/reset-password?token=" + plainToken;
-        System.out.println("MOCK EMAIL SENT TO: " + user.getEmail() + " | LINK: " + resetLink);
+        
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(senderEmail); 
+        message.setTo(user.getEmail());
+        message.setSubject("Password Reset Request - Fluxboard");
+        message.setText("You have requested to reset the password for your Fluxboard account.\n\n"
+                + "Please click the link below to set a new password:\n"
+                + resetLink + "\n\n"
+                + "This link will automatically expire after 15 minutes.\n"
+                + "If you did not make this request, please ignore this email.");
+        javaMailSender.send(message);
 
-        return resetLink;
+        return "If the email exists, a reset link has been sent to your email address.";
     }
 
     public void processResetPassword(ResetPasswordRequest request) {
