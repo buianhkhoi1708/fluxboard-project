@@ -39,8 +39,8 @@ public class AuthService {
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    @Value("${spring.mail.username}")
-    private String senderEmail;
+    @Value("${EMAIL}")
+    private String systemEmail;
 
     public AuthService(UserRepository userRepository, JwtTokenService jwtTokenService, JavaMailSender javaMailSender) {
         this.userRepository = userRepository;
@@ -122,7 +122,7 @@ public class AuthService {
         String resetLink = frontendUrl + "/reset-password?token=" + plainToken;
 
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(senderEmail);
+        message.setFrom(systemEmail);
         message.setTo(user.getEmail());
         message.setSubject("Password Reset Request - Fluxboard");
         message.setText("You have requested to reset the password for your Fluxboard account.\n\n"
@@ -130,6 +130,7 @@ public class AuthService {
                 + resetLink + "\n\n"
                 + "This link will automatically expire after 15 minutes.\n"
                 + "If you did not make this request, please ignore this email.");
+        
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
                 javaMailSender.send(message);
