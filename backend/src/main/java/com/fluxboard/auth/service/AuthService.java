@@ -67,8 +67,7 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
-                user.getRoleId()
-        );
+                user.getRoleId());
     }
 
     private Bucket resolveBucket(String key) {
@@ -121,9 +120,9 @@ public class AuthService {
         userRepository.save(user);
 
         String resetLink = frontendUrl + "/reset-password?token=" + plainToken;
-        
+
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(senderEmail); 
+        message.setFrom(senderEmail);
         message.setTo(user.getEmail());
         message.setSubject("Password Reset Request - Fluxboard");
         message.setText("You have requested to reset the password for your Fluxboard account.\n\n"
@@ -131,9 +130,25 @@ public class AuthService {
                 + resetLink + "\n\n"
                 + "This link will automatically expire after 15 minutes.\n"
                 + "If you did not make this request, please ignore this email.");
-        javaMailSender.send(message);
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                javaMailSender.send(message);
+            } catch (Exception e) {
+                System.err.println("Email sending error: " + e.getMessage());
+            }
+        });
 
         return "If the email exists, a reset link has been sent to your email address.";
+    }
+
+    public void verifyResetToken(String token) {
+        String hashedIncomingToken = hashToken(token);
+        User user = userRepository.findByResetTokenAndDeletedFalse(hashedIncomingToken)
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Invalid or expired reset token."));
+
+        if (user.getResetTokenExpiry().isBefore(Instant.now())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Reset token has expired.");
+        }
     }
 
     public void processResetPassword(ResetPasswordRequest request) {

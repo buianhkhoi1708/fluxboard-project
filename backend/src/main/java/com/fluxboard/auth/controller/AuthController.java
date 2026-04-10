@@ -10,9 +10,11 @@ import com.fluxboard.common.util.ResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -33,12 +35,17 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<String>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request,
-            HttpServletRequest httpServletRequest
-    ) {
+            HttpServletRequest httpServletRequest) {
         String clientIp = httpServletRequest.getRemoteAddr();
         String testLink = authService.processForgotPassword(request, clientIp);
-        
+
         return ResponseFactory.ok("If the email exists, a password reset link has been sent.", testLink);
+    }
+
+    @GetMapping("/verify-reset-token")
+    public ApiResponse<Void> verifyResetToken(@RequestParam String token) {
+        authService.verifyResetToken(token);
+        return ResponseFactory.success(null);
     }
 
     @PostMapping("/reset-password")
