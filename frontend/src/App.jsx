@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import BoardPage from './pages/BoardPage';
 import { SocketProvider } from './context/SocketContext';
+import AdminRBACPage from './pages/AdminRBACPage';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route element={<MainLayout />}>
             <Route path="/" element={<Navigate to="/board" replace />} />
             <Route path="/board" element={<BoardPage />} />
+            <Route path="/adminrbac" element={<AdminRBACPage/>} />
             {/* Mốt Long làm trang Settings thì thêm vào đây: */}
             {/* <Route path="/settings" element={<SettingsPage />} /> */}
           </Route>

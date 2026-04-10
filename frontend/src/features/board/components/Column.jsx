@@ -14,7 +14,6 @@ const Column = memo(({ list }) => {
   const [newPriority, setNewPriority] = useState('Medium');
   const [newPoints, setNewPoints] = useState('');
   
-  // 👉 THÊM BIẾN MỚI CHO KHỚP API
   const [newStartDate, setNewStartDate] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [newEstimatedDays, setNewEstimatedDays] = useState('');
@@ -51,7 +50,7 @@ const Column = memo(({ list }) => {
   };
 
   return (
-    <div className="w-[300px] shrink-0 flex flex-col bg-slate-100/80 backdrop-blur-md rounded-2xl max-h-full relative border border-white/60 shadow-sm">
+    <div className="w-[85vw] max-w-[300px] sm:w-[300px] shrink-0 flex flex-col bg-slate-100/80 backdrop-blur-md rounded-2xl max-h-full relative border border-white/60 shadow-sm">
       {isMenuOpen && <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)}></div>}
       
       <div className="flex justify-between items-start p-3.5 pb-2 cursor-grab active:cursor-grabbing">
