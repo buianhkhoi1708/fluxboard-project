@@ -6,6 +6,17 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/fluxboard_db}
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${EMAIL}
+    password: ${EMAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:
@@ -33,3 +44,11 @@ auth:
     secret: ${JWT_SECRET:replace-this-with-a-32-byte-minimum-secret}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
     issuer: ${JWT_ISSUER:fluxboard-backend}
+
+app:
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:5173}
+
+seeddata: ${SEED_DATA}
+seed-system-admin-email: ${SEED_SYSTEM_ADMIN_EMAIL}
+seed-system-admin-password: ${SEED_SYSTEM_ADMIN_PASSWORD}

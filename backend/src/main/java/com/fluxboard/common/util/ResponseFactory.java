@@ -36,4 +36,8 @@ public final class ResponseFactory {
         PageMeta meta = PageMeta.from(page);
         return ResponseEntity.ok(ApiResponse.success(message, page.getContent(), meta));
     }
+
+    public static ApiResponse<Void> success(Object object) {
+        throw new UnsupportedOperationException("Unimplemented method 'success'");
+    }
 }
