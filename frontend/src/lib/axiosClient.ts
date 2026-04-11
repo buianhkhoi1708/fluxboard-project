@@ -40,10 +40,15 @@ axiosClient.interceptors.response.use(
       
       // 👉 MẸO PRO ENTERPRISE: Bắt lỗi 401 để Auto Logout
       if (status === 401) {
+        // Nếu API đang gọi là /auth/login thì bỏ qua
+        if (error.config.url === '/auth/login') {
+            return Promise.reject(error);
+        }
+
+        // Nếu là các API khác (như lấy Board) mà dính 401 thì mới ép tải lại trang
         console.warn("🔴 Token không hợp lệ hoặc đã hết hạn. Đang đăng xuất...");
-        // Khôi bảo Long mở 2 dòng dưới ra khi làm xong trang Login nhé:
-        // localStorage.removeItem('token');
-        // window.location.href = '/login'; 
+        localStorage.removeItem('token');
+        window.location.href = '/login';
       }
       
     } else if (error.request) {

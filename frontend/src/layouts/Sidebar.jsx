@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, Settings, LogOut, Briefcase, ListTodo, KanbanSquare, Shield } from 'lucide-react';
+import { useAuthStore } from '../features/auth/store/useAuthStore';
 
 const Sidebar = () => {
   const menuItems = [
@@ -12,6 +13,8 @@ const Sidebar = () => {
     { path: '/adminrbac', icon: <Shield size={20} />, label: 'RBAC' }, // Rút gọn chữ Phân Quyền
     { path: '/settings', icon: <Settings size={20} />, label: 'Settings' },
   ];
+
+  const { logout } = useAuthStore();
 
   return (
     <aside className="
@@ -50,7 +53,10 @@ const Sidebar = () => {
       {/* KHU VỰC NÚT LOGOUT */}
       {/* Mobile: Nằm chốt sổ bên phải Bottom Bar | Desktop: Nằm dưới đáy Sidebar */}
       <div className="p-2 md:p-4 md:border-t md:border-slate-200 bg-slate-50 flex items-center justify-center md:justify-start shrink-0 border-l border-slate-200 md:border-l-0">
-        <button className="flex flex-col md:flex-row items-center md:justify-start w-full gap-1 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 md:text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0">
+        <button 
+          onClick={logout}
+          className="flex flex-col md:flex-row items-center md:justify-start w-full gap-1 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 md:text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0"
+        >
           <LogOut size={20} className="text-slate-400 group-hover:text-rose-500 transition-colors" />
           <span className="whitespace-nowrap">Đăng xuất</span>
         </button>
