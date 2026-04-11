@@ -226,4 +226,9 @@ public class ProjectService
                 entity.getUpdatedAt()
         );
     }
+    public Page<ProjectOverviewResponse> getPageOverview(Pageable pageable) {
+    // Lấy list project rồi tận dụng luôn hàm getOverview sếp đã viết sẵn ở dưới!
+    return projectRepository.findByDeletedFalse(pageable)
+            .map(entity -> getOverview(entity.getId()));
+}
 }

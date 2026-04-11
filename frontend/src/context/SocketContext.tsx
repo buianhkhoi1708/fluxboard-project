@@ -10,7 +10,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Kết nối tới Backend của Mạnh
     const socket = new SockJS('http://localhost:8080/api/v1/ws-fluxboard');
     const client = Stomp.over(socket);
     client.debug = () => {}; 

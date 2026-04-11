@@ -70,6 +70,17 @@ public class ProjectController {
     }
 
     @RequirePermission("PROJECT_VIEW")
+    @GetMapping("/overviews") // 👉 Không có {projectId}, lấy toàn bộ danh sách
+    public ResponseEntity<ApiResponse<List<ProjectOverviewResponse>>> getProjectOverviews(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        // Cần đảm bảo sếp đã tạo hàm getPageOverview bên ProjectService nhé
+        Page<ProjectOverviewResponse> page = projectService.getPageOverview(pageable);
+        
+        return ResponseFactory.paged("Project overviews retrieved successfully.", page);
+    }
+
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping("/departments/{departmentId}")
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjectsByDepartment(
             @PathVariable String departmentId,
