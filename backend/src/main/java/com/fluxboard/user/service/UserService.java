@@ -9,6 +9,10 @@ import com.fluxboard.user.dto.request.UpdateUserRequest;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.project.repository.ProjectMemberRepository;
+import com.fluxboard.project.entity.ProjectMember;
+
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -19,10 +23,12 @@ import org.springframework.util.StringUtils;
 public class UserService implements CrudService<UserResponse, String, CreateUserRequest, UpdateUserRequest> {
 
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, ProjectMemberRepository projectMemberRepository) {
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -99,6 +105,29 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         User user = findUserById(id);
         user.markDeleted();
         userRepository.save(user);
+    }
+
+    /**
+     * Lấy ngữ cảnh nhân sự của một Project để gửi cho AI xử lý.
+     * Fix lỗi static reference bằng cách gọi qua instance projectMemberRepository.
+     */
+    public List<String> getAiPersonnelContextByProject(String projectId) {
+        List<String> userIds = projectMemberRepository.findByProjectIdAndIsActiveTrue(projectId)
+                .stream()
+                .map(ProjectMember::getUserId)
+                .toList();
+
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+
+        return userRepository.findByIdInAndDeletedFalse(userIds)
+                .stream()
+                .map(u -> String.format("- ID: %s | Tên: %s | Team: %s", 
+                        u.getId(), 
+                        u.getFullName(), 
+                        u.getTeamId() != null ? u.getTeamId() : "N/A"))
+                .toList();
     }
 
     private User findUserById(String id) {

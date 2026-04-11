@@ -1,16 +1,11 @@
 package com.fluxboard.ai.dto;
 
-import lombok.Data;
+import jakarta.validation.constraints.NotBlank;
 
-@Data
-public class AiPromptRequest {
-    private String prompt;
-
-    public String getPrompt() {
-        return prompt;
-    }
-
-    public void setPrompt(String prompt) {
-        this.prompt = prompt;
-    }
-}
+public record AiPromptRequest(
+    @NotBlank(message = "Prompt không được để trống")
+    String prompt,
+    
+    @NotBlank(message = "Project ID không được để trống")
+    String projectId
+) {}

@@ -1,6 +1,10 @@
 package com.fluxboard.common.script;
 
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.project.entity.ProjectEntity;
+import com.fluxboard.project.entity.ProjectMember;
+import com.fluxboard.project.repository.ProjectMemberRepository;
+import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.rbac.entity.PermissionEntity;
 import com.fluxboard.rbac.entity.RoleEntity;
 import com.fluxboard.rbac.entity.RolePermissionEntity;
@@ -35,17 +39,22 @@ public class RbacSeedDataScript implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final RolePermissionRepository rolePermissionRepository;
+    
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final boolean seedDataEnabled;
     private final String seedAdminEmail;
     private final String seedAdminPassword;
+    private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
 
     public RbacSeedDataScript(
             RoleRepository roleRepository,
             PermissionRepository permissionRepository,
             RolePermissionRepository rolePermissionRepository,
             UserRepository userRepository,
+            ProjectRepository projectRepository,      // Thêm cái này
+            ProjectMemberRepository projectMemberRepository,
             @Value("${seeddata:${SEED_DATA:false}}") boolean seedDataEnabled,
             @Value("${SEED_SYSTEM_ADMIN_EMAIL:${SYSTEM_ADMIN_EMAIL:}}") String seedAdminEmail,
             @Value("${SEED_SYSTEM_ADMIN_PASSWORD:${SYSTEM_ADMIN_PASSWORD:}}") String seedAdminPassword
@@ -58,6 +67,8 @@ public class RbacSeedDataScript implements ApplicationRunner {
         this.seedDataEnabled = seedDataEnabled;
         this.seedAdminEmail = seedAdminEmail;
         this.seedAdminPassword = seedAdminPassword;
+        this.projectRepository = projectRepository;             // Gán giá trị vào đây
+        this.projectMemberRepository = projectMemberRepository;
     }
 
     @Override
@@ -75,6 +86,8 @@ public class RbacSeedDataScript implements ApplicationRunner {
         int createdRolePermissions = seedRolePermissions(rolesByKey, permissionsByCode);
         boolean createdSystemAdmin = seedSystemAdminUser(rolesByKey);
 
+        seedAiTestingData(rolesByKey);
+
         log.info(
                 "Seed data completed. roles={}, permissions={}, newRolePermissions={}, createdSystemAdmin={}",
                 rolesByKey.size(),
@@ -82,6 +95,7 @@ public class RbacSeedDataScript implements ApplicationRunner {
                 createdRolePermissions,
                 createdSystemAdmin
         );
+
     }
 
     private Map<RoleKey, RoleEntity> seedRoles() {
@@ -359,6 +373,64 @@ public class RbacSeedDataScript implements ApplicationRunner {
     private Set<String> set(String... values) {
         return Set.of(values);
     }
+
+    private void seedAiTestingData(Map<RoleKey, RoleEntity> rolesByKey) {
+    log.info("Seeding AI testing data (Users with Teams & Sample Project)...");
+
+    // 1. Tạo Project mẫu
+    ProjectEntity project = projectRepository.findByNameAndDeletedFalse("Fluxboard AI System")
+            .stream().findFirst()
+            .orElseGet(() -> {
+                ProjectEntity p = new ProjectEntity();
+                p.setName("Fluxboard AI System");
+                p.setStatus("ACTIVE");
+                p.setDepartmentId("IT-DEPT");
+                return projectRepository.save(p);
+            });
+
+    // 2. Tạo danh sách User kèm theo Team chuyên môn (TeamId rất quan trọng cho AI)
+    User manh = createAiUser("Châu Đức Mạnh", "manh@fluxboard.com", "Backend-Team", rolesByKey);
+    User quang = createAiUser("Bùi Trương Nhật Quang", "quang@fluxboard.com", "Frontend-Team", rolesByKey);
+    User longUser = createAiUser("Hán Dương Long", "long@fluxboard.com", "QC-Team", rolesByKey);
+
+    // 3. Gán họ vào Project Member với Role là MEMBER (Scope PROJECT)
+    RoleEntity projectMemberRole = rolesByKey.get(new RoleKey(Role.MEMBER, Scope.PROJECT));
+    if (projectMemberRole != null) {
+        assignProjectMember(project.getId(), manh.getId(), projectMemberRole.getId());
+        assignProjectMember(project.getId(), quang.getId(), projectMemberRole.getId());
+        assignProjectMember(project.getId(), longUser.getId(), projectMemberRole.getId());
+    }
+    
+    log.info("AI testing data seeded successfully for Project: {}", project.getName());
+}
+
+private User createAiUser(String name, String email, String team, Map<RoleKey, RoleEntity> rolesByKey) {
+    return userRepository.findByEmail(email).orElseGet(() -> {
+        User u = new User();
+        u.setFullName(name);
+        u.setEmail(email);
+        u.setPassword(passwordEncoder.encode("123456"));
+        u.setTeamId(team); // AI Service sẽ dựa vào đây để gán việc
+        u.setDepartmentId("IT-DEPT");
+        
+        // Gán Role mặc định là EMPLOYEE (Scope SYSTEM)
+        RoleEntity employeeRole = rolesByKey.get(new RoleKey(Role.EMPLOYEE, Scope.SYSTEM));
+        if (employeeRole != null) u.setRoleId(employeeRole.getId());
+        
+        return userRepository.save(u);
+    });
+}
+
+private void assignProjectMember(String projectId, String userId, String roleId) {
+    if (!projectMemberRepository.existsByProjectIdAndUserIdAndIsActiveTrue(projectId, userId)) {
+        ProjectMember pm = new ProjectMember();
+        pm.setProjectId(projectId);
+        pm.setUserId(userId);
+        pm.setRoleIds(List.of(roleId));
+        pm.setActive(true);
+        projectMemberRepository.save(pm);
+    }
+}
 
     private record RoleSeed(Role name, Scope scope, String description) {
     }
