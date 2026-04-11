@@ -38,6 +38,23 @@ export const useAuthStore = create((set) => ({
     }
   },
 
+  // Hàm xử lý Quên mật khẩu
+  forgotPassword: async (email: string) => {
+    set({ isLoading: true });
+    try {
+      // Gọi API quên mật khẩu
+      const response: any = await axiosClient.post('/auth/forgot-password', { email });
+      set({ isLoading: false });
+      return { success: true, message: response.message || 'Đã gửi yêu cầu khôi phục.' };
+    } catch (error: any) {
+      set({ isLoading: false });
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại sau.' 
+      };
+    }
+  },
+
   // Hàm xử lý Đăng xuất
   logout: () => {
     localStorage.removeItem('token');

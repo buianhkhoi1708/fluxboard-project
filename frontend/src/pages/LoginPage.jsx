@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 
@@ -68,6 +68,12 @@ const LoginPage = () => {
               className="w-full bg-slate-100/50 border-none px-4 py-3 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
               placeholder="••••••••"
             />
+
+            <div className="flex justify-start mt-2">
+              <Link to="/forgot-password" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                Quên mật khẩu
+              </Link>
+            </div>
           </div>
 
           <button 
