@@ -37,7 +37,11 @@ public final class ResponseFactory {
         return ResponseEntity.ok(ApiResponse.success(message, page.getContent(), meta));
     }
 
-    public static ApiResponse<Void> success(Object object) {
-        throw new UnsupportedOperationException("Unimplemented method 'success'");
+    public static ResponseEntity<ApiResponse<Void>> success(String message) {
+        return ResponseEntity.ok(ApiResponse.success(message));
+    }
+
+    public static <T> ResponseEntity<ApiResponse<T>> success(String message, T data) {
+        return ResponseEntity.ok(ApiResponse.success(message, data));
     }
 }
