@@ -6,6 +6,7 @@ import { SocketProvider } from './context/SocketContext';
 import AdminRBACPage from './pages/AdminRBACPage';
 import WorkspacesPage from './pages/WorkspacesPage';
 import BoardView from './features/board/components/BoardView';
+import AiBoardGeneratorPage from './pages/AiBoardGeneratePage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/adminrbac" element={<AdminRBACPage/>} />
             <Route path="/workspaces" element={<WorkspacesPage/>} />
             <Route path="/board/:id" element={<BoardView />} />
+            <Route path="/aigenerateboard" element={<AiBoardGeneratorPage/>}/>
             {/* Mốt Long làm trang Settings thì thêm vào đây: */}
             {/* <Route path="/settings" element={<SettingsPage />} /> */}
           </Route>

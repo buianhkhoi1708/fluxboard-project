@@ -15,20 +15,24 @@ import org.springframework.web.bind.annotation.*;
 public class AiController {
 
     private final AiService aiService;
-
     @PostMapping("/boards/{boardId}/generate")
-    public ResponseEntity<ApiResponse<AiTaskResponse>> generate(
-            @PathVariable String boardId,
-            @RequestBody AiPromptRequest request) {
-        
-        // Gọi Service xử lý AI, lưu DB và trả về data
-        AiTaskResponse data = aiService.generateSmartTasks(
+public ResponseEntity<?> generateTasks(
+        @PathVariable String boardId,
+        @RequestBody AiPromptRequest request) { // 🚀 Dùng DTO sếp vừa thêm memberIds
+
+    try {
+        // 🚀 THÊM request.memberIds() VÀO CHỖ NÀY
+        AiTaskResponse response = aiService.generateSmartTasks(
                 boardId, 
                 request.projectId(), 
-                request.prompt()
+                request.prompt(), 
+                request.memberIds() // <--- Chìa khóa đây sếp!
         );
-
-        // TỐI ƯU: Dùng ResponseFactory để thống nhất format toàn hệ thống
-        return ResponseFactory.ok("AI đã phân rã task thành công!", data);
+        
+        return ResponseEntity.ok(response);
+    } catch (Exception e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
     }
+}
+  
 }

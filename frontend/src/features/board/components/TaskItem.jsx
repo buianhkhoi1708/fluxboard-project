@@ -93,13 +93,31 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
 
           <div className="flex items-center gap-2">
             {task.assignees?.length > 0 && (
-              <div className="flex -space-x-1">
-                <div className="w-5 h-5 rounded-full bg-slate-200 border border-white flex items-center justify-center text-[8px] font-bold text-slate-600"><User size={10} /></div>
-              </div>
-            )}
-            {task.story_points > 0 && (
-              <span className="min-w-[24px] h-6 px-1.5 flex items-center justify-center rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-extrabold border border-indigo-100 shadow-sm" title="Story Points">{task.story_points}</span>
-            )}
+  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+      {task.assignees.map((assignee, idx) => {
+        // Lấy chữ cái đầu để làm Avatar giả cho xịn
+        const displayName = assignee.name || assignee.fullName || assignee.username || assignee.email || 'U';
+        const initial = displayName.charAt(0).toUpperCase();
+
+        return (
+          <span
+            key={assignee.id || idx}
+            title={displayName} // Hover vào là hiện tên đầy đủ
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold transition-all hover:bg-indigo-100 shadow-sm"
+          >
+            {/* Vòng tròn Avatar nhỏ */}
+            <div className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-[8px] text-white">
+              {initial}
+            </div>
+            
+            <span className="truncate max-w-[80px]">
+              {displayName}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  )}
           </div>
         </div>
 

@@ -4,7 +4,7 @@ import axios from 'axios';
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   // Set timeout khoảng 10 giây để tránh app bị treo nếu mạng lag
-  timeout: 10000, 
+  timeout: 60000, 
 });
 
 // Request Interceptor

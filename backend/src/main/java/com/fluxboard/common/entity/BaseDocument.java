@@ -56,4 +56,7 @@ public abstract class BaseDocument {
         this.deleted = false;
         this.deletedAt = null;
     }
+    public void setId(String id) {
+        this.id = id;
+    }
 }

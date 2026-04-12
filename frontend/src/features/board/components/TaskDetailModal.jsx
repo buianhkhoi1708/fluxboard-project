@@ -219,25 +219,50 @@ const TaskDetailModal = ({ isOpen, onClose, task, listId }) => {
                   Thông số
                 </h4>
                 
-                <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-bold text-slate-600 flex items-center gap-2"><User size={15} className="text-slate-400"/> Người thực hiện</label>
-                  <div className="flex items-center gap-2">
-                    {task.assignees?.length > 0 ? (
-                      <div className="flex -space-x-2">
-                        {task.assignees.map((assigneeId, idx) => (
-                          <div key={idx} className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-white flex items-center justify-center text-indigo-700 font-bold shadow-sm text-xs" title={assigneeId}>
-                            <User size={16} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-[13px] text-slate-400 italic bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 border-dashed font-medium">Chưa phân công</span>
-                    )}
-                    <button className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50" title="Thêm người">
-                      <Plus size={18} />
-                    </button>
-                  </div>
-                </div>
+                <div className="flex flex-col gap-3">
+  <label className="text-[13px] font-bold text-slate-600 flex items-center gap-2">
+    <User size={15} className="text-slate-400"/> Người thực hiện
+  </label>
+  
+  <div className="flex flex-wrap gap-2">
+    {task.assignees?.length > 0 ? (
+      task.assignees.map((assignee, idx) => {
+        const displayName = assignee.name || assignee.fullName || assignee.username || assignee.email || 'Unnamed';
+        const initial = displayName.charAt(0).toUpperCase();
+
+        return (
+          <div 
+            key={assignee.id || idx} 
+            className="flex items-center gap-2 px-2 py-1.5 bg-indigo-50 border border-indigo-100 rounded-xl shadow-sm group/name"
+          >
+            {/* Avatar nhỏ với chữ cái đầu */}
+            <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-black text-white shadow-sm">
+              {initial}
+            </div>
+            {/* Tên hiển thị rõ ràng */}
+            <span className="text-[12px] font-bold text-indigo-700 pr-1">
+              {displayName}
+            </span>
+            {/* Nút gỡ người này (nếu sếp muốn làm tính năng xóa) */}
+            <button className="opacity-0 group-hover/name:opacity-100 p-0.5 hover:bg-indigo-200 rounded-full transition-all text-indigo-400 hover:text-indigo-600">
+              <X size={10} />
+            </button>
+          </div>
+        );
+      })
+    ) : (
+      <span className="w-full text-[13px] text-slate-400 italic bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 border-dashed font-medium text-center">
+        Chưa có ai nhận việc
+      </span>
+    )}
+
+    {/* Nút thêm người thực hiện */}
+    <button className="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all font-bold text-[12px]">
+      <Plus size={14} />
+      <span>Thêm người</span>
+    </button>
+  </div>
+</div>
 
                 <div className="flex flex-col gap-2">
                   <label className="text-[13px] font-bold text-slate-600 flex items-center gap-2"><Flag size={15} className="text-slate-400"/> Mức Ưu tiên</label>

@@ -21,7 +21,7 @@ const Sidebar = () => {
   const executionItems = [
     { path: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
     { path: '/workspaces', icon: <Briefcase size={20} />, label: 'Workspaces' },
-    { path: '/board', icon: <KanbanSquare size={20} />, label: 'Kanban & AI' }, // AI Highlighted
+    { path: '/aigenerateboard', icon: <KanbanSquare size={20} />, label: 'AI Boards' }, // AI Highlighted
     { path: '/tasks', icon: <ListTodo size={20} />, label: 'My Tasks' },
   ];
 
