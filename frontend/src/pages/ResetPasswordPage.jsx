@@ -111,7 +111,7 @@ const ResetPasswordPage = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Xác nhận mật khẩu</label>
+              <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Xác nhận mật khẩu mới</label>
               <input 
                 type="password" required minLength={6} value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

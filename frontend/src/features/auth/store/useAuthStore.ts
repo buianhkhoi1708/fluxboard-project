@@ -74,7 +74,7 @@ export const useAuthStore = create((set) => ({
     try {
       const response: any = await axiosClient.post('/auth/reset-password', { 
         token, 
-        password: newPassword 
+        new_password: newPassword 
       });
       set({ isLoading: false });
       return { success: true, message: response.message || 'Đổi mật khẩu thành công!' };
