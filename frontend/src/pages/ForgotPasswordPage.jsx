@@ -1,34 +1,61 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
+import { forgotPasswordSchema } from '../features/auth/schema/auth.schema';
 import { KeyRound, ArrowLeft, Send, Loader2, CheckCircle2 } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
-  const [email, setEmail] = useState('');
+  const [formData, setFormData] = useState({ email: '' });
+  const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
   
   const { forgotPassword, isLoading } = useAuthStore();
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const handleBlur = async (e) => {
+    const { name } = e.target;
+    try {
+      await forgotPasswordSchema.validateAt(name, formData);
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    } catch (err) {
+      setErrors(prev => ({ ...prev, [name]: err.message }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLoading) return; // Đảm bảo button disable
+    if (isLoading) return;
     setStatus({ type: '', message: '' });
-    
-    const result = await forgotPassword(email);
-    if (result.success) {
-      // Luôn hiện thành công để che giấu email
-      setStatus({ 
-        type: 'success', 
-        message: 'Đường dẫn khôi phục mật khẩu đã được gửi đến hộp thư của bạn. Vui lòng kiểm tra!' 
+    setErrors({});
+
+    try {
+      await forgotPasswordSchema.validate(formData, { abortEarly: false });
+      
+      const result = await forgotPassword(formData.email);
+      if (result.success) {
+        setStatus({ 
+          type: 'success', 
+          message: 'Đường dẫn khôi phục mật khẩu đã được gửi đến hộp thư của bạn. Vui lòng kiểm tra!' 
+        });
+      } else {
+        setStatus({ type: 'error', message: result.message });
+      }
+    } catch (err) {
+      const validationErrors = {};
+      err.inner.forEach(error => {
+        validationErrors[error.path] = error.message;
       });
-    } else {
-      setStatus({ type: 'error', message: result.message });
+      setErrors(validationErrors);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
-      {/* Background decoration */}
       <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/20 blur-[120px]"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-teal-500/20 blur-[120px]"></div>
 
@@ -42,33 +69,41 @@ const ForgotPasswordPage = () => {
         <h2 className="text-2xl font-black text-center text-slate-800">Quên mật khẩu</h2>
         <p className="text-sm font-medium text-slate-500 text-center">Nhập email đăng nhập để nhận hướng dẫn khôi phục.</p>
 
-        {/* Khung hiển thị thông báo thành công hoặc thất bại */}
         {status.type === 'success' && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3 mt-4">
             <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={20} />
             <p className="text-sm font-medium text-emerald-700">{status.message}</p>
           </div>
         )}
         
         {status.type === 'error' && (
-          <div className="mb-6 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold rounded-xl text-center">
+          <div className="mb-6 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold rounded-xl text-center mt-4">
             {status.message}
           </div>
         )}
 
-        {/* Ẩn form đi nếu đã gửi thành công để người dùng không bấm spam */}
         {status.type !== 'success' && (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1 ml-1 mt-4">Email của bạn</label>
+              <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Email của bạn</label>
               <input 
-                type="email" 
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-100/50 border-none px-4 py-3 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                type="text" 
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
+                  errors.email 
+                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
+                    : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500'
+                }`}
                 placeholder="email@gmail.com"
               />
+              {errors.email && (
+                <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
+                  {errors.email}
+                </span>
+              )}
             </div>
 
             <button 
@@ -86,7 +121,6 @@ const ForgotPasswordPage = () => {
           </form>
         )}
 
-        {/* Nút quay lại trang Đăng nhập */}
         <div className="mt-8 text-center">
           <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
             <ArrowLeft size={16} />

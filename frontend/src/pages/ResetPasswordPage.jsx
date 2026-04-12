@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
+import { resetPasswordSchema } from '../features/auth/schema/auth.schema';
 import { LockKeyhole, ArrowRight, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
 const ResetPasswordPage = () => {
@@ -8,8 +9,8 @@ const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formData, setFormData] = useState({ password: '', confirmPassword: '' });
+  const [errors, setErrors] = useState({});
   
   // Các trạng thái của trang
   const [isVerifying, setIsVerifying] = useState(true);
@@ -33,7 +34,7 @@ const ResetPasswordPage = () => {
       setIsVerifying(false);
       
       if (result.success) {
-        setIsValidToken(true); // Mở khóa cho phép hiện form
+        setIsValidToken(true); 
       } else {
         setIsValidToken(false);
         setStatus({ type: 'error', message: result.message });
@@ -43,22 +44,42 @@ const ResetPasswordPage = () => {
     checkToken();
   }, [token]);
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const handleBlur = async (e) => {
+    const { name } = e.target;
+    try {
+      await resetPasswordSchema.validateAt(name, formData);
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    } catch (err) {
+      setErrors(prev => ({ ...prev, [name]: err.message }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus({ type: '', message: '' });
+    setErrors({});
 
-    // Kiểm tra sơ bộ ở Frontend
-    if (password !== confirmPassword) {
-      setStatus({ type: 'error', message: 'Mật khẩu xác nhận không khớp!' });
-      return;
-    }
-    
-    // Gửi token đang giấu kín và mật khẩu mới xuống Backend
-    const result = await resetPassword(token, password);
-    if (result.success) {
-      setStatus({ type: 'success', message: result.message });
-    } else {
-      setStatus({ type: 'error', message: result.message });
+    try {
+      await resetPasswordSchema.validate(formData, { abortEarly: false });
+      
+      const result = await resetPassword(token, formData.password);
+      if (result.success) {
+        setStatus({ type: 'success', message: result.message });
+      } else {
+        setStatus({ type: 'error', message: result.message });
+      }
+    } catch (err) {
+      const validationErrors = {};
+      err.inner.forEach(error => {
+        validationErrors[error.path] = error.message;
+      });
+      setErrors(validationErrors);
     }
   };
 
@@ -104,20 +125,45 @@ const ResetPasswordPage = () => {
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Mật khẩu mới</label>
               <input 
-                type="password" required minLength={6} value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-100/50 border-none px-4 py-3 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                placeholder="Nhập tối thiểu 6 ký tự"
+                type="password" 
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
+                  errors.password 
+                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
+                    : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500'
+                }`}
+                placeholder="Nhập tối thiểu 8 ký tự, 1 chữ hoa, 1 số"
               />
+              {errors.password && (
+                <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
+                  {errors.password}
+                </span>
+              )}
             </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Xác nhận mật khẩu mới</label>
               <input 
-                type="password" required minLength={6} value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-slate-100/50 border-none px-4 py-3 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                type="password" 
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
+                  errors.confirmPassword 
+                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
+                    : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500'
+                }`}
                 placeholder="Nhập lại mật khẩu mới"
               />
+              {errors.confirmPassword && (
+                <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
+                  {errors.confirmPassword}
+                </span>
+              )}
             </div>
 
             <button 
@@ -134,7 +180,7 @@ const ResetPasswordPage = () => {
           </form>
         )}
 
-        {/* Nút điều hướng (sẽ hiện khi đổi thành công hoặc token lỗi) */}
+        {/* Nút điều hướng */}
         {!isVerifying && (!isValidToken || status.type === 'success') && (
           <div className="mt-6 text-center">
             <Link to={status.type === 'success' ? "/login" : "/forgot-password"} className="inline-flex items-center justify-center w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl transition-colors">
