@@ -106,6 +106,12 @@ const LoginPage = () => {
                 {error}
               </div>
             )}
+
+            <div className="flex justify-start mt-2">
+              <Link to="/forgot-password" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                Quên mật khẩu
+              </Link>
+            </div>
           </div>
 
           <button 

@@ -6,6 +6,8 @@ import { SocketProvider } from './context/SocketContext';
 import AdminRBACPage from './pages/AdminRBACPage';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './routes/ProtectedRoute';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
         <Routes>
           {/* Route công khai: Ai cũng vào được */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           
           {/* Các Route cần bảo vệ: Phải đăng nhập mới vào được */}
           {/* Luồng giao diện có chứa Sidebar và Navbar */}

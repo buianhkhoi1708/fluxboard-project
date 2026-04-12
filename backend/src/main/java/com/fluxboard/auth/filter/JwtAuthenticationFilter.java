@@ -39,6 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return "/health-check".equals(servletPath)
                 || "/auth/login".equals(servletPath)
                 || "/auth/forgot-password".equals(servletPath)
+                || "/auth/verify-reset-token".equals(servletPath)
                 || "/auth/reset-password".equals(servletPath)
                 || "/error".equals(servletPath)
                 || servletPath.startsWith("/api/v1/ws-fluxboard")
