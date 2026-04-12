@@ -55,6 +55,38 @@ export const useAuthStore = create((set) => ({
     }
   },
 
+  // Hàm kiểm tra Token ngay khi vừa bấm từ Email vào
+  verifyResetToken: async (token: string) => {
+    try {
+      await axiosClient.get(`/auth/verify-reset-token?token=${token}`);
+      return { success: true };
+    } catch (error: any) {
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Đường dẫn không hợp lệ hoặc đã hết hạn.' 
+      };
+    }
+  },
+
+  // Hàm gửi mật khẩu mới
+  resetPassword: async (token: string, newPassword: string) => {
+    set({ isLoading: true });
+    try {
+      const response: any = await axiosClient.post('/auth/reset-password', { 
+        token, 
+        password: newPassword 
+      });
+      set({ isLoading: false });
+      return { success: true, message: response.message || 'Đổi mật khẩu thành công!' };
+    } catch (error: any) {
+      set({ isLoading: false });
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại.' 
+      };
+    }
+  },
+
   // Hàm xử lý Đăng xuất
   logout: () => {
     localStorage.removeItem('token');
