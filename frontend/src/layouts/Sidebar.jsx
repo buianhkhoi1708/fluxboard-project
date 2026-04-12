@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -15,6 +16,8 @@ import {
 } from 'lucide-react';
 
 const Sidebar = () => {
+  const {logout} = useAuthStore();
+
   // ==========================================
   // GROUP 1: EXECUTION & AI (Phases 3 & 4)
   // ==========================================
@@ -93,32 +96,20 @@ const Sidebar = () => {
         </div>
       </div>
       
-      {/* 3. LOGOUT & AI WIDGET */}
-      <div className="p-2 md:p-4 md:border-t md:border-slate-100 flex flex-row md:flex-col gap-2 bg-white">
-        
-        {/* AI Status Widget */}
-        <div className="hidden md:flex items-center justify-between p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100/50 mb-2">
-          <div className="flex items-center gap-3">
-            <div className="bg-white p-1.5 rounded-xl shadow-sm border border-indigo-50">
-              <Sparkles size={16} className="text-indigo-600" />
-            </div>
-            <div>
-              <p className="text-[12px] font-bold text-indigo-900">Gemini AI</p>
-              <p className="text-[10px] text-indigo-600/80 font-medium">Auto-Assign Ready</p>
-            </div>
-          </div>
-          {/* Active Status Indicator */}
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-        </div>
 
-        {/* Logout Button */}
-        <button className="flex flex-col md:flex-row items-center justify-center md:justify-start w-full gap-1 md:gap-3 px-3 py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0 border border-transparent md:hover:border-rose-100">
+      <div className="flex-1 flex flex-row md:flex-col gap-1 md:gap-6 overflow-x-auto md:overflow-y-auto no-scrollbar px-2 py-2 md:px-4 pb-20 md:pb-0">
+        <button 
+          onClick={logout}
+        className="flex flex-col md:flex-row items-center justify-center md:justify-start w-full gap-1 md:gap-3 px-3 py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0 border border-transparent md:hover:border-rose-100">
           <LogOut size={20} className="text-slate-400 group-hover:text-rose-500 transition-colors" />
           <span className="whitespace-nowrap">Logout</span>
         </button>
+          
       </div>
+     
     </aside>
   );
 };
 
 export default Sidebar;
+
