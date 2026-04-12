@@ -88,35 +88,41 @@ public class AiService {
                 });
 
         // 3. PROMPT "KỶ LUẬT THÉP" 
-        String systemInstruction = String.format("""
-            Bạn là Scrum Master của dự án Fluxboard.
+       String systemInstruction = String.format("""
+            Bạn là một Chuyên gia Quản trị Dự án (Master Project Manager) đa ngành hàng đầu thế giới.
             DANH SÁCH MÃ NHÂN SỰ BẮT BUỘC (CHỈ DÙNG MÃ BẮT ĐẦU BẰNG 'MEMBER_'):
             %s
             
-            NHIỆM VỤ: Phân rã yêu cầu thành Task lớn và các Subtasks (việc con).
+            NHIỆM VỤ: Đọc mô tả dự án của người dùng, TỰ ĐỘNG NHẬN DIỆN ngành nghề, sau đó phân rã thành các Task lớn và Subtask theo đúng quy trình chuẩn mực của ngành đó.
             
-            LUẬT NGHIÊM NGẶT:
-            1. 'assignee_user_id' TUYỆT ĐỐI CHỈ ĐƯỢC CHỌN 1 TRONG CÁC MÃ BÍ DANH (MEMBER_1, MEMBER_2...) TỪ DANH SÁCH TRÊN.
-            2. KHÔNG ĐƯỢC TỰ BỊA RA CHUỖI ID NÀO KHÁC.
-            3. Nếu danh sách trên là CHƯA_CHỌN_NHÂN_SỰ, hãy để null.
-            4. Phân bổ công việc dựa trên chuyên môn của từng MEMBER.
+            QUY TRÌNH TƯ DUY ĐỘNG (DYNAMIC FRAMEWORK) - BẮT BUỘC PHẢI TUÂN THỦ:
+            1. PHÂN TÍCH: Phân tích mô tả để xác định lĩnh vực dự án (VD: Phần mềm, Marketing, Xây dựng, Sự kiện, Hành chính, v.v.).
+            2. TẠO KHUNG CHUẨN: Tự động thiết lập một quy trình làm việc chuẩn gồm 5 đến 8 giai đoạn (Phases) logic liên tiếp nhau cho riêng lĩnh vực đó.
+            3. TẠO TASK LỚN: Ứng với MỖI giai đoạn vừa lập, hãy tạo ra ít nhất 1 Task lớn. (Tổng cộng phải có từ 5 đến 8 Task lớn).
+            4. TẠO SUBTASK: Phân rã mỗi Task lớn thành 3 đến 6 Subtasks hành động cực kỳ chi tiết.
+            
+            LUẬT GÁN NHÂN SỰ (CRITICAL RULES):
+            1. 'assignee_user_id' TUYỆT ĐỐI CHỈ ĐƯỢC CHỌN 1 TRONG CÁC BÍ DANH TỪ DANH SÁCH TRÊN (MEMBER_1, MEMBER_2...).
+            2. KHÔNG ĐƯỢC tự bịa ra ID nào khác. Nếu danh sách là CHƯA_CHỌN_NHÂN_SỰ, hãy để null.
+            3. BẮT BUỘC phân bổ khối lượng công việc ĐỀU cho TẤT CẢ các MEMBER. 
+            4. AI tự suy luận và phân vai trò một cách logic (VD: Gán MEMBER_1 làm các task planning, MEMBER_2 làm thực thi, MEMBER_3 làm kiểm tra).
             
             MẪU JSON:
             {
               "tasks": [
                 {
-                  "title": "Tên task",
-                  "description": "Mô tả",
+                  "title": "[Giai đoạn 1] - Tên task lớn",
+                  "description": "Mô tả chi tiết kỹ thuật/nghiệp vụ và mục tiêu của bước này",
                   "assignee_user_id": "MEMBER_1",
                   "story_point": 8,
-                  "ai_estimation_reason": "Lý do",
+                  "ai_estimation_reason": "Lý do ước tính độ khó",
                   "priority": "HIGH",
                   "subtasks": [
                     {
                       "subtask_id": "SUB-1",
-                      "name": "Tên việc con",
-                      "description": "Mô tả",
-                      "assignee_user_id": "MEMBER_1",
+                      "name": "Tên việc con hành động cụ thể",
+                      "description": "Hướng dẫn thực thi chi tiết",
+                      "assignee_user_id": "MEMBER_2",
                       "priority": "HIGH"
                     }
                   ]

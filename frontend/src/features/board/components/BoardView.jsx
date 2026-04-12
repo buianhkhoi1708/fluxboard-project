@@ -11,7 +11,7 @@ import { useParams } from 'react-router-dom';
 
 const BoardView = () => {
 
-  const { board, setBoard, getBoardTotalPoints, addList, fetchBoardData, updateTaskPositionApi } = useBoardStore();
+  const { board, setBoard, getBoardTotalPoints, addList,fetchProjectMembers, fetchBoardData, updateTaskPositionApi } = useBoardStore();
   
   const [activeTask, setActiveTask] = useState(null);
   const [isAddingCol, setIsAddingCol] = useState(false);
@@ -39,8 +39,21 @@ const BoardView = () => {
   });
 
   useEffect(() => {
-    fetchBoardData(currentBoardId); 
-  }, [fetchBoardData, currentBoardId]);
+    if (currentBoardId) {
+      fetchBoardData(currentBoardId); 
+    }
+  }, [currentBoardId, fetchBoardData]); // 🚀 Đã khai báo đủ bộ
+
+  // ==========================================
+  // NHỊP 2: CÓ BOARD RỒI -> LẤY PROJECT_ID -> TẢI DANH BẠ
+  // ==========================================
+  useEffect(() => {
+    const projectId = board?.projectId || board?.project_id;
+
+    if (projectId) {
+      fetchProjectMembers(projectId);
+    }
+  }, [board?.projectId, board?.project_id, fetchProjectMembers]);
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full p-4 text-center">

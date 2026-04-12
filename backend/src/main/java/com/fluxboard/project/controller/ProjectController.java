@@ -2,6 +2,7 @@ package com.fluxboard.project.controller;
 
 import com.fluxboard.auth.model.AuthRequestContext;
 import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.project.dto.request.CreateProjectRequest;
@@ -46,6 +47,15 @@ public class ProjectController {
         return ResponseFactory.created(
                 "Project created successfully.",
                 projectService.create(request, authUser.userId())
+        );
+    }
+
+    @RequirePermission("PROJECT_VIEW")
+    @GetMapping("/{projectId}/members")
+    public ResponseEntity<ApiResponse<List<TaskUserSummaryResponse>>> getProjectMembers(@PathVariable String projectId) {
+        return ResponseFactory.ok(
+                "Project members retrieved successfully.", 
+                projectService.getProjectMembers(projectId)
         );
     }
 
@@ -102,5 +112,15 @@ public class ProjectController {
     public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable String projectId) {
         projectService.delete(projectId);
         return ResponseFactory.ok("Project deleted successfully.");
+    }
+
+    @RequirePermission("PROJECT_UPDATE") // Chỉ người có quyền sửa dự án mới được thêm member
+    @PostMapping("/{projectId}/members")
+    public ResponseEntity<ApiResponse<Void>> addProjectMember(
+            @PathVariable String projectId,
+            @Valid @RequestBody com.fluxboard.project.dto.request.AddProjectMemberRequest request) {
+        
+        projectService.addProjectMember(projectId, request);
+        return ResponseFactory.ok("Member added to project successfully.");
     }
 }

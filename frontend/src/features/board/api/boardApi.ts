@@ -51,4 +51,17 @@ export const boardApi = {
     const response: any = await axiosClient.delete(`/tasks/${taskId}`);
     return response.data || response;
   },
+  addProjectMember: async (projectId: string, userId: string, roleIds: string[] = ["MEMBER"]) => {
+    const payload = {
+      user_id: userId,
+      role_ids: roleIds
+    };
+    const response: any = await axiosClient.post(`/projects/${projectId}/members`, payload);
+    return response.data || response;
+  },
+
+  // Lấy danh bạ (Hàm cũ của sếp - giữ nguyên)
+  getProjectMembers: (projectId: string) => {
+    return axiosClient.get(`/projects/${projectId}/members`);
+  },
 };
