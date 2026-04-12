@@ -1,5 +1,6 @@
 package com.fluxboard.auth.service;
 
+import com.fluxboard.auth.dto.request.ChangePasswordRequest;
 import com.fluxboard.auth.dto.request.ForgotPasswordRequest;
 import com.fluxboard.auth.dto.request.LoginRequest;
 import com.fluxboard.auth.dto.request.ResetPasswordRequest;
@@ -25,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 public class AuthService {
@@ -149,6 +151,37 @@ public class AuthService {
         user.setResetToken(null);
         user.setResetTokenExpiry(null);
 
+        userRepository.save(user);
+    }
+
+    public void changePassword(String userId, ChangePasswordRequest request) {
+        String normalizedUserId = TextUtils.trimToNull(userId);
+        if (!StringUtils.hasText(normalizedUserId)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Authenticated user is required.");
+        }
+
+        User user = userRepository.findByIdAndDeletedFalse(normalizedUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found."));
+
+        String currentPassword = TextUtils.trim(request.currentPassword());
+        String newPassword = TextUtils.trim(request.newPassword());
+        String confirmNewPassword = TextUtils.trim(request.confirmNewPassword());
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Current password is incorrect.");
+        }
+
+        if (!newPassword.equals(confirmNewPassword)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "New password and confirm new password do not match.");
+        }
+
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "New password must be different from current password.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetToken(null);
+        user.setResetTokenExpiry(null);
         userRepository.save(user);
     }
 }
