@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { resetPasswordSchema } from '../features/auth/schema/auth.schema';
-import { LockKeyhole, ArrowRight, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { LockKeyhole, ArrowRight, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
 
 const ResetPasswordPage = () => {
   // Lấy token từ URL xuống
@@ -11,7 +11,10 @@ const ResetPasswordPage = () => {
 
   const [formData, setFormData] = useState({ password: '', confirmPassword: '' });
   const [errors, setErrors] = useState({});
-  
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   // Các trạng thái của trang
   const [isVerifying, setIsVerifying] = useState(true);
   const [isValidToken, setIsValidToken] = useState(false);
@@ -84,11 +87,15 @@ const ResetPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/20 blur-[120px]"></div>
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[120px]"></div>
+    <div 
+      className="min-h-screen flex items-center justify-center relative overflow-hidden bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')` }}
+    >
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"></div>
+      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/30 blur-[120px]"></div>
+      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-teal-500/30 blur-[120px]"></div>
 
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/50 z-10">
+      <div className="w-full max-w-md bg-white/90 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl border border-white/40 z-10">
         <div className="flex justify-center mb-6">
           <div className="w-14 h-14 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
             <LockKeyhole className="text-white" size={28} />
@@ -124,19 +131,28 @@ const ResetPasswordPage = () => {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Mật khẩu mới</label>
-              <input 
-                type="password" 
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
-                  errors.password 
-                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
-                    : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500'
-                }`}
-                placeholder="Nhập tối thiểu 8 ký tự, 1 chữ hoa, 1 số"
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  className={`w-full border pl-4 pr-12 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
+                    errors.password 
+                      ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
+                      : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500'
+                  }`}
+                  placeholder="Nhập tối thiểu 8 ký tự, 1 chữ hoa, 1 số"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
               {errors.password && (
                 <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
                   {errors.password}

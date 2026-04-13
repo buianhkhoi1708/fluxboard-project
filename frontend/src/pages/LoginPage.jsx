@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { loginSchema } from '../features/auth/schema/auth.schema';
-import { Sparkles, ArrowRight, Loader2 } from 'lucide-react';
+import { Sparkles, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   const { login, isLoading } = useAuthStore();
   const navigate = useNavigate();
@@ -61,11 +62,15 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[120px]"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-500/20 blur-[120px]"></div>
-
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/50 z-10">
+    <div 
+      className="min-h-screen flex items-center justify-center relative overflow-hidden bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')` }}
+    >
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"></div>
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/30 blur-[120px]"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-500/30 blur-[120px]"></div>
+      
+      <div className="w-full max-w-md bg-white/90 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl border border-white/40 z-10">
         <div className="flex justify-center mb-6">
           <div className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
             <Sparkles className="text-white" size={28} />
@@ -94,7 +99,7 @@ const LoginPage = () => {
               className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
                 errors.email 
                   ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
-                  : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
+                  : 'bg-slate-100/70 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
               }`}
               placeholder="email@gmail.com"
             />
@@ -108,19 +113,29 @@ const LoginPage = () => {
           {/* PASSWORD */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Mật khẩu</label>
-            <input 
-              type="password" 
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
-                errors.password 
-                  ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
-                  : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
-              }`}
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"} 
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`w-full border pl-4 pr-12 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
+                  errors.password 
+                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
+                    : 'bg-slate-100/70 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
+                }`}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            
             {errors.password && (
               <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
                 {errors.password}
@@ -137,7 +152,7 @@ const LoginPage = () => {
           <button 
             type="submit" 
             disabled={isLoading}
-            className="mt-2 w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
+            className="mt-2 w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isLoading ? <Loader2 className="animate-spin" size={18} /> : (
               <>
