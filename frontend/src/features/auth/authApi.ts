@@ -7,13 +7,18 @@ const apiClient = axios.create({
 });
 
 export const authApi = {
-  // ... các hàm login, forgotPassword khác
+  // ... các hàm login, forgotPassword khác giữ nguyên
 
-  changePassword: async (data: { oldPassword: string; newPassword: string }) => {
-    // 1. Lấy token từ nơi lưu trữ
+  // 🚀 Đã cập nhật Type khớp 100% với form và Backend
+  changePassword: async (data: { 
+    current_password: string; 
+    new_password: string; 
+    confirm_new_password: string 
+  }) => {
+    // 1. Lấy token từ nơi lưu trữ (localStorage)
     const token = localStorage.getItem('token'); 
 
-    // 2. Kẹp token vào Header Authorization
+    // 2. Kẹp token vào Header Authorization và gửi data đi
     return await apiClient.post('/auth/change-password', data, {
       headers: {
         Authorization: `Bearer ${token}` 
