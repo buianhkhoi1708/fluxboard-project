@@ -64,7 +64,7 @@ const LoginPage = () => {
           </div>
         </div>
         
-        <h2 className="text-2xl font-black text-center text-slate-800 mb-2">Đăng nhập Fluxboard</h2>
+        <h2 className="text-2xl font-black text-center text-slate-800! mb-2">Đăng nhập Fluxboard</h2>
         <p className="text-sm font-medium text-slate-500 text-center mb-8">Chào mừng bạn quay trở lại không gian làm việc</p>
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">

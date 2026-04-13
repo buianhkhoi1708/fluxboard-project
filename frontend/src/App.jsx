@@ -9,14 +9,6 @@ import BoardView from "./features/board/components/BoardView";
 import AiBoardGeneratorPage from "./pages/AiBoardGeneratePage";
 import LoginPage from "./pages/LoginPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import MainLayout from './layouts/MainLayout';
-import BoardPage from './pages/BoardPage';
-import { SocketProvider } from './context/SocketContext';
-import AdminRBACPage from './pages/AdminRBACPage';
-import LoginPage from './pages/LoginPage';
-import ProtectedRoute from './routes/ProtectedRoute';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 
