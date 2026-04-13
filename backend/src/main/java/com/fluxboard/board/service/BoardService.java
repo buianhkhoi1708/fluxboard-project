@@ -133,6 +133,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
         return new BoardDetailResponse(
                 board.getId(),
+                board.getProjectId(),
                 board.getName(),
                 columnResponses
         );

@@ -422,7 +422,7 @@ private User createAiUser(String name, String email, String team, Map<RoleKey, R
 }
 
 private void assignProjectMember(String projectId, String userId, String roleId) {
-    if (!projectMemberRepository.existsByProjectIdAndUserIdAndIsActiveTrue(projectId, userId)) {
+    if (!projectMemberRepository.existsByProjectIdAndUserIdAndDeletedFalse(projectId, userId)) {
         ProjectMember pm = new ProjectMember();
         pm.setProjectId(projectId);
         pm.setUserId(userId);

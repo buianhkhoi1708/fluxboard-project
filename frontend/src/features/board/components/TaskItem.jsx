@@ -7,8 +7,10 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 import TaskDetailModal from './TaskDetailModal'; 
 
 const priorityColors = { 
-  Low: 'bg-blue-100 text-blue-700', Medium: 'bg-yellow-100 text-yellow-700', 
-  High: 'bg-orange-100 text-orange-700', Critical: 'bg-red-100 text-red-700' 
+  Low: 'bg-blue-100 text-blue-700', 
+  Medium: 'bg-yellow-100 text-yellow-700', 
+  High: 'bg-orange-100 text-orange-700', 
+  Critical: 'bg-red-100 text-red-700' 
 };
 
 const formatDateForInput = (dateString) => {
@@ -17,7 +19,8 @@ const formatDateForInput = (dateString) => {
 };
 
 const TaskItem = memo(({ task, listId, isOverlay }) => {
-  const { deleteTask, toggleSubtask } = useBoardStore(); 
+  // 🚀 Bổ sung getMemberById vào đây
+  const { deleteTask, toggleSubtask, getMemberById } = useBoardStore(); 
   
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); 
@@ -91,15 +94,55 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
             {task.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[task.priority] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{task.priority}</span></span>}
           </div>
 
+          {/* 🚀 LOGIC RENDER ASSIGNEES ĐÃ FIX */}
           <div className="flex items-center gap-2">
-            {task.assignees?.length > 0 && (
-              <div className="flex -space-x-1">
-                <div className="w-5 h-5 rounded-full bg-slate-200 border border-white flex items-center justify-center text-[8px] font-bold text-slate-600"><User size={10} /></div>
-              </div>
-            )}
-            {task.story_points > 0 && (
-              <span className="min-w-[24px] h-6 px-1.5 flex items-center justify-center rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-extrabold border border-indigo-100 shadow-sm" title="Story Points">{task.story_points}</span>
-            )}
+            {(() => {
+              // Vét cạn: Lấy mảng từ mọi kiểu đặt tên có thể của Backend
+              const assigneeArray = task.assignees_user_id || task.assigneesUserId || task.assignees || [];
+
+              if (assigneeArray.length > 0) {
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {assigneeArray.map((item, idx) => {
+                      // Nếu API lỡ trả về object rồi thì lấy id, nếu là string ID thì giữ nguyên
+                      const userId = typeof item === 'object' ? (item.id || item._id) : item;
+                      
+                      // Lấy dữ liệu user từ danh bạ (dựa vào ID)
+                      const member = getMemberById(userId) || (typeof item === 'object' ? item : null);
+                      
+                      // Bóc tách tên và avatar
+                      const displayName = member?.name || member?.full_name || member?.fullName || member?.username || 'Unnamed';
+                      const avatarUrl = member?.avatar || member?.avatar_url || member?.avatarUrl;
+                      const initial = displayName.charAt(0).toUpperCase();
+
+                      return (
+                        <span
+                          key={userId || idx}
+                          title={displayName} 
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold transition-all hover:bg-indigo-100 shadow-sm"
+                        >
+                          {avatarUrl ? (
+                            <img 
+                              src={avatarUrl} 
+                              alt={displayName} 
+                              className="w-4 h-4 rounded-full object-cover border border-indigo-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-[8px] text-white shrink-0">
+                              {initial}
+                            </div>
+                          )}
+                          <span className="truncate max-w-[80px]">
+                            {displayName}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         </div>
 

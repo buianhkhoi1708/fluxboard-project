@@ -1,9 +1,12 @@
 package com.fluxboard.auth.controller;
 
+import com.fluxboard.auth.dto.request.ChangePasswordRequest;
 import com.fluxboard.auth.dto.request.ForgotPasswordRequest;
 import com.fluxboard.auth.dto.request.LoginRequest;
 import com.fluxboard.auth.dto.request.ResetPasswordRequest;
 import com.fluxboard.auth.dto.response.LoginResponse;
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.auth.service.AuthService;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -43,14 +47,23 @@ public class AuthController {
     }
 
     @GetMapping("/verify-reset-token")
-    public ResponseEntity<ApiResponse<Void>> verifyResetToken(@RequestParam String token) {
+    public ApiResponse<Void> verifyResetToken(@RequestParam String token) {
         authService.verifyResetToken(token);
-        return ResponseFactory.ok("Token is valid."); 
+        return ResponseFactory.success(null);
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.processResetPassword(request);
         return ResponseFactory.ok("Password has been reset successfully.");
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        authService.changePassword(authUser.userId(), request);
+        return ResponseFactory.ok("Password changed successfully.");
     }
 }

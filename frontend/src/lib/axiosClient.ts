@@ -4,7 +4,7 @@ import { useAuthStore } from '../features/auth/store/useAuthStore';
 // Khởi tạo Instance với Base URL
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000, 
+  timeout: 60000, 
   // 🚀 TỐI ƯU 1: Chuyển 'Content-Type' lên đây để Axios thiết lập 1 lần lúc khởi tạo, 
   // thay vì request nào cũng phải chạy lại lệnh gán header.
   headers: {
