@@ -9,6 +9,14 @@ import {
   ChevronRight, MessageSquareCode, AlertCircle
 } from 'lucide-react';
 
+// Prompt Suggestions
+const PROMPT_SUGGESTIONS = [
+  "Lên luồng công việc cho Sprint 2 tuần team Dev",
+  "Tạo bảng Onboarding cho nhân sự mới",
+  "Setup quy trình duyệt Content Marketing",
+  "Quản lý tiến độ fix Bug dự án"
+];
+
 const AiBoardGeneratorPage = () => {
   const navigate = useNavigate();
   const { projects, fetchProjects } = useProjectStore();
@@ -119,6 +127,14 @@ const AiBoardGeneratorPage = () => {
     }
   };
 
+  // Hàm xử lý khi bấm phím Enter trong ô nhập
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleConfirmGeneration();
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50/50 overflow-hidden">
       
@@ -207,17 +223,41 @@ const AiBoardGeneratorPage = () => {
                   </span>
                 )}
               </div>
+              
               <div className="p-5">
-                <textarea 
-                  rows={10}
-                  value={prompt}
-                  onChange={(e) => { 
-                    setPrompt(e.target.value); 
-                    setErrors(prev => ({ ...prev, prompt: null })); 
-                  }}
-                  placeholder="Hãy mô tả thật chi tiết. Ví dụ: Tạo quy trình Sprint cho module thanh toán..."
-                  className="w-full bg-slate-50 border-none rounded-xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-100 transition-all resize-none placeholder:text-slate-300"
-                />
+                {/* Prompt Suggestions */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {PROMPT_SUGGESTIONS.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setPrompt(suggestion);
+                        setErrors(prev => ({ ...prev, prompt: null }));
+                      }}
+                      className="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 rounded-full text-[11px] font-semibold transition-colors active:scale-95 text-left"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <textarea 
+                    rows={8}
+                    value={prompt}
+                    onChange={(e) => { 
+                      setPrompt(e.target.value); 
+                      setErrors(prev => ({ ...prev, prompt: null })); 
+                    }}
+                    onKeyDown={handleKeyDown} // Bắt sự kiện Enter
+                    placeholder="Hãy mô tả thật chi tiết"
+                    className="w-full bg-slate-50 border-none rounded-xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-100 transition-all resize-none placeholder:text-slate-300"
+                  />
+                  {/* Gợi ý phím tắt nhỏ ở góc dưới */}
+                  <div className="absolute bottom-3 right-4 text-[10px] font-bold text-slate-400 flex items-center gap-1 bg-white/80 px-2 py-1 rounded-md backdrop-blur-sm pointer-events-none">
+                    <span className="border border-slate-200 px-1.5 py-0.5 rounded">↵ Enter</span> để gửi
+                  </div>
+                </div>
               </div>
             </div>
           </div>
