@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { forgotPasswordSchema } from '../features/auth/schema/auth.schema';
-import { KeyRound, ArrowLeft, Send, Loader2, CheckCircle2 } from 'lucide-react';
+import { KeyRound, ArrowLeft, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import kanbanInfographicImg from '../assets/Benefits-of-a-Kanban-board-infographic2-2.png';
 
 const ForgotPasswordPage = () => {
   const [formData, setFormData] = useState({ email: '' });
@@ -55,81 +56,89 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center relative overflow-hidden bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')` }}
-    >
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"></div>
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/30 blur-[120px]"></div>
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-teal-500/30 blur-[120px]"></div>
-      
-      <div className="w-full max-w-md bg-white/90 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl border border-white/40 z-10">
-        <div className="flex justify-center mb-6">
-          <div className="w-14 h-14 bg-gradient-to-tr from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <KeyRound className="text-white" size={28} />
+    <div className="min-h-screen flex w-full bg-white">
+      {/* FORM QUÊN MẬT KHẨU */}
+      <div className="w-full lg:w-2/3 flex items-center justify-center p-8 sm:p-12 lg:p-24 relative">
+        <div className="w-full max-w-md">
+          <div className="flex justify-start mb-4">
+            <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+              <KeyRound className="text-white" size={24} />
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-black text-slate-800 mb-2">Quên mật khẩu</h2>
+          <p className="text-base font-medium text-slate-500 mb-8">Nhập email đăng nhập để nhận hướng dẫn khôi phục.</p>
+
+          {status.type === 'success' && (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+              <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={20} />
+              <p className="text-sm font-semibold text-emerald-800">{status.message}</p>
+            </div>
+          )}
+          
+          {status.type === 'error' && (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+              <XCircle className="text-rose-600 shrink-0 mt-0.5" size={20} />
+              <p className="text-sm font-semibold text-rose-800">{status.message}</p>
+            </div>
+          )}
+
+          {status.type !== 'success' && (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mt-3 mb-1.5 ml-1">Email của bạn</label>
+                <input 
+                  type="text" 
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  className={`w-full border-2 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all outline-none ${
+                    errors.email 
+                      ? 'bg-rose-50 border-rose-300 focus:border-rose-400 focus:ring-4 focus:ring-rose-100' 
+                      : 'bg-white border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100'
+                  }`}
+                  placeholder="email@gmail.com"
+                />
+                {errors.email && (
+                  <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
+                    {errors.email}
+                  </span>
+                )}
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isLoading}
+                className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <Loader2 className="animate-spin" size={18} /> : (
+                  <>
+                    <span>Gửi link khôi phục</span>
+                    <Send size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          <div className="mt-8 text-left">
+            <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
+              <ArrowLeft size={16} />
+              <span>Quay lại Đăng nhập</span>
+            </Link>
           </div>
         </div>
-        
-        <h2 className="text-2xl font-black text-center text-slate-800">Quên mật khẩu</h2>
-        <p className="text-sm font-medium text-slate-500 text-center">Nhập email đăng nhập để nhận hướng dẫn khôi phục.</p>
+      </div>
 
-        {status.type === 'success' && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3 mt-4">
-            <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={20} />
-            <p className="text-sm font-medium text-emerald-700">{status.message}</p>
-          </div>
-        )}
-        
-        {status.type === 'error' && (
-          <div className="mb-6 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold rounded-xl text-center mt-4">
-            {status.message}
-          </div>
-        )}
-
-        {status.type !== 'success' && (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Email của bạn</label>
-              <input 
-                type="text" 
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
-                  errors.email 
-                    ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
-                    : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500'
-                }`}
-                placeholder="email@gmail.com"
-              />
-              {errors.email && (
-                <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
-                  {errors.email}
-                </span>
-              )}
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={isLoading}
-              className="mt-2 w-full bg-slate-900 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {isLoading ? <Loader2 className="animate-spin" size={18} /> : (
-                <>
-                  <span>Gửi link khôi phục</span>
-                  <Send size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        <div className="mt-8 text-center">
-          <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
-            <ArrowLeft size={16} />
-            <span>Quay lại Đăng nhập</span>
-          </Link>
+      {/*HÌNH ẢNH */}
+      <div className="hidden lg:flex lg:w-1/3 bg-slate-50 items-center justify-center p-8 border-l border-slate-200">
+        <div className="w-full text-center">
+          <img 
+            src={kanbanInfographicImg} 
+            alt="Kanban Benefits" 
+            className="w-full h-auto object-contain mix-blend-multiply"
+          />
         </div>
       </div>
     </div>

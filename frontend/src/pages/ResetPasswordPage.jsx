@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { resetPasswordSchema } from '../features/auth/schema/auth.schema';
 import { LockKeyhole, ArrowRight, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
+import bgResetPassword from '../assets/bg_resetPassword.png';
 
 const ResetPasswordPage = () => {
   // Lấy token từ URL xuống
@@ -90,7 +90,7 @@ const ResetPasswordPage = () => {
   return (
     <div 
       className="min-h-screen flex items-center justify-center relative overflow-hidden bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')` }}
+      style={{ backgroundImage: `url(${bgResetPassword})` }}
     >
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"></div>
       <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/30 blur-[120px]"></div>
