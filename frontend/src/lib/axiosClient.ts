@@ -1,60 +1,62 @@
 import axios from 'axios';
+import { useAuthStore } from '../features/auth/store/useAuthStore'; 
 
 // Khởi tạo Instance với Base URL
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  // Set timeout khoảng 10 giây để tránh app bị treo nếu mạng lag
-  timeout: 10000, 
+  timeout: 60000, 
+  // 🚀 TỐI ƯU 1: Chuyển 'Content-Type' lên đây để Axios thiết lập 1 lần lúc khởi tạo, 
+  // thay vì request nào cũng phải chạy lại lệnh gán header.
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
 // Request Interceptor
 axiosClient.interceptors.request.use(
   (config) => {
-    // Tự động cấu hình header Content-Type
-    config.headers['Content-Type'] = 'application/json';
+    // 🚀 TỐI ƯU 2: Đọc token từ RAM (Zustand state) thay vì đọc từ Ổ cứng (localStorage).
+    // localStorage.getItem là một tác vụ đồng bộ chặn luồng (synchronous blocking). 
+    // Gọi nó ở mọi API request sẽ làm giảm vi hiệu năng của app.
+    const token = useAuthStore.getState().token;
     
-    // 👉 ĐÃ MỞ KHÓA: Lấy Token từ LocalStorage và nhét vào Header (Bearer Token)
-    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error) // Viết tắt cho gọn
 );
 
 // Response Interceptor
 axiosClient.interceptors.response.use(
-  (response) => {
-    // Trả về thẳng data cho gọn, khi gọi API không cần chấm .data nhiều lần
-    return response.data; 
-  },
+  (response) => response.data, // Viết tắt cho gọn
   (error) => {
-    // Đón lõng và xử lý lỗi 400/500 từ Backend
     if (error.response) {
       const status = error.response.status;
       console.error(`[API Error ${status}]:`, error.response.data || 'Đã có lỗi xảy ra từ máy chủ');
       
-      // 👉 MẸO PRO ENTERPRISE: Bắt lỗi 401 để Auto Logout
       if (status === 401) {
+        // 🚀 TỐI ƯU 3: Dùng .includes() thay vì ===
+        // An toàn hơn nếu lỡ API của sếp có thêm query params (VD: /auth/login?method=google)
+        if (error.config.url?.includes('/auth/login')) {
+            return Promise.reject(error);
+        }
+
         console.warn("🔴 Token không hợp lệ hoặc đã hết hạn. Đang đăng xuất...");
-        // Khôi bảo Long mở 2 dòng dưới ra khi làm xong trang Login nhé:
-        // localStorage.removeItem('token');
-        // window.location.href = '/login'; 
+        
+        // 🚀 TỐI ƯU 4: Thay vì tự xóa localStorage và redirect cứng tay, 
+        // hãy gọi luôn hàm logout() của Zustand. Nó sẽ dọn sạch cả Token, User và tự Redirect mượt mà.
+        useAuthStore.getState().logout();
       }
       
     } else if (error.request) {
-      // Lỗi không có phản hồi từ server (sập server, rớt mạng)
       console.error('[Network Error]: Không thể kết nối tới máy chủ');
     } else {
-      // Lỗi khi setup request
       console.error('[Axios Error]:', error.message);
     }
 
-    // Promise.reject để các component gọi API biết là có lỗi
     return Promise.reject(error);
   }
 );

@@ -2,6 +2,7 @@ package com.fluxboard.project.controller;
 
 import com.fluxboard.auth.model.AuthRequestContext;
 import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.project.dto.request.CreateProjectRequest;
@@ -50,6 +51,15 @@ public class ProjectController {
     }
 
     @RequirePermission("PROJECT_VIEW")
+    @GetMapping("/{projectId}/members")
+    public ResponseEntity<ApiResponse<List<TaskUserSummaryResponse>>> getProjectMembers(@PathVariable String projectId) {
+        return ResponseFactory.ok(
+                "Project members retrieved successfully.", 
+                projectService.getProjectMembers(projectId)
+        );
+    }
+
+    @RequirePermission("PROJECT_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjects(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -67,6 +77,17 @@ public class ProjectController {
     @GetMapping("/{projectId}/overview")
     public ResponseEntity<ApiResponse<ProjectOverviewResponse>> getProjectOverview(@PathVariable String projectId) {
         return ResponseFactory.ok("Project overview retrieved successfully.", projectService.getOverview(projectId));
+    }
+
+    @RequirePermission("PROJECT_VIEW")
+    @GetMapping("/overviews") // 👉 Không có {projectId}, lấy toàn bộ danh sách
+    public ResponseEntity<ApiResponse<List<ProjectOverviewResponse>>> getProjectOverviews(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        // Cần đảm bảo sếp đã tạo hàm getPageOverview bên ProjectService nhé
+        Page<ProjectOverviewResponse> page = projectService.getPageOverview(pageable);
+        
+        return ResponseFactory.paged("Project overviews retrieved successfully.", page);
     }
 
     @RequirePermission("PROJECT_VIEW")
@@ -91,5 +112,15 @@ public class ProjectController {
     public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable String projectId) {
         projectService.delete(projectId);
         return ResponseFactory.ok("Project deleted successfully.");
+    }
+
+    @RequirePermission("PROJECT_UPDATE") // Chỉ người có quyền sửa dự án mới được thêm member
+    @PostMapping("/{projectId}/members")
+    public ResponseEntity<ApiResponse<Void>> addProjectMember(
+            @PathVariable String projectId,
+            @Valid @RequestBody com.fluxboard.project.dto.request.AddProjectMemberRequest request) {
+        
+        projectService.addProjectMember(projectId, request);
+        return ResponseFactory.ok("Member added to project successfully.");
     }
 }

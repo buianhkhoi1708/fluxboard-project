@@ -6,27 +6,33 @@ import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.dto.response.BoardResponse;
 import com.fluxboard.board.entity.BoardEntity;
 import com.fluxboard.board.repository.BoardRepository;
+import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.project.dto.request.AddProjectMemberRequest; // 🚀 MỚI THÊM
 import com.fluxboard.project.dto.request.CreateProjectRequest;
 import com.fluxboard.project.dto.request.UpdateProjectRequest;
 import com.fluxboard.project.dto.response.ProjectBoardOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectResponse;
 import com.fluxboard.project.entity.ProjectEntity;
+import com.fluxboard.project.entity.ProjectMember;
+import com.fluxboard.project.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
 
 @Service
 public class ProjectService
@@ -37,38 +43,111 @@ public class ProjectService
     private final BoardColumnRepository boardColumnRepository;
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
 
     public ProjectService(
             ProjectRepository projectRepository,
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
             TaskRepository taskRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            ProjectMemberRepository projectMemberRepository
     ) {
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
     }
 
     @Override
+    @Transactional
     public ProjectResponse create(CreateProjectRequest request) {
         return create(request, null);
     }
 
+    @Transactional
     public ProjectResponse create(CreateProjectRequest request, String ownerUserId) {
         String normalizedOwnerId = requireAuthenticatedUserId(ownerUserId);
         validateUserExists(normalizedOwnerId, "Owner user does not exist.");
 
+        // 1. Lưu ProjectEntity
         ProjectEntity entity = new ProjectEntity();
         entity.setName(TextUtils.trim(request.name()));
         entity.setOwnerId(normalizedOwnerId);
         entity.setDepartmentId(TextUtils.trim(request.departmentId()));
         entity.setStatus(TextUtils.trim(request.status()));
+        ProjectEntity savedProject = projectRepository.save(entity);
 
-        return toResponse(projectRepository.save(entity));
+        // 2. Tự động thêm Owner vào bảng ProjectMember để Frontend có danh sách thành viên
+        ProjectMember membership = new ProjectMember();
+        membership.setProjectId(savedProject.getId());
+        membership.setUserId(normalizedOwnerId);
+        membership.setActive(true);
+        projectMemberRepository.save(membership);
+
+        return toResponse(savedProject);
     }
+
+    /**
+     * API quan trọng để Frontend fetch danh sách "danh bạ" thành viên
+     */
+    public List<TaskUserSummaryResponse> getProjectMembers(String projectId) {
+        // Lấy danh sách ID từ bảng trung gian
+        List<ProjectMember> memberships = projectMemberRepository.findByProjectIdAndIsActiveTrue(projectId);
+        
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> userIds = memberships.stream()
+                .map(ProjectMember::getUserId)
+                .toList();
+
+        // Lấy thông tin chi tiết (FullName, Avatar) từ bảng User
+        return userRepository.findByIdInAndDeletedFalse(userIds).stream()
+                .map(user -> new TaskUserSummaryResponse(
+                        user.getId(), 
+                        user.getFullName(), 
+                        user.getAvatarUrl()
+                ))
+                .toList();
+    }
+
+    // =========================================================================
+    // 🚀 BỔ SUNG HÀM ADD MEMBER TỪ REQUEST CỦA FRONTEND AI_GENERATOR
+    // =========================================================================
+    @Transactional
+    public void addProjectMember(String projectId, AddProjectMemberRequest request) {
+        String normalizedUserId = TextUtils.trim(request.userId());
+
+        // 1. Kiểm tra dự án
+        validateProjectExists(projectId);
+
+        // 2. Kiểm tra User có tồn tại không
+        validateUserExists(normalizedUserId, "User ID to add does not exist.");
+
+        // 3. Chặn thêm trùng lặp (Idempotent)
+        boolean alreadyExists = projectMemberRepository.existsByProjectIdAndUserIdAndDeletedFalse(projectId, normalizedUserId);
+        if (alreadyExists) {
+            return; // Nếu có rồi thì im lặng bỏ qua, không crash luồng AI của sếp
+        }
+
+        // 4. Đăng ký hộ khẩu mới cho User
+        ProjectMember newMember = new ProjectMember();
+        newMember.setProjectId(projectId);
+        newMember.setUserId(normalizedUserId);
+        
+        List<String> roles = (request.roleIds() != null && !request.roleIds().isEmpty()) 
+                             ? request.roleIds() 
+                             : List.of("MEMBER");
+        newMember.setRoleIds(roles);
+        newMember.setActive(true);
+
+        projectMemberRepository.save(newMember);
+    }
+    // =========================================================================
 
     @Override
     public ProjectResponse getById(String id) {
@@ -89,13 +168,9 @@ public class ProjectService
         ProjectEntity project = findProjectById(TextUtils.trim(projectId));
         List<BoardEntity> boards = boardRepository.findByProjectIdAndDeletedFalse(project.getId());
 
-        boards.sort(
-                Comparator.comparing(BoardEntity::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
-        );
+        boards.sort(Comparator.comparing(BoardEntity::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())));
 
-        List<String> boardIds = boards.stream()
-                .map(BoardEntity::getId)
-                .toList();
+        List<String> boardIds = boards.stream().map(BoardEntity::getId).toList();
 
         Map<String, List<BoardColumnResponse>> columnsByBoardId;
         if (boardIds.isEmpty()) {
@@ -122,6 +197,7 @@ public class ProjectService
     }
 
     @Override
+    @Transactional
     public ProjectResponse update(String id, UpdateProjectRequest request) {
         ProjectEntity entity = findProjectById(id);
         String ownerId = TextUtils.trim(request.ownerId());
@@ -136,38 +212,27 @@ public class ProjectService
     }
 
     @Override
+    @Transactional
     public void delete(String id) {
         ProjectEntity entity = findProjectById(id);
         List<BoardEntity> boards = boardRepository.findByProjectIdAndDeletedFalse(entity.getId());
 
         if (!boards.isEmpty()) {
-            List<String> boardIds = boards.stream()
-                    .map(BoardEntity::getId)
-                    .toList();
-
+            List<String> boardIds = boards.stream().map(BoardEntity::getId).toList();
             List<BoardColumnEntity> boardColumns = boardColumnRepository
                     .findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(boardIds);
 
             if (!boardColumns.isEmpty()) {
-                List<String> columnIds = boardColumns.stream()
-                        .map(BoardColumnEntity::getId)
-                        .toList();
-
+                List<String> columnIds = boardColumns.stream().map(BoardColumnEntity::getId).toList();
                 List<TaskEntity> tasks = taskRepository.findByColumnIdInAndDeletedFalse(columnIds);
-                for (TaskEntity task : tasks) {
-                    task.markDeleted();
-                }
+                tasks.forEach(TaskEntity::markDeleted);
                 taskRepository.saveAll(tasks);
 
-                for (BoardColumnEntity boardColumn : boardColumns) {
-                    boardColumn.markDeleted();
-                }
+                boardColumns.forEach(BoardColumnEntity::markDeleted);
                 boardColumnRepository.saveAll(boardColumns);
             }
 
-            for (BoardEntity board : boards) {
-                board.markDeleted();
-            }
+            boards.forEach(BoardEntity::markDeleted);
             boardRepository.saveAll(boards);
         }
 
@@ -186,6 +251,13 @@ public class ProjectService
             throw new AppException(ErrorCode.UNAUTHORIZED, "Authenticated user is required.");
         }
         return normalizedOwnerUserId;
+    }
+
+    // 🚀 MỚI THÊM: Hàm check Project có tồn tại không
+    private void validateProjectExists(String projectId) {
+        if (!projectRepository.existsByIdAndDeletedFalse(projectId)) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Project not found.");
+        }
     }
 
     private void validateUserExists(String userId, String message) {
@@ -225,5 +297,10 @@ public class ProjectService
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    public Page<ProjectOverviewResponse> getPageOverview(Pageable pageable) {
+        return projectRepository.findByDeletedFalse(pageable)
+                .map(entity -> getOverview(entity.getId()));
     }
 }

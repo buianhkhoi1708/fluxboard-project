@@ -706,7 +706,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         List<User> users = userRepository.findByIdInAndDeletedFalse(new ArrayList<>(userIds));
         Map<String, TaskUserSummaryResponse> result = new HashMap<>();
         for (User user : users) {
-            result.put(user.getId(), new TaskUserSummaryResponse(user.getId(), user.getFullName(), user.getAvatarUrl()));
+
+            String userIdStr = String.valueOf(user.getId()); 
+            result.put(userIdStr, new TaskUserSummaryResponse(userIdStr, user.getFullName(), user.getAvatarUrl()));
         }
         return result;
     }
@@ -719,14 +721,15 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
                 .filter(assigneeId -> assigneeId != null)
                 .map(assigneeId -> users.getOrDefault(
                         assigneeId,
-                        new TaskUserSummaryResponse(assigneeId, null, null)
+                        new TaskUserSummaryResponse(assigneeId, "User(" + assigneeId.substring(0, 4) + ")", null)
                 ))
                 .toList();
 
         String authorId = TextUtils.trimToNull(entity.getAuthorUserId());
         TaskUserSummaryResponse author = authorId == null
                 ? null
-                : users.getOrDefault(authorId, new TaskUserSummaryResponse(authorId, null, null));
+                : users.get(authorId);
+                
 
         return new TaskResponse(
                 entity.getId(),

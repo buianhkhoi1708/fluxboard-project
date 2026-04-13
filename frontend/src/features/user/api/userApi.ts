@@ -9,4 +9,7 @@ export const userApi = {
   
   // Xóa User khỏi hệ thống
   deleteUser: (userId: string) => axiosClient.delete(`/users/${userId}`),
+  getAllUsers: (params = { page: 0, size: 50 }) => {
+    return axiosClient.get('/users', { params });
+  },
 };
