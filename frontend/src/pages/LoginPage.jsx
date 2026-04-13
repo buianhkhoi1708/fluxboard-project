@@ -1,67 +1,59 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
-import { loginSchema } from '../features/auth/schema/auth.schema';
 import { Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 
 const LoginPage = () => {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
-  const [serverError, setServerError] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(''); //Lỗi sai tk hoặc mk
+  const [emailError, setEmailError] = useState(''); // Lỗi định dạng Email
   
   const { login, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
-  // Xử lý khi gõ phím -> Xóa lỗi của field đó
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    }
+  // Kiểm tra định dạng email
+  const validateEmail = (email) => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(String(email).toLowerCase());
   };
 
-  // Xử lý khi con trỏ rời khỏi ô nhập -> Check lỗi từng ô (validateAt)
-  const handleBlur = async (e) => {
-    const { name } = e.target;
-    try {
-      await loginSchema.validateAt(name, formData);
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    } catch (err) {
-      setErrors((prev) => ({ ...prev, [name]: err.message }));
-    }
-  };
-
-  // Xử lý khi bấm Đăng nhập -> Check lỗi toàn bộ (abortEarly: false)
   const handleLogin = async (e) => {
     e.preventDefault();
-    setServerError('');
-    setErrors({});
+    setEmailError('');
 
-    try {
-      // Xác thực toàn bộ form
-      await loginSchema.validate(formData, { abortEarly: false });
-      
-      // Nếu không có lỗi thì gọi API Backend
-      const result = await login(formData.email, formData.password);
-      if (result.success) {
-        setServerError('');
-        navigate('/board'); 
-      } else {
-        setServerError('Sai email hoặc mật khẩu');
-      }
-    } catch (err) {
-      // Gom tất cả lỗi từ Yup ném vào state errors
-      const validationErrors = {};
-      err.inner.forEach((error) => {
-        validationErrors[error.path] = error.message;
-      });
-      setErrors(validationErrors);
+    // Chặn trước nếu email sai định dạng
+    if (!validateEmail(email)) {
+      setEmailError('Vui lòng nhập đúng định dạng email');
+      return; // Dừng để không gọi API
+    }
+    
+    // Kiểm tra email và mk
+    const result = await login(email, password);
+    if (result.success) {
+      setError('');
+      navigate('/board'); // Đăng nhập thành công thì phi thẳng vào Board
+    } else {
+      setError('Email hoặc mật khẩu không đúng, vui lòng thử lại');
+    }
+  };
+
+  // Xóa cảnh báo khi người dùng gõ lại email
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value);
+    if (emailError) setEmailError('');
+  };
+
+  // Khi con trỏ chuột rời khỏi ô nhập Email
+  const handleEmailBlur = () => {
+    if (email.trim() !== '' && !validateEmail(email)) { 
+      setEmailError('Vui lòng nhập đúng định dạng email');
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
+      {/* Background decoration */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[120px]"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-500/20 blur-[120px]"></div>
 
@@ -72,66 +64,54 @@ const LoginPage = () => {
           </div>
         </div>
         
-        <h2 className="text-2xl font-black text-center text-slate-800! mb-2">Đăng nhập Fluxboard</h2>
+        <h2 className="text-2xl font-black text-center text-slate-800 mb-2">Đăng nhập Fluxboard</h2>
         <p className="text-sm font-medium text-slate-500 text-center mb-8">Chào mừng bạn quay trở lại không gian làm việc</p>
 
-        {serverError && (
-          <div className="mt-2 mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold rounded-xl text-center">
-            {serverError}
-          </div>
-        )}
-
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          {/* EMAIL */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Email</label>
             <input 
-              type="text" 
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              onBlur={handleBlur}
+              type="text"
+              required
+              value={email}
+              onChange={handleEmailChange}
+              onBlur={handleEmailBlur}
               className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
-                errors.email 
+                emailError 
                   ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
                   : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
               }`}
               placeholder="email@gmail.com"
             />
-            {errors.email && (
+            {emailError && (
               <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
-                {errors.email}
+                {emailError}
               </span>
             )}
           </div>
           
-          {/* PASSWORD */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1 ml-1">Mật khẩu</label>
             <input 
               type="password" 
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              className={`w-full border px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${
-                errors.password 
-                  ? 'bg-rose-50 border-rose-300 focus:ring-2 focus:ring-rose-400' 
-                  : 'bg-slate-100/50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500'
-              }`}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-100/50 border-none px-4 py-3 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
               placeholder="••••••••"
             />
-            {errors.password && (
-              <span className="text-xs font-bold text-rose-500 mt-1.5 ml-1 block">
-                {errors.password}
-              </span>
+            {/* Khung hiển thị thông báo Sai email hoặc mật khẩu */}
+            {error && (
+              <div className="p-3 text-rose-600 text-sm font-bold rounded-xl text-left">
+                {error}
+              </div>
             )}
-          </div>
 
-          <div className="flex justify-start mt-2">
-            <Link to="/forgot-password" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-              Quên mật khẩu
-            </Link>
+            <div className="flex justify-start mt-2">
+              <Link to="/forgot-password" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                Quên mật khẩu
+              </Link>
+            </div>
           </div>
 
           <button 

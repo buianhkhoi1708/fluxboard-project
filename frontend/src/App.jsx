@@ -19,12 +19,10 @@ function App() {
         <Routes>
           {/* Route công khai: Ai cũng vào được */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot" element={<ForgotPasswordPage />} />
+          <Route path="/reset" element={<ResetPasswordPage />} />
 
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          
-          {/* Các Route cần bảo vệ: Phải đăng nhập mới vào được */}
-          {/* Luồng giao diện có chứa Sidebar và Navbar */}
+
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/" element={<Navigate to="/login" replace />} />
