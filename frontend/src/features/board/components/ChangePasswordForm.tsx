@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // 🚀 Đã thêm import navigate
+import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../auth/authApi';
 import logoImg from '../../../assets/icon.svg'; 
 
@@ -13,7 +13,7 @@ const ChangePasswordForm = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' });
 
-  const navigate = useNavigate(); // 🚀 Khởi tạo biến điều hướng
+  const navigate = useNavigate();
 
   // 3. Hàm xử lý khi bấm nút Submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,9 +41,10 @@ const ChangePasswordForm = () => {
     // --- GỌI API ---
     setIsLoading(true);
     try {
+      // ✅ Đã sửa chuẩn camelCase và dùng cú pháp ES6 cho gọn
       await authApi.changePassword({
-        oldPassword: oldPassword,
-        newPassword: newPassword
+        oldPassword,
+        newPassword
       });
 
       // 🚀 Báo thành công, xóa token cũ và đá về trang login
@@ -74,7 +75,7 @@ const ChangePasswordForm = () => {
     }
   };
 
-  // 4. Giao diện (UI) - Đã giữ nguyên 100% thiết kế của bạn
+  // 4. Giao diện (UI)
   return (
     <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md border border-gray-200">
       
