@@ -4,12 +4,13 @@ import MainLayout from './layouts/MainLayout';
 import BoardPage from './pages/BoardPage';
 import { SocketProvider } from './context/SocketContext';
 import AdminRBACPage from './pages/AdminRBACPage';
-
+import ChangePasswordForm from './features/board/components/ChangePasswordForm';
 function App() {
   return (
     <SocketProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/change-password" element={<ChangePasswordForm />} />
           {/* Luồng giao diện có chứa Sidebar và Navbar */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<Navigate to="/board" replace />} />

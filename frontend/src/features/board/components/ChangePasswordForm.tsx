@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // 🚀 Đã thêm import navigate
 import { authApi } from '../../auth/authApi';
 import logoImg from '../../../assets/icon.svg'; 
 
@@ -11,6 +12,8 @@ const ChangePasswordForm = () => {
   // 2. Quản lý UX (Trạng thái loading và thông báo)
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' });
+
+  const navigate = useNavigate(); // 🚀 Khởi tạo biến điều hướng
 
   // 3. Hàm xử lý khi bấm nút Submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,20 +41,32 @@ const ChangePasswordForm = () => {
     // --- GỌI API ---
     setIsLoading(true);
     try {
-      // 🚀 Nối với API: Gửi dạng camelCase để khớp mặc định của Spring Boot
       await authApi.changePassword({
         oldPassword: oldPassword,
         newPassword: newPassword
       });
 
-      // Báo thành công và reset form
-      setMessage({ type: 'success', text: 'Đổi mật khẩu thành công!' });
+      // 🚀 Báo thành công, xóa token cũ và đá về trang login
+      setMessage({ type: 'success', text: 'Đổi mật khẩu thành công! Đang chuyển hướng...' });
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      
+      localStorage.removeItem('token'); // Xóa phiên đăng nhập cũ cho an toàn
+      setTimeout(() => navigate('/login'), 2000); // Đợi 2s rồi tự nhảy sang trang đăng nhập
 
     } catch (error: any) {
       console.error("Lỗi đổi mật khẩu:", error);
+      
+      // 🚀 Bắt lỗi 401 từ Spring Boot (Chưa gửi Token hoặc Token hết hạn)
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         setMessage({ type: 'error', text: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' });
+         localStorage.removeItem('token'); 
+         setTimeout(() => navigate('/login'), 2000);
+         return;
+      }
+
+      // Các lỗi khác (ví dụ: sai mật khẩu cũ)
       const errorMsg = error.response?.data?.message || 'Mật khẩu cũ không chính xác hoặc có lỗi xảy ra.';
       setMessage({ type: 'error', text: errorMsg });
     } finally {
@@ -59,7 +74,7 @@ const ChangePasswordForm = () => {
     }
   };
 
-  // 4. Giao diện (UI)
+  // 4. Giao diện (UI) - Đã giữ nguyên 100% thiết kế của bạn
   return (
     <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md border border-gray-200">
       
@@ -72,7 +87,6 @@ const ChangePasswordForm = () => {
         />
       </div>
 
-      {/* 🚀 Tiêu đề đã được ép màu đen hoàn toàn (text-black) */}
       <h2 className="text-2xl font-bold mb-6 text-center text-black uppercase tracking-wide">
         Đổi Mật Khẩu
       </h2>
