@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { loginSchema } from '../features/auth/schema/auth.schema';
-import { Sparkles, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import kanbanInfographicImg from '../assets/Benefits-of-a-Kanban-board-infographic2-2.png';
+import logoIcon from '../assets/icon.svg';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -68,10 +69,13 @@ const LoginPage = () => {
         {/* FORM LOGIN */}
       <div className="w-full lg:w-2/3 flex items-center justify-center p-8 sm:p-12 lg:p-24 relative">
         <div className="w-full max-w-md">
-          <div className="flex justify-start mb-4">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-              <Sparkles className="text-white" size={24} />
-            </div>
+          <div className="flex items-center gap-3 mb-12">
+            <img 
+              src={logoIcon} 
+              alt="Fluxboard Logo" 
+              className="w-10 h-10 object-contain drop-shadow-sm" 
+            />
+            <span className="text-2xl font-black text-slate-800 tracking-tight">Fluxboard</span>
           </div>
           
           <h2 className="text-3xl font-black text-slate-800 mb-2">Đăng nhập</h2>
