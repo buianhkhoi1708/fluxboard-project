@@ -1,204 +1,192 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi } from '../../auth/authApi';
-import logoImg from '../../../assets/icon.svg'; 
+import * as yup from 'yup';
+import { authApi } from '../../auth/authApi'; 
+
+const passwordSchema = yup.object().shape({
+  currentPassword: yup.string().required('Vui lòng nhập mật khẩu hiện tại'),
+  newPassword: yup.string()
+    .required('Vui lòng nhập mật khẩu mới')
+    .matches(
+      /^(?=.*[A-Z])(?=.*\d).{8,}$/,
+      'Mật khẩu phải từ 8 ký tự, gồm ít nhất 1 chữ hoa và 1 chữ số'
+    ),
+  confirmPassword: yup.string()
+    .required('Vui lòng xác nhận mật khẩu mới')
+    .oneOf([yup.ref('newPassword')], 'Mật khẩu xác nhận không khớp'),
+});
 
 const ChangePasswordForm = () => {
-  // 1. Quản lý State của Form
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formData, setFormData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [serverMessage, setServerMessage] = useState({ type: '', text: '' });
   
-  // 🚀 Thêm State để quản lý Ẩn/Hiện mật khẩu (độc lập cho 3 ô)
+  // State quản lý ẩn/hiện mật khẩu cho từng ô
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  
-  // 2. Quản lý UX
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' });
 
   const navigate = useNavigate();
 
-  // 3. Xử lý Logic Submit
+  useEffect(() => {
+    const validateRealTime = async () => {
+      try {
+        await passwordSchema.validate(formData, { abortEarly: false });
+        setErrors({}); 
+      } catch (err: any) {
+        const newErrors: { [key: string]: string } = {};
+        err.inner.forEach((error: any) => {
+          newErrors[error.path] = error.message;
+        });
+        setErrors(newErrors);
+      }
+    };
+    if (formData.currentPassword || formData.newPassword || formData.confirmPassword) {
+      validateRealTime();
+    } else {
+      setErrors({});
+    }
+  }, [formData]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage({ type: '', text: '' });
+    setServerMessage({ type: '', text: '' });
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      return setMessage({ type: 'error', text: 'Vui lòng điền đầy đủ các trường!' });
-    }
-    if (newPassword.length < 6) {
-      return setMessage({ type: 'error', text: 'Mật khẩu mới phải có ít nhất 6 ký tự!' });
-    }
-    if (newPassword !== confirmPassword) {
-      return setMessage({ type: 'error', text: 'Mật khẩu xác nhận không khớp!' });
-    }
-    if (currentPassword === newPassword) {
-      return setMessage({ type: 'error', text: 'Mật khẩu mới phải khác mật khẩu hiện tại!' });
-    }
+    if (Object.keys(errors).length > 0) return;
 
     setIsLoading(true);
     try {
       await authApi.changePassword({
-        current_password: currentPassword,
-        new_password: newPassword,
-        confirm_new_password: confirmPassword
+        current_password: formData.currentPassword,
+        new_password: formData.newPassword,
+        confirm_new_password: formData.confirmPassword
       });
-
-      setMessage({ type: 'success', text: 'Đổi mật khẩu thành công! Đang chuyển hướng...' });
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      
+      setServerMessage({ type: 'success', text: 'Đổi mật khẩu thành công! Đang chuyển hướng...' });
+      setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       
       localStorage.removeItem('token'); 
       setTimeout(() => navigate('/login'), 2000);
-
-    } catch (error: any) {
-      console.error("Lỗi đổi mật khẩu:", error);
       
+    } catch (error: any) {
       if (error.response?.status === 401 || error.response?.status === 403) {
-         setMessage({ type: 'error', text: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' });
+         setServerMessage({ type: 'error', text: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' });
          localStorage.removeItem('token'); 
          setTimeout(() => navigate('/login'), 2000);
          return;
       }
-
-      const errorMsg = error.response?.data?.message || 'Mật khẩu hiện tại không chính xác hoặc có lỗi xảy ra.';
-      setMessage({ type: 'error', text: errorMsg });
+      setServerMessage({ type: 'error', text: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại!' });
     } finally {
-      setIsLoading(false); 
+      setIsLoading(false);
     }
   };
 
-  // Component phụ: Icon Con mắt (Tái sử dụng cho gọn code)
-  const EyeIcon = ({ isVisible }: { isVisible: boolean }) => {
-    return isVisible ? (
-      // Mắt nhắm
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-      </svg>
-    ) : (
-      // Mắt mở
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-      </svg>
-    );
-  };
+  // Component dùng chung cho Icon Con Mắt (Đen & Đậm nét)
+  const EyeIcon = ({ isShowing, onClick }: { isShowing: boolean, onClick: () => void }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 focus:outline-none"
+    >
+      {isShowing ? (
+        <svg className="w-5 h-5 !text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+      ) : (
+        <svg className="w-5 h-5 !text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+        </svg>
+      )}
+    </button>
+  );
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-tr from-cyan-700 via-slate-800 to-indigo-900">
-      <div className="w-full max-w-[420px] bg-[#f4f5f8] rounded-[24px] p-8 shadow-2xl">
-        
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-indigo-500 rounded-xl flex items-center justify-center mb-4 shadow-md">
-             <img src={logoImg} alt="Fluxboard Logo" className="h-8 w-8 object-contain filter brightness-0 invert" />
+    <div className="max-w-md animate-fade-in">
+      <h2 className="text-2xl font-bold !text-black mb-6">Đổi mật khẩu</h2>
+      
+      {serverMessage.text && (
+        <div className={`p-3 mb-4 rounded-lg text-sm font-bold border border-black bg-gray-100 !text-black`}>
+          {serverMessage.type === 'error' ? '⚠ ' : '✔ '} {serverMessage.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Mật khẩu cũ */}
+        <div>
+          <label className="block text-sm font-bold !text-black mb-1">Mật khẩu hiện tại</label>
+          <div className="relative">
+            <input
+              type={showCurrent ? "text" : "password"}
+              name="currentPassword"
+              value={formData.currentPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:outline-none !text-black placeholder-black transition ${errors.currentPassword ? 'border-black focus:ring-black bg-gray-200' : 'border-gray-400 focus:ring-black focus:border-black'}`}
+            />
+            <EyeIcon isShowing={showCurrent} onClick={() => setShowCurrent(!showCurrent)} />
           </div>
-          <h2 className="text-xl font-bold text-gray-800 tracking-wide">
-            Đổi mật khẩu Fluxboard
-          </h2>
-          <p className="text-xs text-gray-500 mt-2 font-medium">
-            Vui lòng thiết lập mật khẩu mới an toàn
-          </p>
+          {errors.currentPassword && <p className="!text-black text-xs mt-1.5 font-bold">⚠ {errors.currentPassword}</p>}
         </div>
 
-        {message.text && (
-          <div className={`p-3 mb-5 rounded-xl text-sm font-medium border text-center ${
-            message.type === 'error' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-green-100 text-green-700 border-green-200'
-          }`}>
-            {message.text}
+        {/* Mật khẩu mới */}
+        <div>
+          <label className="block text-sm font-bold !text-black mb-1">Mật khẩu mới</label>
+          <div className="relative">
+            <input
+              type={showNew ? "text" : "password"}
+              name="newPassword"
+              value={formData.newPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:outline-none !text-black placeholder-black transition ${errors.newPassword ? 'border-black focus:ring-black bg-gray-200' : 'border-gray-400 focus:ring-black focus:border-black'}`}
+            />
+            <EyeIcon isShowing={showNew} onClick={() => setShowNew(!showNew)} />
           </div>
-        )}
+          {errors.newPassword && <p className="!text-black text-xs mt-1.5 font-bold">⚠ {errors.newPassword}</p>}
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          
-          {/* Mật khẩu hiện tại */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">Mật khẩu hiện tại</label>
-            <div className="relative">
-              <input
-                type={showCurrent ? "text" : "password"}
-                className="w-full pl-4 pr-11 py-3 bg-slate-300/60 border-none rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 placeholder-gray-500 font-medium transition-all"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••••••"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrent(!showCurrent)}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-indigo-600 transition-colors focus:outline-none"
-              >
-                <EyeIcon isVisible={showCurrent} />
-              </button>
-            </div>
+        {/* Xác nhận mật khẩu */}
+        <div>
+          <label className="block text-sm font-bold !text-black mb-1">Xác nhận mật khẩu</label>
+          <div className="relative">
+            <input
+              type={showConfirm ? "text" : "password"}
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:outline-none !text-black placeholder-black transition ${errors.confirmPassword ? 'border-black focus:ring-black bg-gray-200' : 'border-gray-400 focus:ring-black focus:border-black'}`}
+            />
+            <EyeIcon isShowing={showConfirm} onClick={() => setShowConfirm(!showConfirm)} />
           </div>
+          {errors.confirmPassword && <p className="!text-black text-xs mt-1.5 font-bold">⚠ {errors.confirmPassword}</p>}
+        </div>
 
-          {/* Mật khẩu mới */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">Mật khẩu mới</label>
-            <div className="relative">
-              <input
-                type={showNew ? "text" : "password"}
-                className="w-full pl-4 pr-11 py-3 bg-slate-300/60 border-none rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 placeholder-gray-500 font-medium transition-all"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••••••"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNew(!showNew)}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-indigo-600 transition-colors focus:outline-none"
-              >
-                <EyeIcon isVisible={showNew} />
-              </button>
-            </div>
-          </div>
-
-          {/* Xác nhận mật khẩu mới */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">Xác nhận mật khẩu</label>
-            <div className="relative">
-              <input
-                type={showConfirm ? "text" : "password"}
-                className="w-full pl-4 pr-11 py-3 bg-slate-300/60 border-none rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 placeholder-gray-500 font-medium transition-all"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••••••"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-indigo-600 transition-colors focus:outline-none"
-              >
-                <EyeIcon isVisible={showConfirm} />
-              </button>
-            </div>
-          </div>
-          {/* Nút Submit */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full mt-4 py-3.5 px-4 text-white text-sm font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2
-              ${isLoading 
-                ? 'bg-[#111827]/70 cursor-not-allowed' 
-                : 'bg-[#111827] hover:bg-black active:scale-[0.98]'
-              }`}
-          >
-            {isLoading ? 'Đang xử lý...' : (
-              <>
-                Xác nhận thay đổi
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </>
-            )}
-          </button>
-        </form>
-      </div>
+        <button
+          type="submit"
+          disabled={isLoading || Object.keys(errors).length > 0}
+          className={`w-full mt-2 py-2.5 px-4 !text-black font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 border border-black
+            ${(isLoading || Object.keys(errors).length > 0)
+              ? 'bg-gray-300 cursor-not-allowed' 
+              : 'bg-white hover:bg-gray-200 active:scale-95'
+            }`}
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin h-5 w-5 !text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Đang xử lý...
+            </>
+          ) : (
+            'Đổi mật khẩu'
+          )}
+        </button>
+      </form>
     </div>
   );
 };
