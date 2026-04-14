@@ -78,7 +78,7 @@ const ChangePasswordForm = () => {
              <img src={logoImg} alt="Fluxboard Logo" className="h-8 w-8 object-contain filter brightness-0 invert" />
           </div>
           <h2 className="text-xl font-bold text-gray-800 tracking-wide">
-            Đổi mật khẩu Fluxboard
+            Đổi mật khẩu
           </h2>
           <p className="text-xs text-gray-500 mt-2 font-medium">
             Vui lòng thiết lập mật khẩu mới an toàn
