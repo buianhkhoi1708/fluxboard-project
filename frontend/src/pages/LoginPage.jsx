@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { loginSchema } from '../features/auth/schema/auth.schema';
 import { ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
-import kanbanInfographicImg from '../assets/Benefits-of-a-Kanban-board-infographic2-2.png';
 import logoIcon from '../assets/icon.svg';
 
 const LoginPage = () => {
@@ -64,18 +63,35 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex w-full bg-white">
-      
+    <div className="min-h-screen flex w-full bg-white relative">
+      <div className="hidden lg:flex lg:w-[45%] relative bg-indigo-600 overflow-hidden items-center justify-center p-16">
+        <div className="absolute -bottom-[10%] -left-[10%] w-[500px] h-[500px] bg-indigo-800 rounded-full shadow-2xl animate-blob"></div>
+        <div className="absolute bottom-[5%] left-[20%] w-[350px] h-[350px] bg-indigo-700 rounded-full shadow-xl animate-blob animation-delay-2000"></div>
+        <div className="absolute -top-[20%] -left-[10%] w-[600px] h-[600px] bg-indigo-500/30 rounded-full animate-blob animation-delay-4000"></div>
+        <div className="absolute top-[10%] -right-[10%] w-[300px] h-[300px] bg-indigo-500/20 rounded-full animate-blob animation-delay-6000"></div>
+
+        <div className="relative z-10 max-w-md w-full pointer-events-none">
+          <h1 className="text-6xl font-black !text-indigo-100/90 mb-3 tracking-widest uppercase drop-shadow-md">
+            Welcome to FLUXBOARD
+          </h1>
+          <div className="w-12 h-1 bg-indigo-400 mb-6 rounded-full"></div>
+          <div className="text-sm font-medium text-indigo-100/90 leading-relaxed space-y-3">
+            <p>Nền tảng quản lý công việc và tối ưu hóa hiệu suất đội ngũ</p>
+            <p>Đăng nhập để tiếp tục làm việc với các dự án của bạn</p>
+          </div>
+        </div>
+      </div>
+
         {/* FORM LOGIN */}
-      <div className="w-full lg:w-2/3 flex items-center justify-center p-8 sm:p-12 lg:p-24 relative">
-        <div className="w-full max-w-md">
-          <div className="flex items-center gap-3 mb-12">
+      <div className="w-full lg:w-[55%] flex items-center justify-center p-8 sm:p-12 lg:p-24 relative bg-white">
+        <div className="w-full max-w-md z-10">
+          <div className="flex items-center gap-4 mb-12">
             <img 
               src={logoIcon} 
               alt="Fluxboard Logo" 
-              className="w-10 h-10 object-contain drop-shadow-sm" 
+              className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-md" 
             />
-            <span className="text-2xl font-black text-slate-800 tracking-tight">Fluxboard</span>
+            <span className="text-4xl sm:text-5xl font-black text-slate-800 tracking-tight">Fluxboard</span>
           </div>
           
           <h2 className="text-3xl font-black text-slate-800 mb-2">Đăng nhập</h2>
@@ -162,16 +178,24 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* HÌNH ẢNH */}
-      <div className="hidden lg:flex lg:w-1/3 bg-slate-50 items-center justify-center p-8 border-l border-slate-200">
-        <div className="w-full text-center">
-          <img 
-            src={kanbanInfographicImg} 
-            alt="Kanban Benefits" 
-            className="w-full h-auto object-contain mix-blend-multiply"
-          />
-        </div>
-      </div>
+      {/* Hiệu ứng chuyển động của bóng */}
+      <style>{`
+        @keyframes chaotic-float {
+          0% { transform: translate(0, 0) scale(1); }
+          20% { transform: translate(60px, -40px) scale(1.15); }
+          40% { transform: translate(-80px, 50px) scale(0.85); }
+          60% { transform: translate(40px, 90px) scale(1.2); }
+          80% { transform: translate(-50px, -60px) scale(0.9); }
+          100% { transform: translate(0, 0) scale(1); }
+        }
+        .animate-blob {
+          animation: chaotic-float 60s infinite ease-in-out;
+        }
+        .animation-delay-2000 { animation-delay: -3s; }
+        .animation-delay-4000 { animation-delay: -7s; }
+        .animation-delay-6000 { animation-delay: -11s; }
+      `}</style>
+      
     </div>
   );
 };
