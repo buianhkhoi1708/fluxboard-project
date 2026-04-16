@@ -16,12 +16,13 @@ public class AiInsightService {
     private final TaskRepository taskRepository;
 
     public List<AiInsightResponse> getDeviationInsights(String projectId) {
+
         List<TaskEntity> completedTasks = taskRepository
                 .findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(projectId, "DONE");
 
         return completedTasks.stream().map(task -> {
-            double suggested = task.getAiSuggestedPoint();
-            double actual = task.getStoryPoint();
+            double suggested = task.getAiSuggestedPoint() != null ? task.getAiSuggestedPoint() : 0.0;
+            double actual = task.getStoryPoint() != null ? task.getStoryPoint() : 0.0;
             
             double deviationPercent = 0.0;
             if (suggested > 0) {
@@ -30,7 +31,7 @@ public class AiInsightService {
 
             String status;
             String comment;
-            
+
             if (Math.abs(deviationPercent) <= 10.0) {
                 status = "ACCURATE";
                 comment = "AI estimation is highly accurate and aligns closely with the team's actual effort.";

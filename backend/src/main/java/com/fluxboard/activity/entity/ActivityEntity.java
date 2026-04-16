@@ -14,12 +14,16 @@ public class ActivityEntity {
     @Id
     private String id;
 
-    @Field("project_id")
-    private String projectId;
-
     @Field("user_id")
     private String userId;
 
     private String action;
+    
+    @Field("ip_address")
+    private String ipAddress;
+    
+    @Field("device_info")
+    private String deviceInfo;
+    
     private LocalDateTime createdAt = LocalDateTime.now();
 }

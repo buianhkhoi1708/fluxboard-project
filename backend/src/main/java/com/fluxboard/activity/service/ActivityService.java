@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -16,6 +15,14 @@ public class ActivityService {
     private final ActivityRepository activityRepository;
 
     public List<LoginHistoryResponse> getLoginHistories(String userId, Pageable pageable) {
-        return Collections.emptyList();
+        return activityRepository.findLoginHistoriesByUserId(userId, pageable)
+                .stream()
+                .map(activity -> LoginHistoryResponse.builder()
+                        .timestamp(activity.getCreatedAt())
+                        .ipAddress(activity.getIpAddress())
+                        .deviceInfo(activity.getDeviceInfo())
+                        .build()
+                )
+                .toList();
     }
 }
