@@ -180,6 +180,7 @@ public class AiService {
                 String parentId = new ObjectId().toString(); 
                 parentTask.setId(parentId);
                 parentTask.setColumnId(targetColumnId);
+                parentTask.setProjectId(projectId);
                 
                 String title = dto.title() != null ? dto.title() : (dto.name() != null ? dto.name() : "Untitled Task");
                 parentTask.setTitle(title);
@@ -211,6 +212,7 @@ public class AiService {
                         subTask.setId(new ObjectId().toString());
                         subTask.setParentTaskId(parentId); 
                         subTask.setColumnId(targetColumnId);
+                        subTask.setProjectId(projectId);
                         
                         String stTitle = subDto.title() != null ? subDto.title() : (subDto.name() != null ? subDto.name() : "Untitled Subtask");
                         subTask.setTitle(stTitle);
