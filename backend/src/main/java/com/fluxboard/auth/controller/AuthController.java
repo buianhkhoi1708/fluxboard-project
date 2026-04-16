@@ -47,9 +47,9 @@ public class AuthController {
     }
 
     @GetMapping("/verify-reset-token")
-    public ApiResponse<Void> verifyResetToken(@RequestParam String token) {
+    public ResponseEntity<ApiResponse<Void>> verifyResetToken(@RequestParam String token) {
         authService.verifyResetToken(token);
-        return ResponseFactory.success(null);
+        return ResponseFactory.ok("Token is valid."); 
     }
 
     @PostMapping("/reset-password")

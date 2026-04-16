@@ -1,21 +1,24 @@
 package com.fluxboard.auth.filter;
 
-import com.fluxboard.auth.model.AuthRequestContext;
-import com.fluxboard.auth.model.AuthenticatedUser;
-import com.fluxboard.auth.service.JwtTokenService;
-import com.fluxboard.common.exception.AppException;
-import com.fluxboard.common.exception.ErrorCode;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.auth.service.JwtTokenService;
+import com.fluxboard.common.exception.AppException;
+import com.fluxboard.common.exception.ErrorCode;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 @Order(2)
@@ -45,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return "/health-check".equals(servletPath)
                 || "/auth/login".equals(servletPath)
                 || "/auth/forgot-password".equals(servletPath)
+                || "/auth/verify-reset-token".equals(servletPath)
                 || "/auth/reset-password".equals(servletPath)
                 || "/error".equals(servletPath)
                 || servletPath.startsWith("/api/v1/ws-fluxboard")
