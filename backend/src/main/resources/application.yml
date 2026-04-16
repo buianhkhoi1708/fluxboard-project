@@ -29,6 +29,10 @@ spring:
   web:
     resources:
       add-mappings: false
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 server:
   address: ${SERVER_HOST:localhost}
@@ -41,6 +45,11 @@ management:
     web:
       exposure:
         include: health,info
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
 
 auth:
   jwt:

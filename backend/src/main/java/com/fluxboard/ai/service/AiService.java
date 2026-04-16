@@ -3,6 +3,7 @@ package com.fluxboard.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fluxboard.ai.dto.AiTaskResponse;
+import com.fluxboard.ai.dto.response.AiInsightResponse;
 import com.fluxboard.ai.entity.AiContext;
 import com.fluxboard.ai.repository.AiContextRepository;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
@@ -19,6 +20,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -37,8 +39,8 @@ public class AiService {
     private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
     public AiService(ObjectMapper objectMapper, UserService userService, 
-                    AiContextRepository aiContextRepo, TaskRepository taskRepository,
-                    BoardColumnRepository columnRepository) {
+                     AiContextRepository aiContextRepo, TaskRepository taskRepository,
+                     BoardColumnRepository columnRepository) {
         this.restClient = RestClient.create();
         this.objectMapper = objectMapper;
         this.userService = userService;
@@ -88,7 +90,7 @@ public class AiService {
                 });
 
         // 3. PROMPT "KỶ LUẬT THÉP" 
-       String systemInstruction = String.format("""
+        String systemInstruction = String.format("""
             Bạn là một Chuyên gia Quản trị Dự án (Master Project Manager) đa ngành hàng đầu thế giới.
             DANH SÁCH MÃ NHÂN SỰ BẮT BUỘC (CHỈ DÙNG MÃ BẮT ĐẦU BẰNG 'MEMBER_'):
             %s
@@ -288,5 +290,52 @@ public class AiService {
         } catch (Exception e) {
             throw new RuntimeException("Lỗi kết nối API Gemini.");
         }
+    }
+
+    // ==========================================
+    // THÊM MỚI: AI DEVIATION INSIGHTS 
+    // ==========================================
+    public List<AiInsightResponse> getDeviationInsights(String projectId) {
+        // Truy vấn các task đã hoàn thành và có đánh giá từ AI ban đầu
+        List<TaskEntity> completedTasks = taskRepository
+                .findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(projectId, "DONE");
+
+        return completedTasks.stream().map(task -> {
+            double suggested = task.getAiSuggestedPoint() != null ? task.getAiSuggestedPoint() : 0.0;
+            double actual = task.getStoryPoint() != null ? task.getStoryPoint() : 0.0;
+            
+            double deviationPercent = 0.0;
+            if (suggested > 0) {
+                deviationPercent = ((actual - suggested) / suggested) * 100.0;
+            }
+
+            String status;
+            String comment;
+            
+            // Biên độ dung sai được chấp nhận là +-10%
+            if (Math.abs(deviationPercent) <= 10.0) {
+                status = "ACCURATE";
+                comment = "AI ước lượng khá sát với thực tế triển khai của team.";
+            } else if (deviationPercent > 10.0) {
+                status = "UNDERESTIMATED";
+                comment = String.format("AI ước lượng thấp hơn thực tế. Task phức tạp hơn dự kiến, tốn thêm %.1f%% nỗ lực.", deviationPercent);
+            } else {
+                status = "OVERESTIMATED";
+                comment = String.format("AI ước lượng cao hơn thực tế. Team hoàn thành nhanh hơn dự kiến %.1f%%.", Math.abs(deviationPercent));
+            }
+
+            // Làm tròn 2 chữ số thập phân
+            double roundedDeviation = Math.round(deviationPercent * 100.0) / 100.0;
+
+            return new AiInsightResponse(
+                    task.getId(),
+                    task.getTitle(),
+                    suggested,
+                    actual,
+                    roundedDeviation,
+                    status,
+                    comment
+            );
+        }).collect(Collectors.toList());
     }
 }

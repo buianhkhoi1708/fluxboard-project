@@ -1,11 +1,17 @@
 package com.fluxboard.user.controller;
 
+import com.fluxboard.activity.dto.response.LoginHistoryResponse;
+import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.media.service.MediaService;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import com.fluxboard.user.dto.request.CreateUserRequest;
+import com.fluxboard.user.dto.request.UpdateNotificationPrefRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.dto.response.UserResponse;
+import com.fluxboard.user.service.UserNotificationPrefService;
 import com.fluxboard.user.service.UserService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -21,16 +27,28 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/users")
 public class UserController {
 
     private final UserService userService;
+    private final MediaService mediaService;
+    private final UserNotificationPrefService notificationPrefService;
+    private final ActivityService activityService;
 
-    public UserController(UserService userService) {
+    public UserController(
+            UserService userService,
+            MediaService mediaService,
+            UserNotificationPrefService notificationPrefService,
+            ActivityService activityService) {
         this.userService = userService;
+        this.mediaService = mediaService;
+        this.notificationPrefService = notificationPrefService;
+        this.activityService = activityService;
     }
 
     @PostMapping
@@ -65,5 +83,43 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String userId) {
         userService.delete(userId);
         return ResponseFactory.ok("User deleted successfully.");
+    }
+
+    @PostMapping("/{userId}/avatar")
+    public ResponseEntity<ApiResponse<String>> uploadAvatar(
+            @PathVariable String userId,
+            @RequestParam("file") MultipartFile file) {
+        String avatarUrl = mediaService.uploadAvatar(file);
+        userService.updateAvatarUrl(userId, avatarUrl);
+        return ResponseFactory.ok("Avatar uploaded successfully.", avatarUrl);
+    }
+
+    @GetMapping("/{userId}/notifications/preferences")
+    public ResponseEntity<ApiResponse<UserNotificationPrefResponse>> getNotificationPreferences(
+            @PathVariable String userId) {
+        return ResponseFactory.ok(
+                "Notification preferences retrieved.", 
+                notificationPrefService.getPreferencesByUserId(userId)
+        );
+    }
+
+    @PutMapping("/{userId}/notifications/preferences")
+    public ResponseEntity<ApiResponse<UserNotificationPrefResponse>> updateNotificationPreferences(
+            @PathVariable String userId,
+            @Valid @RequestBody UpdateNotificationPrefRequest request) {
+        return ResponseFactory.ok(
+                "Notification preferences updated.", 
+                notificationPrefService.updatePreferences(userId, request)
+        );
+    }
+
+    @GetMapping("/{userId}/activities/logins")
+    public ResponseEntity<ApiResponse<List<LoginHistoryResponse>>> getLoginHistories(
+            @PathVariable String userId,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseFactory.ok(
+                "Login histories retrieved successfully.", 
+                activityService.getLoginHistories(userId, pageable)
+        );
     }
 }

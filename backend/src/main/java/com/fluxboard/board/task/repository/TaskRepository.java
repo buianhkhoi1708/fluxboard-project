@@ -26,5 +26,7 @@ public interface TaskRepository extends MongoRepository<TaskEntity, String> {
             int order
     );
 
+    List<TaskEntity> findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(String projectId, String status);
+
     List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(String columnId, int order);
 }
