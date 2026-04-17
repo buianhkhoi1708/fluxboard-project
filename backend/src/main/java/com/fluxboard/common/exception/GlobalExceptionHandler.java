@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -164,6 +165,19 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(
                 ErrorCode.DATABASE_ERROR,
                 ErrorCode.DATABASE_ERROR.getDefaultMessage(),
+                request.getRequestURI(),
+                List.of()
+        );
+    }
+    
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxSizeException(
+            MaxUploadSizeExceededException ex,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                ErrorCode.BAD_REQUEST,
+                "The file size has exceeded the allowed limit (maximum 2MB).",
                 request.getRequestURI(),
                 List.of()
         );
