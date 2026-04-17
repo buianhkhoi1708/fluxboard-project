@@ -18,13 +18,20 @@ public class CloudinaryServiceImpl implements MediaService {
 
     private final Cloudinary cloudinary;
 
-    @Override
+@Override
     public String uploadAvatar(MultipartFile file) {
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ cho phép tải lên các tệp định dạng ảnh (ví dụ: .png, .jpg, .jpeg)!");
-        }
+        String originalFilename = file.getOriginalFilename();
+        
+        boolean isImageHeader = contentType != null && contentType.startsWith("image/");
+        boolean hasImageExtension = originalFilename != null && 
+            (originalFilename.toLowerCase().endsWith(".png") || 
+             originalFilename.toLowerCase().endsWith(".jpg") || 
+             originalFilename.toLowerCase().endsWith(".jpeg"));
 
+        if (!isImageHeader || !hasImageExtension) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Only valid image file formats (.png, .jpg, .jpeg) are allowed for uploading!");
+        }
         try {
             Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
                     "folder", "fluxboard/avatars",
