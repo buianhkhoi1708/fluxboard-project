@@ -11,6 +11,8 @@ import com.fluxboard.project.dto.response.ProjectOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectResponse;
 import com.fluxboard.project.service.ProjectService;
 import com.fluxboard.rbac.annotation.RequirePermission;
+import com.fluxboard.ai.service.AiService;
+import com.fluxboard.ai.dto.response.AiInsightResponse;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -34,9 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final AiService aiService; 
 
-    public ProjectController(ProjectService projectService) {
+    public ProjectController(ProjectService projectService, AiService aiService) {
         this.projectService = projectService;
+        this.aiService = aiService;
     }
 
     @RequirePermission("PROJECT_CREATE")
@@ -80,13 +84,11 @@ public class ProjectController {
     }
 
     @RequirePermission("PROJECT_VIEW")
-    @GetMapping("/overviews") // 👉 Không có {projectId}, lấy toàn bộ danh sách
+    @GetMapping("/overviews")
     public ResponseEntity<ApiResponse<List<ProjectOverviewResponse>>> getProjectOverviews(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         
-        // Cần đảm bảo sếp đã tạo hàm getPageOverview bên ProjectService nhé
         Page<ProjectOverviewResponse> page = projectService.getPageOverview(pageable);
-        
         return ResponseFactory.paged("Project overviews retrieved successfully.", page);
     }
 
@@ -114,7 +116,7 @@ public class ProjectController {
         return ResponseFactory.ok("Project deleted successfully.");
     }
 
-    @RequirePermission("PROJECT_UPDATE") // Chỉ người có quyền sửa dự án mới được thêm member
+    @RequirePermission("PROJECT_UPDATE")
     @PostMapping("/{projectId}/members")
     public ResponseEntity<ApiResponse<Void>> addProjectMember(
             @PathVariable String projectId,
@@ -122,5 +124,14 @@ public class ProjectController {
         
         projectService.addProjectMember(projectId, request);
         return ResponseFactory.ok("Member added to project successfully.");
+    }
+
+    @RequirePermission("PROJECT_VIEW") 
+    @GetMapping("/{projectId}/ai-insights")
+    public ResponseEntity<ApiResponse<List<AiInsightResponse>>> getAiInsights(@PathVariable String projectId) {
+        return ResponseFactory.ok(
+                "AI insights retrieved successfully.", 
+                aiService.getDeviationInsights(projectId)
+        );
     }
 }
