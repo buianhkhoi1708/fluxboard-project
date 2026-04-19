@@ -2,58 +2,42 @@ import React, { useState, useEffect } from 'react';
 import Column from './Column';
 import TaskItem from './TaskItem'; 
 import { useBoardStore } from '../stores/useBoardStore'; 
+import { useUserStore } from '../../user/store/useUserStore'; // 🚀 IMPORT KHO TOÀN CỤC
 import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { X, Plus, Target, Save, Sparkles, Filter } from 'lucide-react'; 
+import { Save, Sparkles, Filter, Users } from 'lucide-react'; 
 import AiGeneratorPanel from './AiGeneratorPanel';
 import { useRealtimeEvent } from '../../../hooks/useRealtimeEvent'
 import { useParams } from 'react-router-dom';
 
 const BoardView = () => {
-
-  const { board, setBoard, getBoardTotalPoints, addList,fetchProjectMembers, fetchBoardData, updateTaskPositionApi } = useBoardStore();
+  const { board, setBoard, fetchBoardData, updateTaskPositionApi } = useBoardStore();
   
+  // 🚀 LẤY TỪ ĐIỂN USER TỪ KHO TOÀN CỤC
+  const { userDictionary } = useUserStore();
+
   const [activeTask, setActiveTask] = useState(null);
-  const [isAddingCol, setIsAddingCol] = useState(false);
-  const [newColTitle, setNewColTitle] = useState('');
 
-  const mouseSensor = useSensor(MouseSensor, {
-    activationConstraint: { distance: 5 }, // PC: Kéo 5px là ăn ngay
-  });
-  
-  const touchSensor = useSensor(TouchSensor, {
-    activationConstraint: { 
-      delay: 250, // Mobile: Bắt buộc nhấn giữ 0.25s mới bắt đầu kéo (để phân biệt với cuộn trang)
-      tolerance: 5, // Cho phép ngón tay rung lắc nhẹ 5px trong lúc nhấn giữ
-    },
-  });
-
+  const mouseSensor = useSensor(MouseSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } });
   const sensors = useSensors(mouseSensor, touchSensor);
   const { id } = useParams();
 
   const currentBoardId = id || '69d22692ef24ae604f65ae89'; 
 
   useRealtimeEvent(`/topic/board/${currentBoardId}`, () => {
-    console.log("🔔 [Real-time Module] Board changed, fetching new data...");
     fetchBoardData(currentBoardId);
   });
 
   useEffect(() => {
-    if (currentBoardId) {
-      fetchBoardData(currentBoardId); 
-    }
-  }, [currentBoardId, fetchBoardData]); // 🚀 Đã khai báo đủ bộ
+    if (currentBoardId) fetchBoardData(currentBoardId); 
+  }, [currentBoardId, fetchBoardData]); 
 
-  // ==========================================
-  // NHỊP 2: CÓ BOARD RỒI -> LẤY PROJECT_ID -> TẢI DANH BẠ
-  // ==========================================
-  useEffect(() => {
-    const projectId = board?.projectId || board?.project_id;
-
-    if (projectId) {
-      fetchProjectMembers(projectId);
-    }
-  }, [board?.projectId, board?.project_id, fetchProjectMembers]);
+  // 🚀 LỌC RA NHỮNG USER THUỘC VỀ PROJECT NÀY
+  const projectId = board?.projectId || board?.project_id;
+  const projectMembers = Object.values(userDictionary).filter(
+    (user) => projectId && user.project_roles && user.project_roles[projectId]
+  );
 
   if (!board) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 gap-4 min-h-full p-4 text-center">
@@ -85,7 +69,6 @@ const BoardView = () => {
 
     const sourceColIndex = board.columns.findIndex(c => c.id === activeColId || c._id === activeColId);
     const destColIndex = board.columns.findIndex(c => c.id === overColId || c._id === overColId);
-    
     if (sourceColIndex === -1 || destColIndex === -1) return;
 
     const newColumns = [...board.columns];
@@ -98,11 +81,9 @@ const BoardView = () => {
       
       newColumns[sourceColIndex] = { ...col, tasks: arrayMove(col.tasks, oldIndex, newIndex) };
       newOrder = newIndex + 1; 
-      
     } else {
       const sourceCol = newColumns[sourceColIndex];
       const destCol = newColumns[destColIndex];
-      
       const movedTask = sourceCol.tasks.find(t => t.id === active.id || t._id === active.id);
       const newSourceTasks = sourceCol.tasks.filter(t => t.id !== active.id && t._id !== active.id);
       const newDestTasks = [...(destCol.tasks || [])];
@@ -115,7 +96,6 @@ const BoardView = () => {
         newDestTasks.push(movedTask);
         newOrder = newDestTasks.length;
       }
-      
       newColumns[sourceColIndex] = { ...sourceCol, tasks: newSourceTasks };
       newColumns[destColIndex] = { ...destCol, tasks: newDestTasks };
     }
@@ -124,24 +104,9 @@ const BoardView = () => {
     updateTaskPositionApi(active.id, overColId, newOrder);
   };
 
-  const handleAddListClick = () => {
-    if (newColTitle.trim()) {
-      addList(newColTitle.trim());
-      setNewColTitle(''); 
-      setIsAddingCol(false);
-    }
-  };
-
-  const handleSaveBoard = () => {
-    console.log("Dữ liệu chuẩn bị gọi API Save:", board);
-    alert("Tính năng lưu DB đang phát triển!");
-  };
-
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      
       <div className="flex flex-col h-full bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white relative overflow-hidden">
-
         <AiGeneratorPanel />
 
         <div className="px-4 py-3 md:px-6 md:py-4 bg-white/70 backdrop-blur-xl border-b border-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 lg:gap-4 shrink-0 z-10 sticky top-0">
@@ -154,21 +119,39 @@ const BoardView = () => {
               <h2 className="text-lg md:text-xl font-black !text-black tracking-tight truncate">
                 {board.board_name}
               </h2>
-              {board.description && (
-                <p className="text-[11px] md:text-xs text-slate-500 mt-0.5 truncate font-medium w-full">
-                  {board.description}
-                </p>
-              )}
             </div>
           </div>
           
           <div className="flex items-center gap-2 md:gap-3 w-full lg:w-auto overflow-x-auto no-scrollbar pb-1 lg:pb-0 shrink-0">
             
-            <div className="hidden sm:flex -space-x-2 mr-1 shrink-0">
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] md:text-xs font-bold z-30" title="Khôi">K</div>
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] md:text-xs font-bold z-20" title="Mạnh">M</div>
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] md:text-xs font-bold z-10" title="Quang">Q</div>
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-slate-100 text-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold z-0">+2</div>
+            {/* 🚀 AVATAR STACK TỰ ĐỘNG TỪ KHO TOÀN CỤC */}
+            <div className="hidden sm:flex items-center -space-x-2 mr-2 shrink-0">
+              {projectMembers.length > 0 ? (
+                <>
+                  {projectMembers.slice(0, 4).map((member, idx) => {
+                    const displayName = member.full_name || 'Member';
+                    const avatarUrl = member.avatar_url;
+                    return (
+                      <div key={member.id} title={displayName} className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white flex items-center justify-center overflow-hidden z-[10] shadow-sm transition-transform hover:scale-110 hover:z-50 cursor-pointer" style={{ zIndex: 10 - idx }}>
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover bg-white" />
+                        ) : (
+                          <div className="w-full h-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] md:text-xs font-bold">{displayName.charAt(0).toUpperCase()}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {projectMembers.length > 4 && (
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-slate-100 text-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold z-0 shadow-sm cursor-pointer hover:bg-slate-200 transition-colors" title={`Và ${projectMembers.length - 4} người khác`}>
+                      +{projectMembers.length - 4}
+                    </div>
+                  )}
+                </>
+              ) : (
+                 <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-slate-50 text-slate-400 flex items-center justify-center shadow-sm cursor-default" title="Đang tải thành viên...">
+                   <Users size={14} />
+                 </div>
+              )}
             </div>
 
             <div className="h-5 md:h-6 w-px bg-slate-200 hidden sm:block shrink-0"></div>
@@ -177,19 +160,7 @@ const BoardView = () => {
               <Filter size={14} className="md:w-4 md:h-4" />
               <span>Lọc</span>
             </button>
-
-            {getBoardTotalPoints && (
-              <div className="flex items-center gap-1.5 bg-white border border-indigo-100 px-2.5 py-1.5 md:px-3 rounded-lg text-xs md:text-sm font-bold text-indigo-600 shadow-sm shrink-0 cursor-default whitespace-nowrap">
-                <Target size={14} className="text-indigo-500 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">Tổng: </span>
-                <span>{getBoardTotalPoints()} pt</span>
-              </div>
-            )}
-            
-            <button 
-              onClick={handleSaveBoard}
-              className="flex items-center gap-1.5 md:gap-2 bg-slate-900 hover:bg-black text-white px-3 py-1.5 md:px-4 rounded-lg text-xs md:text-sm font-bold transition-all active:scale-95 shadow-md shrink-0 whitespace-nowrap"
-            >
+            <button className="flex items-center gap-1.5 md:gap-2 bg-slate-900 hover:bg-black text-white px-3 py-1.5 md:px-4 rounded-lg text-xs md:text-sm font-bold transition-all active:scale-95 shadow-md shrink-0 whitespace-nowrap">
               <Save size={14} className="text-indigo-200 md:w-4 md:h-4" />
               <span>Lưu dự án</span>
             </button>
@@ -197,52 +168,12 @@ const BoardView = () => {
         </div>
 
         <div className="flex-1 w-full p-4 md:p-6 pb-8 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-4 md:gap-6 items-start custom-scrollbar">
-          
           {board.columns?.map((col) => <Column key={col.id || col._id} list={col} />)}
-          
-          {isAddingCol ? (
-            <div className="w-[85vw] max-w-[300px] sm:w-[300px] shrink-0 bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl shadow-xl border border-white flex flex-col gap-3 ring-2 ring-indigo-100/50 transition-all animate-in fade-in zoom-in-95 duration-200">
-              <input 
-                autoFocus 
-                value={newColTitle} 
-                onChange={e => setNewColTitle(e.target.value)} 
-                onKeyDown={e => e.key === 'Enter' && handleAddListClick()} 
-                placeholder="Nhập tên cột mới..." 
-                className="text-sm font-bold border-none bg-slate-100/50 rounded-xl px-4 py-3 outline-none w-full focus:bg-white focus:ring-2 focus:ring-indigo-400 transition-all placeholder:text-slate-400 placeholder:font-medium" 
-              />
-              <div className="flex gap-2 items-center">
-                <button 
-                  onClick={handleAddListClick} 
-                  className="flex-1 py-2.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-700 shadow-[0_4px_14px_0_rgba(79,70,229,0.39)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.23)] transition-all active:scale-95"
-                >
-                  Thêm cột
-                </button>
-                <button 
-                  onClick={() => { setIsAddingCol(false); setNewColTitle(''); }} 
-                  className="p-2.5 text-slate-400 bg-slate-100 hover:bg-rose-50 hover:text-rose-500 rounded-xl transition-all"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setIsAddingCol(true)} 
-              className="group w-[85vw] max-w-[300px] sm:w-[300px] shrink-0 flex items-center justify-center gap-2 px-4 py-4 bg-slate-200/30 hover:bg-white/60 rounded-2xl text-slate-500 font-bold transition-all duration-300 border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:text-indigo-600 hover:shadow-lg backdrop-blur-sm"
-            >
-              <Plus size={20} className="transition-transform duration-300 group-hover:rotate-90" /> 
-              <span>Thêm danh sách mới</span>
-            </button>
-          )}
-
           <div className="w-4 md:w-8 shrink-0"></div>
         </div>
       </div>
 
-      <DragOverlay dropAnimation={{
-          duration: 250,
-          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-        }}>
+      <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
         {activeTask ? <TaskItem task={activeTask} isOverlay listId="overlay" /> : null}
       </DragOverlay>
     </DndContext>
