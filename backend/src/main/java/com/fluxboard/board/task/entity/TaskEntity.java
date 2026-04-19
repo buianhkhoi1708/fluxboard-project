@@ -25,6 +25,10 @@ public class TaskEntity extends BaseDocument {
     @Field("column_id")
     private String columnId;
 
+    // 🚀 BỔ SUNG TRƯỜNG NÀY ĐỂ FIX LỖI CRASH APP VÀ PHỤC VỤ TÍNH NĂNG AI INSIGHT
+    @Field("project_id")
+    private String projectId;
+
     @Field("parent_task_id")
     private String parentTaskId;
 
@@ -83,6 +87,14 @@ public class TaskEntity extends BaseDocument {
 
     public void setColumnId(String columnId) {
         this.columnId = columnId;
+    }
+
+    public String getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
     }
 
     public String getParentTaskId() {
