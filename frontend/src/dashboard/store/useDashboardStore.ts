@@ -18,7 +18,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     try {
       let response: any; 
       
-      // Khớp chính xác với 4 Role trong JSON của bạn
+      // Khớp chính xác 100% với các Role
       if (role === 'SYSTEM_ADMIN') {
         response = await dashboardApi.getAdminMetrics();
       } else if (role === 'MANAGER') {
