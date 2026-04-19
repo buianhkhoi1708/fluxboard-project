@@ -1,8 +1,10 @@
 import React, { useState, memo } from 'react';
-import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock, User } from 'lucide-react';
+import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../stores/useBoardStore';
+// 🚀 1. IMPORT KHO TOÀN CỤC VÀO ĐÂY
+import { useUserStore } from '../../user/store/useUserStore'; 
 import DeleteConfirmModal from './DeleteConfirmModal'; 
 import TaskDetailModal from './TaskDetailModal'; 
 
@@ -19,9 +21,15 @@ const formatDateForInput = (dateString) => {
 };
 
 const TaskItem = memo(({ task, listId, isOverlay }) => {
-  // 🚀 Bổ sung getMemberById vào đây
-  const { deleteTask, toggleSubtask, getMemberById } = useBoardStore(); 
+  // 🚀 2. XÓA getMemberById, CHỈ LẤY deleteTask và toggleSubtask
+  const { deleteTask, toggleSubtask, board } = useBoardStore(); 
   
+  // 🚀 3. LÔI HÀM getUser TỪ KHO TOÀN CỤC RA
+  const getUser = useUserStore((state) => state.getUser);
+  
+  // Lấy ProjectID hiện tại để hàm getUser biết đường mà mò đúng Role
+  const projectId = board?.projectId || board?.project_id;
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); 
   
@@ -39,11 +47,9 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
         style={style} 
         {...attributes} 
         {...listeners} 
-        // 👉 UX Đỉnh cao: Chạm vào bất kỳ đâu trên thẻ cũng mở Modal chi tiết
         onClick={() => setIsDetailModalOpen(true)}
         className={`group relative flex flex-col bg-white p-3.5 sm:p-4 rounded-xl shadow-sm border border-slate-200 cursor-grab active:cursor-grabbing hover:border-indigo-300 hover:shadow-md transition-all ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
       >
-        {/* 👉 Tăng padding right (pr-14) để text không chui xuống dưới 2 nút action */}
         <h4 className="text-sm font-semibold text-slate-800 break-words pr-14 leading-snug">{task.title}</h4>
         
         {task.description && (
@@ -54,7 +60,6 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
         )}
 
         {(task.due_date || task.estimated_days) && (
-          // 👉 Thêm flex-wrap để không bị bóp méo khi màn hình thu hẹp
           <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] font-medium text-slate-500">
             {task.due_date && (
               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 whitespace-nowrap">
@@ -80,7 +85,6 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
                 className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors"
               >
                 {st.status === 'DONE' ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
-                {/* 👉 Thêm flex-1 và truncate để tự cắt chuỗi nếu subtask quá dài */}
                 <span className={`text-[11px] flex-1 truncate ${st.status === 'DONE' ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`} title={st.title}>
                   {st.title}
                 </span>
@@ -94,25 +98,21 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
             {task.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[task.priority] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{task.priority}</span></span>}
           </div>
 
-          {/* 🚀 LOGIC RENDER ASSIGNEES ĐÃ FIX */}
           <div className="flex items-center gap-2">
             {(() => {
-              // Vét cạn: Lấy mảng từ mọi kiểu đặt tên có thể của Backend
               const assigneeArray = task.assignees_user_id || task.assigneesUserId || task.assignees || [];
 
               if (assigneeArray.length > 0) {
                 return (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                     {assigneeArray.map((item, idx) => {
-                      // Nếu API lỡ trả về object rồi thì lấy id, nếu là string ID thì giữ nguyên
                       const userId = typeof item === 'object' ? (item.id || item._id) : item;
                       
-                      // Lấy dữ liệu user từ danh bạ (dựa vào ID)
-                      const member = getMemberById(userId) || (typeof item === 'object' ? item : null);
+                      // 🚀 4. ĐIỂM ĂN TIỀN LÀ ĐÂY: Dùng getUser thay cho getMemberById
+                      const member = getUser(userId, projectId); 
                       
-                      // Bóc tách tên và avatar
-                      const displayName = member?.name || member?.full_name || member?.fullName || member?.username || 'Unnamed';
-                      const avatarUrl = member?.avatar || member?.avatar_url || member?.avatarUrl;
+                      const displayName = member?.full_name || 'Unnamed';
+                      const avatarUrl = member?.avatar_url;
                       const initial = displayName.charAt(0).toUpperCase();
 
                       return (
@@ -146,7 +146,6 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
           </div>
         </div>
 
-        {/* 👉 MOBILE FIX: opacity-100 trên Mobile, chỉ ẩn trên Desktop (md:opacity-0) */}
         <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm rounded-lg p-0.5 shadow-sm border border-slate-100">
           <button 
             onClick={(e) => { e.stopPropagation(); setIsDetailModalOpen(true); }} 
