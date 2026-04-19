@@ -64,7 +64,7 @@ const SettingsPage = () => {
 };
 
 // ==========================================
-// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN
+// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN (ĐÃ NỐI API)
 // ==========================================
 const ProfileTab = () => {
   const { user, updateUserProfile } = useAuthStore();
@@ -73,8 +73,17 @@ const ProfileTab = () => {
   const targetId = user?.id || (user as any)?.userId || (user as any)?.user_id;
   const [name, setName] = useState(user?.full_name || '');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
+  
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  useEffect(() => {
+    if (user) {
+      setName(user.full_name || '');
+      if (user.avatar_url) setAvatarPreview(user.avatar_url);
+    }
+  }, [user]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,12 +94,14 @@ const ProfileTab = () => {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    setMessage({ type: '', text: '' });
+
     if (!targetId || !user) {
-      alert("Lỗi: Không tìm thấy ID người dùng. Hãy thử đăng xuất và đăng nhập lại!");
+      setMessage({ type: 'error', text: 'Lỗi: Không tìm thấy ID người dùng. Hãy thử đăng xuất và đăng nhập lại!' });
+      setIsSaving(false);
       return; 
     }
-    
-    setIsSaving(true);
     
     try {
       let finalAvatarUrl = user?.avatar_url;
@@ -109,11 +120,14 @@ const ProfileTab = () => {
       // 3. Đồng bộ State để Sidebar/Navbar đổi ngay
       updateUserProfile({ full_name: name, avatar_url: finalAvatarUrl || user?.avatar_url || '' });
       setSelectedFile(null); 
-      alert("Lưu hồ sơ thành công!");
+      setMessage({ type: 'success', text: 'Lưu hồ sơ thành công!' });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi cập nhật Profile:", error);
-      alert("Có lỗi xảy ra khi lưu hồ sơ. Vui lòng thử lại.");
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.message || 'Có lỗi xảy ra khi lưu hồ sơ. Vui lòng thử lại.' 
+      });
     } finally {
       setIsSaving(false);
     }
@@ -123,6 +137,14 @@ const ProfileTab = () => {
     <div className="max-w-2xl animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800 mb-8">Hồ sơ cá nhân</h2>
       
+      {message.text && (
+        <div className={`p-3 mb-6 rounded-xl text-sm font-medium border ${
+          message.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
       <div className="flex items-center gap-6 mb-10">
         {avatarPreview ? (
           <img src={avatarPreview} alt="Avatar Preview" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm" />
@@ -180,7 +202,9 @@ const ProfileTab = () => {
   );
 };
 
+// ==========================================
 // COMPONENT TAB 3: THÔNG BÁO (TOGGLE UI)
+// ==========================================
 const NotificationTab = () => {
   const { user } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
