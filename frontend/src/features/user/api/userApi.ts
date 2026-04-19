@@ -12,4 +12,12 @@ export const userApi = {
   getAllUsers: (params = { page: 0, size: 50 }) => {
     return axiosClient.get('/users', { params });
   },
+  // 1. Lấy thông tin cá nhân của user đang đăng nhập
+  getProfile: () => axiosClient.get('/users/profile'), 
+  // 2. Cập nhật thông tin cá nhân (Dùng FormData để hỗ trợ upload file ảnh)
+  updateProfile: (formData: FormData) => axiosClient.put('/users/profile', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  }),
 };

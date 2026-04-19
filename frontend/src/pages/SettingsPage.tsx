@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ChangePasswordForm from '../features/board/components/ChangePasswordForm';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
+// 🚀 1. Import userApi vào đây
+import { userApi } from '../features/user/api/userApi';
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
@@ -62,38 +64,86 @@ const SettingsPage = () => {
 };
 
 // ==========================================
-// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN
+// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN (ĐÃ NỐI API)
 // ==========================================
 const ProfileTab = () => {
   const { user, updateUserProfile } = useAuthStore();
 
-  // Khởi tạo state nội bộ từ global state
   const [name, setName] = useState(user?.full_name || '');
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || `https://ui-avatars.com/api/?name=${name || 'User'}&background=random`);
+  
+  // 🚀 2. Thêm state lưu file thực tế và thông báo UI
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Đồng bộ data khi user load xong
+  useEffect(() => {
+    if (user) {
+      setName(user.full_name || '');
+      if (user.avatar_url) setAvatarPreview(user.avatar_url);
+    }
+  }, [user]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file); // Lưu lại file để đẩy lên API
       const imageUrl = URL.createObjectURL(file);
-      setAvatarPreview(imageUrl);
+      setAvatarPreview(imageUrl); // Preview tạm thời
     }
   };
 
-  const handleSave = () => {
+  // 🚀 3. Logic gọi API thật
+  const handleSave = async () => {
     setIsSaving(true);
-    // Giả lập gọi API
-    setTimeout(() => {
-      // Cập nhật lên Global Store (Zustand)
-      updateUserProfile({ full_name: name, avatar_url: avatarPreview });
+    setMessage({ type: '', text: '' });
+
+    try {
+      // Dùng FormData để gửi cả chữ và file
+      const formData = new FormData();
+      formData.append('full_name', name); // Sửa key 'full_name' hoặc 'name' cho khớp với backend của bạn
+      
+      if (selectedFile) {
+        formData.append('avatar', selectedFile);
+      }
+
+      // Gọi API lên Backend
+      const response = await userApi.updateProfile(formData);
+      
+      // Giả sử Backend trả về data user mới nhất có chứa link ảnh mới (response.data.avatar_url)
+      const updatedAvatarUrl = response.data?.avatar_url || avatarPreview;
+
+      // Cập nhật lại Zustand Global Store để Navbar/Sidebar tự đổi ảnh theo
+      updateUserProfile({ full_name: name, avatar_url: updatedAvatarUrl });
+      
+      setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
+      setSelectedFile(null); // Clear file sau khi upload xong
+      
+    } catch (error: any) {
+      console.error("Lỗi cập nhật profile:", error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại!' 
+      });
+    } finally {
       setIsSaving(false);
-    }, 500);
+    }
   };
 
   return (
     <div className="max-w-2xl animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800 mb-8">Hồ sơ cá nhân</h2>
       
+      {/* 🚀 4. Khung hiển thị báo lỗi/thành công */}
+      {message.text && (
+        <div className={`p-3 mb-6 rounded-xl text-sm font-medium border ${
+          message.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
       <div className="flex items-center gap-6 mb-10">
         <img src={avatarPreview} alt="Avatar Preview" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm" />
         <div>
@@ -134,16 +184,26 @@ const ProfileTab = () => {
         <button 
           onClick={handleSave}
           disabled={isSaving}
-          className="mt-8 bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-70"
+          className="mt-8 bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-70 flex items-center gap-2"
         >
-          {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+          {isSaving ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Đang lưu...
+            </>
+          ) : 'Lưu thay đổi'}
         </button>
       </div>
     </div>
   );
 };
 
+// ==========================================
 // COMPONENT TAB 3: THÔNG BÁO (TOGGLE UI)
+// ==========================================
 const NotificationTab = () => {
   const [toggles, setToggles] = useState({
     tasks: true,
