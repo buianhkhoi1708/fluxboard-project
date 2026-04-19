@@ -23,4 +23,14 @@ public class UserNotificationPrefEntity {
     
     @Field("in_app_notifications_enabled")
     private boolean inAppNotificationsEnabled;
+
+    // Thêm các TH cho sự kiện nhận
+    @Field("notify_on_task_assign")
+    private boolean notifyOnTaskAssign;
+
+    @Field("notify_on_due_date")
+    private boolean notifyOnDueDate;
+
+    @Field("notify_on_comment_mention")
+    private boolean notifyOnCommentMention;
 }

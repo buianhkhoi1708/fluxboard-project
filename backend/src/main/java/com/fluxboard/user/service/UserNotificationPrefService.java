@@ -23,13 +23,19 @@ public class UserNotificationPrefService {
                             .userId(userId)
                             .emailNotificationsEnabled(true)
                             .inAppNotificationsEnabled(true)
+                            .notifyOnTaskAssign(true)
+                            .notifyOnDueDate(true)
+                            .notifyOnCommentMention(true)
                             .build();
                     return repository.save(newPref);
                 });
 
         return new UserNotificationPrefResponse(
                 entity.isEmailNotificationsEnabled(),
-                entity.isInAppNotificationsEnabled()
+                entity.isInAppNotificationsEnabled(),
+                entity.isNotifyOnTaskAssign(),
+                entity.isNotifyOnDueDate(),
+                entity.isNotifyOnCommentMention()
         );
     }
 
@@ -39,12 +45,18 @@ public class UserNotificationPrefService {
 
         entity.setEmailNotificationsEnabled(request.emailNotificationsEnabled());
         entity.setInAppNotificationsEnabled(request.inAppNotificationsEnabled());
+        entity.setNotifyOnTaskAssign(request.notifyOnTaskAssign());
+        entity.setNotifyOnDueDate(request.notifyOnDueDate());
+        entity.setNotifyOnCommentMention(request.notifyOnCommentMention());
         
         repository.save(entity);
 
         return new UserNotificationPrefResponse(
                 entity.isEmailNotificationsEnabled(),
-                entity.isInAppNotificationsEnabled()
+                entity.isInAppNotificationsEnabled(),
+                entity.isNotifyOnTaskAssign(),
+                entity.isNotifyOnDueDate(),
+                entity.isNotifyOnCommentMention()
         );
     }
 }

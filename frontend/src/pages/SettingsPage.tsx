@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ChangePasswordForm from '../features/board/components/ChangePasswordForm';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
+import { userApi } from '../features/user/api/userApi';
+import { User, Loader2 } from 'lucide-react';
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
@@ -68,26 +70,53 @@ const ProfileTab = () => {
   const { user, updateUserProfile } = useAuthStore();
 
   // Khởi tạo state nội bộ từ global state
+  const targetId = user?.id || (user as any)?.userId || (user as any)?.user_id;
   const [name, setName] = useState(user?.full_name || '');
-  const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || `https://ui-avatars.com/api/?name=${name || 'User'}&background=random`);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setAvatarPreview(imageUrl);
+      setSelectedFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!targetId || !user) {
+      alert("Lỗi: Không tìm thấy ID người dùng. Hãy thử đăng xuất và đăng nhập lại!");
+      return; 
+    }
+    
     setIsSaving(true);
-    // Giả lập gọi API
-    setTimeout(() => {
-      // Cập nhật lên Global Store (Zustand)
-      updateUserProfile({ full_name: name, avatar_url: avatarPreview });
+    
+    try {
+      let finalAvatarUrl = user?.avatar_url;
+
+      // 1. Upload ảnh (nếu có chọn)
+      if (selectedFile) {
+        const avatarResponse = await userApi.uploadAvatar(String(targetId), selectedFile);
+        finalAvatarUrl = avatarResponse.data;
+      }
+
+      // 2. Cập nhật tên (nếu có sửa)
+      if (name !== user?.full_name) {
+        await userApi.updateUser(String(targetId), { full_name: name });
+      }
+
+      // 3. Đồng bộ State để Sidebar/Navbar đổi ngay
+      updateUserProfile({ full_name: name, avatar_url: finalAvatarUrl || user?.avatar_url || '' });
+      setSelectedFile(null); 
+      alert("Lưu hồ sơ thành công!");
+
+    } catch (error) {
+      console.error("Lỗi cập nhật Profile:", error);
+      alert("Có lỗi xảy ra khi lưu hồ sơ. Vui lòng thử lại.");
+    } finally {
       setIsSaving(false);
-    }, 500);
+    }
   };
 
   return (
@@ -95,7 +124,14 @@ const ProfileTab = () => {
       <h2 className="text-2xl font-bold text-slate-800 mb-8">Hồ sơ cá nhân</h2>
       
       <div className="flex items-center gap-6 mb-10">
-        <img src={avatarPreview} alt="Avatar Preview" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm" />
+        {avatarPreview ? (
+          <img src={avatarPreview} alt="Avatar Preview" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm" />
+        ) : (
+          <div className="w-24 h-24 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-4xl border-4 border-slate-100 shadow-sm">
+            {name?.charAt(0).toUpperCase() || 'U'}
+          </div>
+        )}
+
         <div>
           <label className="cursor-pointer bg-white text-slate-700 px-5 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition border border-slate-200 shadow-sm block">
             Đổi ảnh đại diện
@@ -134,8 +170,9 @@ const ProfileTab = () => {
         <button 
           onClick={handleSave}
           disabled={isSaving}
-          className="mt-8 bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-70"
+          className="mt-8 bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-70 flex items-center gap-2"
         >
+          {isSaving && <Loader2 size={16} className="animate-spin" />}
           {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
         </button>
       </div>
@@ -145,53 +182,124 @@ const ProfileTab = () => {
 
 // COMPONENT TAB 3: THÔNG BÁO (TOGGLE UI)
 const NotificationTab = () => {
+  const { user } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const targetId = user?.id || (user as any)?.userId || (user as any)?.user_id;
+
+
   const [toggles, setToggles] = useState({
-    tasks: true,
-    comments: true,
-    reminders: false,
-    announcements: true,
-    messages: true,
-    mentions: true,
+    email_notifications_enabled: true,
+    in_app_notifications_enabled: true,
+    notify_on_task_assign: true,
+    notify_on_due_date: false,
+    notify_on_comment_mention: true,
   });
 
-  const handleToggle = (key: keyof typeof toggles) => {
-    setToggles(prev => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    const fetchPrefs = async () => {
+      if (!targetId) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const response = await userApi.getNotificationPrefs(String(targetId));
+        if (response.data) {
+          setToggles({
+            email_notifications_enabled: response.data.email_notifications_enabled ?? true,
+            in_app_notifications_enabled: response.data.in_app_notifications_enabled ?? true,
+            notify_on_task_assign: response.data.notify_on_task_assign ?? true,
+            notify_on_due_date: response.data.notify_on_due_date ?? false,
+            notify_on_comment_mention: response.data.notify_on_comment_mention ?? true,
+          });
+        }
+      } catch (error) {
+        console.error("Lỗi lấy cấu hình thông báo:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPrefs();
+  }, [targetId]);
+
+  const handleToggle = async (stateKey: keyof typeof toggles) => {
+    if (!targetId) return;
+
+    // Optimistic UI Update
+    const newToggles = { ...toggles, [stateKey]: !toggles[stateKey] };
+    setToggles(newToggles);
+
+    try {
+      // Gửi cấu hình lên Backend để lưu vào Database
+      await userApi.updateNotificationPrefs(String(targetId), newToggles as any);
+    } catch (error) {
+      console.error("Lỗi lưu thông báo:", error);
+      setToggles(toggles); // Hoàn tác UI nếu gọi API thất bại
+      alert("Không thể lưu cấu hình, vui lòng thử lại!");
+    }
   };
 
-  const ToggleSwitch = ({ label, stateKey }: { label: string, stateKey: keyof typeof toggles }) => (
+  const ToggleSwitch = ({ label, description, stateKey }: { label: string, description?: string, stateKey: keyof typeof toggles }) => (
     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      <div className="pr-4">
+        <span className="text-sm font-semibold text-slate-700">{label}</span>
+        {description && <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{description}</p>}
+      </div>
       <button 
         onClick={() => handleToggle(stateKey)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${toggles[stateKey] ? 'bg-indigo-600' : 'bg-slate-300'}`}
+        className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${toggles[stateKey] ? 'bg-indigo-600' : 'bg-slate-300'}`}
       >
         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-300 ${toggles[stateKey] ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>
   );
 
+  if (isLoading) {
+    return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-indigo-600" size={32} /></div>;
+  }
+
   return (
     <div className="max-w-2xl animate-in fade-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-2">Notification Center</h2>
-      <p className="text-sm text-slate-500 mb-8">Quản lý cách bạn nhận thông tin từ hệ thống.</p>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Trung tâm Thông báo</h2>
+      <p className="text-sm text-slate-500 mb-8">Quản lý các kênh nhận thông tin từ hệ thống Fluxboard.</p>
       
       <div className="space-y-8">
+        
+        {/* KÊNH NHẬN */}
         <div>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Project Notifications</h3>
+          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Kênh nhận (Channels)</h3>
           <div className="space-y-3">
-            <ToggleSwitch label="Khi được giao việc" stateKey="tasks" />
-            <ToggleSwitch label="Nhắc nhở sắp đến hạn" stateKey="reminders" />
+            <ToggleSwitch 
+              label="In-app Notification (Thông báo trong app)" 
+              description="Nhận thông báo trực tiếp qua quả chuông ở góc phải màn hình."
+              stateKey="in_app_notifications_enabled" 
+            />
+            <ToggleSwitch 
+              label="Email" 
+              description="Hệ thống sẽ gửi email báo cáo công việc đến hộp thư của bạn."
+              stateKey="email_notifications_enabled" 
+            />
           </div>
         </div>
 
+        {/* SỰ KIỆN NHẬN */}
         <div>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Communication Channels</h3>
+          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Sự kiện nhận (Events)</h3>
           <div className="space-y-3">
-            <ToggleSwitch label="Thông báo toàn hệ thống" stateKey="announcements" />
-            <ToggleSwitch label="Tin nhắn trực tiếp" stateKey="messages" />
-            <ToggleSwitch label="Khi bị nhắc tên @" stateKey="mentions" />
+            <ToggleSwitch 
+              label="Khi có Task mới được Assign." 
+              stateKey="notify_on_task_assign" 
+            />
+            <ToggleSwitch 
+              label="Khi Task sắp đến hạn (due_date < 24h)." 
+              stateKey="notify_on_due_date" 
+            />
+            <ToggleSwitch 
+              label="Khi có task_comments mới tag tên mình." 
+              stateKey="notify_on_comment_mention" 
+            />
           </div>
         </div>
+
       </div>
     </div>
   );
