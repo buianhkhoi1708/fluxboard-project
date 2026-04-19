@@ -1,5 +1,6 @@
 package com.fluxboard.project.service;
 
+import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.board.column.dto.response.BoardColumnResponse;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
@@ -44,6 +45,7 @@ public class ProjectService
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final ActivityService activityService;
 
     public ProjectService(
             ProjectRepository projectRepository,
@@ -51,7 +53,8 @@ public class ProjectService
             BoardColumnRepository boardColumnRepository,
             TaskRepository taskRepository,
             UserRepository userRepository,
-            ProjectMemberRepository projectMemberRepository
+            ProjectMemberRepository projectMemberRepository,
+            ActivityService activityService
     ) {
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
@@ -59,6 +62,7 @@ public class ProjectService
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
+        this.activityService = activityService;
     }
 
     @Override
@@ -86,6 +90,7 @@ public class ProjectService
         membership.setUserId(normalizedOwnerId);
         membership.setActive(true);
         projectMemberRepository.save(membership);
+        activityService.logProjectCreated(savedProject.getId(), normalizedOwnerId, savedProject.getName());
 
         return toResponse(savedProject);
     }
@@ -120,6 +125,11 @@ public class ProjectService
     // =========================================================================
     @Transactional
     public void addProjectMember(String projectId, AddProjectMemberRequest request) {
+        addProjectMember(projectId, request, null);
+    }
+
+    @Transactional
+    public void addProjectMember(String projectId, AddProjectMemberRequest request, String actorUserId) {
         String normalizedUserId = TextUtils.trim(request.userId());
 
         // 1. Kiểm tra dự án
@@ -146,6 +156,12 @@ public class ProjectService
         newMember.setActive(true);
 
         projectMemberRepository.save(newMember);
+        activityService.logProjectMemberAdded(
+                TextUtils.trim(projectId),
+                normalizedUserId,
+                TextUtils.trimToNull(actorUserId),
+                roles
+        );
     }
     // =========================================================================
 
@@ -199,7 +215,15 @@ public class ProjectService
     @Override
     @Transactional
     public ProjectResponse update(String id, UpdateProjectRequest request) {
+        return update(id, request, null);
+    }
+
+    @Transactional
+    public ProjectResponse update(String id, UpdateProjectRequest request, String actorUserId) {
         ProjectEntity entity = findProjectById(id);
+        String previousName = entity.getName();
+        String previousOwnerId = entity.getOwnerId();
+        String previousStatus = entity.getStatus();
         String ownerId = TextUtils.trim(request.ownerId());
         validateUserExists(ownerId, "Owner user does not exist.");
 
@@ -208,13 +232,46 @@ public class ProjectService
         entity.setDepartmentId(TextUtils.trim(request.departmentId()));
         entity.setStatus(TextUtils.trim(request.status()));
 
-        return toResponse(projectRepository.save(entity));
+        ProjectEntity saved = projectRepository.save(entity);
+        String changedField = null;
+        String oldValue = null;
+        String newValue = null;
+
+        if (!sameText(previousName, saved.getName())) {
+            changedField = "name";
+            oldValue = previousName;
+            newValue = saved.getName();
+        } else if (!sameText(previousOwnerId, saved.getOwnerId())) {
+            changedField = "ownerId";
+            oldValue = previousOwnerId;
+            newValue = saved.getOwnerId();
+        } else if (!sameText(previousStatus, saved.getStatus())) {
+            changedField = "status";
+            oldValue = previousStatus;
+            newValue = saved.getStatus();
+        }
+
+        activityService.logProjectUpdated(
+                saved.getId(),
+                TextUtils.trimToNull(actorUserId),
+                changedField,
+                oldValue,
+                newValue,
+                saved.getName()
+        );
+        return toResponse(saved);
     }
 
     @Override
     @Transactional
     public void delete(String id) {
+        delete(id, null);
+    }
+
+    @Transactional
+    public void delete(String id, String actorUserId) {
         ProjectEntity entity = findProjectById(id);
+        String projectName = entity.getName();
         List<BoardEntity> boards = boardRepository.findByProjectIdAndDeletedFalse(entity.getId());
 
         if (!boards.isEmpty()) {
@@ -238,6 +295,7 @@ public class ProjectService
 
         entity.markDeleted();
         projectRepository.save(entity);
+        activityService.logProjectDeleted(entity.getId(), TextUtils.trimToNull(actorUserId), projectName);
     }
 
     public ProjectEntity findProjectById(String projectId) {
@@ -264,6 +322,15 @@ public class ProjectService
         if (!userRepository.existsByIdAndDeletedFalse(userId)) {
             throw new AppException(ErrorCode.BAD_REQUEST, message);
         }
+    }
+
+    private boolean sameText(String first, String second) {
+        String normalizedFirst = TextUtils.trimToNull(first);
+        String normalizedSecond = TextUtils.trimToNull(second);
+        if (normalizedFirst == null) {
+            return normalizedSecond == null;
+        }
+        return normalizedFirst.equals(normalizedSecond);
     }
 
     private ProjectResponse toResponse(ProjectEntity entity) {

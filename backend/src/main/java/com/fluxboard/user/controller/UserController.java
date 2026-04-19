@@ -1,5 +1,7 @@
 package com.fluxboard.user.controller;
 
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.rbac.annotation.RequirePermission;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,8 +38,11 @@ public class UserController {
 
     @PostMapping
     @RequirePermission("USER_CREATE")
-    public ResponseEntity<ApiResponse<UserResponse>> createUser(@Valid @RequestBody CreateUserRequest request) {
-        return ResponseFactory.created("User created successfully.", userService.create(request));
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(
+            @Valid @RequestBody CreateUserRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.created("User created successfully.", userService.create(request, authUser.userId()));
     }
 
     @RequirePermission("USER_VIEW")
@@ -56,14 +62,19 @@ public class UserController {
     @PutMapping("/{userId}")
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             @PathVariable String userId,
-            @Valid @RequestBody UpdateUserRequest request) {
-        return ResponseFactory.ok("User updated successfully.", userService.update(userId, request));
+            @Valid @RequestBody UpdateUserRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.ok("User updated successfully.", userService.update(userId, request, authUser.userId()));
     }
 
     @RequirePermission("USER_DELETE")
     @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String userId) {
-        userService.delete(userId);
+    public ResponseEntity<ApiResponse<Void>> deleteUser(
+            @PathVariable String userId,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        userService.delete(userId, authUser.userId());
         return ResponseFactory.ok("User deleted successfully.");
     }
 }
