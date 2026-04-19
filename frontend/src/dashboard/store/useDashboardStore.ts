@@ -1,4 +1,3 @@
-// src/features/dashboard/store/useDashboardStore.ts
 import { create } from 'zustand';
 import { dashboardApi } from '../api/dashboardApi';
 
@@ -17,12 +16,12 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   fetchData: async (role: string) => {
     set({ isLoading: true, error: null });
     try {
-      // 🚀 SỬA LỖI Ở ĐÂY: Thêm type ": any" để TypeScript không báo lỗi 'unknown'
       let response: any; 
       
-      if (role.includes('ADMIN')) {
+      // Khớp chính xác với 4 Role trong JSON của bạn
+      if (role === 'SYSTEM_ADMIN') {
         response = await dashboardApi.getAdminMetrics();
-      } else if (role.includes('MANAGER')) {
+      } else if (role === 'MANAGER') {
         response = await dashboardApi.getManagerMetrics();
       } else if (role === 'LEAD') {
         response = await dashboardApi.getLeadMetrics();
@@ -32,7 +31,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
       
       set({ data: response.data, isLoading: false });
     } catch (err: any) {
-      set({ error: err.message || 'Lỗi tải dữ liệu', isLoading: false });
+      set({ error: err.message || 'Lỗi tải dữ liệu Dashboard', isLoading: false });
     }
   }
 }));
