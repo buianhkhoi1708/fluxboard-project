@@ -20,6 +20,5 @@ public interface ActivityRepository extends MongoRepository<ActivityEntity, Stri
     Page<ActivityEntity> findBySourceTypeAndSourceIdAndDeletedFalse(
             ActivitySource sourceType,
             String sourceId,
-            Pageable pageable
-    );
+            Pageable pageable);
 }

@@ -55,7 +55,8 @@ public class ActivityService {
 
     public Page<ActivityResponse> getPageBySource(ActivitySource sourceType, String sourceId, Pageable pageable) {
         String normalizedSourceId = TextUtils.trim(sourceId);
-        return toResponsePage(activityRepository.findBySourceTypeAndSourceIdAndDeletedFalse(sourceType, normalizedSourceId, pageable));
+        return toResponsePage(activityRepository.findBySourceTypeAndSourceIdAndDeletedFalse(sourceType,
+                normalizedSourceId, pageable));
     }
 
     public void logTaskCreated(String taskId, String boardId, String projectId, String actorUserId, String taskTitle) {
@@ -70,8 +71,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                buildMessage("Task created", taskTitle)
-        );
+                buildMessage("Task created", taskTitle));
     }
 
     public void logTaskUpdated(
@@ -82,8 +82,7 @@ public class ActivityService {
             String field,
             String oldValue,
             String newValue,
-            String taskTitle
-    ) {
+            String taskTitle) {
         log(
                 ActivitySource.TASK,
                 taskId,
@@ -95,8 +94,7 @@ public class ActivityService {
                 field,
                 oldValue,
                 newValue,
-                buildMessage("Task updated", taskTitle)
-        );
+                buildMessage("Task updated", taskTitle));
     }
 
     public void logTaskMoved(
@@ -106,8 +104,7 @@ public class ActivityService {
             String actorUserId,
             String oldColumnId,
             String newColumnId,
-            String taskTitle
-    ) {
+            String taskTitle) {
         log(
                 ActivitySource.TASK,
                 taskId,
@@ -119,8 +116,7 @@ public class ActivityService {
                 "columnId",
                 TextUtils.trimToNull(oldColumnId),
                 TextUtils.trimToNull(newColumnId),
-                buildMessage("Task moved", taskTitle)
-        );
+                buildMessage("Task moved", taskTitle));
     }
 
     public void logTaskDeleted(String taskId, String boardId, String projectId, String actorUserId, String taskTitle) {
@@ -135,8 +131,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                buildMessage("Task deleted", taskTitle)
-        );
+                buildMessage("Task deleted", taskTitle));
     }
 
     public void logUserCreated(String userId, String actorUserId, String email, String fullName) {
@@ -151,8 +146,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                "User created: %s (%s)".formatted(display(fullName), display(email))
-        );
+                "User created: %s (%s)".formatted(display(fullName), display(email)));
     }
 
     public void logUserUpdated(String userId, String actorUserId, String field, String oldValue, String newValue) {
@@ -167,8 +161,7 @@ public class ActivityService {
                 TextUtils.trimToNull(field),
                 TextUtils.trimToNull(oldValue),
                 TextUtils.trimToNull(newValue),
-                "User updated"
-        );
+                "User updated");
     }
 
     public void logUserDeleted(String userId, String actorUserId, String email) {
@@ -183,8 +176,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                "User deleted: %s".formatted(display(email))
-        );
+                "User deleted: %s".formatted(display(email)));
     }
 
     public void logProjectCreated(String projectId, String actorUserId, String projectName) {
@@ -199,8 +191,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                buildMessage("Project created", projectName)
-        );
+                buildMessage("Project created", projectName));
     }
 
     public void logProjectUpdated(
@@ -209,8 +200,7 @@ public class ActivityService {
             String field,
             String oldValue,
             String newValue,
-            String projectName
-    ) {
+            String projectName) {
         log(
                 ActivitySource.PROJECT,
                 projectId,
@@ -222,8 +212,7 @@ public class ActivityService {
                 TextUtils.trimToNull(field),
                 TextUtils.trimToNull(oldValue),
                 TextUtils.trimToNull(newValue),
-                buildMessage("Project updated", projectName)
-        );
+                buildMessage("Project updated", projectName));
     }
 
     public void logProjectDeleted(String projectId, String actorUserId, String projectName) {
@@ -238,8 +227,7 @@ public class ActivityService {
                 null,
                 null,
                 null,
-                buildMessage("Project deleted", projectName)
-        );
+                buildMessage("Project deleted", projectName));
     }
 
     public void logProjectMemberAdded(String projectId, String addedUserId, String actorUserId, List<String> roleIds) {
@@ -260,8 +248,7 @@ public class ActivityService {
                 "memberId",
                 null,
                 normalizedAddedUserId,
-                message
-        );
+                message);
     }
 
     public ActivityEntity log(
@@ -275,8 +262,7 @@ public class ActivityService {
             String field,
             String oldValue,
             String newValue,
-            String message
-    ) {
+            String message) {
         if (sourceType == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Activity source type is required.");
         }
@@ -339,8 +325,7 @@ public class ActivityService {
         for (User user : users) {
             result.put(
                     user.getId(),
-                    new ActivityActorResponse(user.getId(), user.getFullName(), user.getAvatarUrl())
-            );
+                    new ActivityActorResponse(user.getId(), user.getFullName(), user.getAvatarUrl()));
         }
 
         return result;
@@ -352,8 +337,7 @@ public class ActivityService {
                 ? null
                 : actors.getOrDefault(
                         actorUserId,
-                        new ActivityActorResponse(actorUserId, "User(%s)".formatted(shortId(actorUserId)), null)
-                );
+                        new ActivityActorResponse(actorUserId, "User(%s)".formatted(shortId(actorUserId)), null));
 
         return new ActivityResponse(
                 entity.getId(),
@@ -370,8 +354,7 @@ public class ActivityService {
                 entity.getNewValue(),
                 entity.getMessage(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
+                entity.getUpdatedAt());
     }
 
     private String buildMessage(String actionLabel, String targetName) {

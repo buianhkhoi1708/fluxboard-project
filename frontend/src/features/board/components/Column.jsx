@@ -1,22 +1,33 @@
 import React, { useState, memo } from 'react';
-import { MoreHorizontal, Plus, Trash2, Flag, Target, User, Calendar, Clock } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2, Flag, Target, User, Calendar, Clock, Check } from 'lucide-react';
 import TaskItem from './TaskItem';
 import { useBoardStore } from '../stores/useBoardStore';
+import { useUserStore } from '../../user/store/useUserStore'; // 🚀 IMPORT KHO TOÀN CỤC
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 const Column = memo(({ list }) => {
-  const { getColumnTotalPoints, addTask, deleteList } = useBoardStore();
+  const { board, getColumnTotalPoints, addTask, deleteList } = useBoardStore();
   
+  // 🚀 Lấy danh sách thành viên dự án để nhét vào form chọn
+  const { userDictionary } = useUserStore();
+  const projectId = board?.projectId || board?.project_id;
+  const projectMembers = Object.values(userDictionary).filter(
+    (user) => projectId && user.project_roles && user.project_roles[projectId]
+  );
+
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPriority, setNewPriority] = useState('Medium');
   const [newPoints, setNewPoints] = useState('');
-  
   const [newStartDate, setNewStartDate] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [newEstimatedDays, setNewEstimatedDays] = useState('');
+  
+  // 🚀 State lưu danh sách ID người được chọn cho Task mới
+  const [newAssignees, setNewAssignees] = useState([]);
+  const [isAssigneeOpen, setIsAssigneeOpen] = useState(false);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -29,6 +40,12 @@ const Column = memo(({ list }) => {
     data: { type: 'List', listId: listId }
   });
 
+  const handleToggleAssignee = (userId) => {
+    setNewAssignees(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
   const handleAddTaskClick = async () => {
     if (newTitle.trim()) {
       await addTask(listId, {
@@ -38,14 +55,18 @@ const Column = memo(({ list }) => {
         story_points: newPoints,
         start_date: newStartDate,
         due_date: newDueDate,
-        estimated_days: newEstimatedDays
+        estimated_days: newEstimatedDays,
+        assignees_user_id: newAssignees // 🚀 Gửi kèm danh sách người lên API
       });
 
+      // Reset form
       setIsAdding(false);
       setNewTitle('');
+      setNewDesc('');
       setNewStartDate('');
       setNewDueDate('');
       setNewEstimatedDays('');
+      setNewAssignees([]);
     }
   };
 
@@ -88,7 +109,41 @@ const Column = memo(({ list }) => {
             <div className="bg-slate-50 border border-slate-200 rounded-lg focus-within:ring-1 focus-within:ring-indigo-400 focus-within:border-indigo-400 transition-all p-1">
               <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Mô tả chi tiết..." rows={2} className="text-xs text-slate-600 bg-transparent border-none outline-none w-full p-1 resize-none custom-scrollbar" />
             </div>
+
+            {/* 🚀 BỘ CHỌN ASSIGNEE MỚI */}
+            <div className="relative">
+              <button 
+                onClick={() => setIsAssigneeOpen(!isAssigneeOpen)}
+                className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 w-full"
+              >
+                <User size={12} className="text-indigo-500" />
+                {newAssignees.length === 0 ? "Gán thành viên" : `Đã chọn ${newAssignees.length} người`}
+              </button>
+              
+              {isAssigneeOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsAssigneeOpen(false)}></div>
+                  <div className="absolute top-full left-0 mt-1 w-full bg-white border border-slate-200 shadow-xl rounded-lg z-50 p-1 max-h-40 overflow-y-auto custom-scrollbar">
+                    {projectMembers.map(member => (
+                      <div 
+                        key={member.id} 
+                        onClick={() => handleToggleAssignee(member.id)}
+                        className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <img src={member.avatar_url || '/default-avatar.png'} className="w-5 h-5 rounded-full object-cover" />
+                          <span className="text-xs text-slate-700">{member.full_name}</span>
+                        </div>
+                        {newAssignees.includes(member.id) && <Check size={14} className="text-indigo-600" />}
+                      </div>
+                    ))}
+                    {projectMembers.length === 0 && <div className="text-xs text-center text-slate-400 p-2">Chưa có thành viên</div>}
+                  </div>
+                </>
+              )}
+            </div>
             
+            {/* Các trường còn lại giữ nguyên */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none"><Calendar size={12} className="text-slate-400" /></div>

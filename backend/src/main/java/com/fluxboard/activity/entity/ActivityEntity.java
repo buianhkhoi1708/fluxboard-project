@@ -10,18 +10,9 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "activities")
 @CompoundIndexes({
-        @CompoundIndex(
-                name = "idx_source_created_active",
-                def = "{'source_type': 1, 'source_id': 1, 'created_at': -1, 'is_deleted': 1}"
-        ),
-        @CompoundIndex(
-                name = "idx_project_created_active",
-                def = "{'project_id': 1, 'created_at': -1, 'is_deleted': 1}"
-        ),
-        @CompoundIndex(
-                name = "idx_task_created_active",
-                def = "{'task_id': 1, 'created_at': -1, 'is_deleted': 1}"
-        )
+        @CompoundIndex(name = "idx_source_created_active", def = "{'source_type': 1, 'source_id': 1, 'created_at': -1, 'is_deleted': 1}"),
+        @CompoundIndex(name = "idx_project_created_active", def = "{'project_id': 1, 'created_at': -1, 'is_deleted': 1}"),
+        @CompoundIndex(name = "idx_task_created_active", def = "{'task_id': 1, 'created_at': -1, 'is_deleted': 1}")
 })
 public class ActivityEntity extends BaseDocument {
 

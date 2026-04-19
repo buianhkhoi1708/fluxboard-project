@@ -15,24 +15,20 @@ import org.springframework.web.bind.annotation.*;
 public class AiController {
 
     private final AiService aiService;
-    @PostMapping("/boards/{boardId}/generate")
-public ResponseEntity<?> generateTasks(
-        @PathVariable String boardId,
-        @RequestBody AiPromptRequest request) { // 🚀 Dùng DTO sếp vừa thêm memberIds
 
-    try {
-        // 🚀 THÊM request.memberIds() VÀO CHỖ NÀY
+    @PostMapping("/boards/{boardId}/generate")
+    public ResponseEntity<ApiResponse<AiTaskResponse>> generateTasks(
+            @PathVariable String boardId,
+            @RequestBody AiPromptRequest request) {
+
+        // Exception (nếu có) sẽ bị đẩy thẳng ra ngoài và được GlobalExceptionHandler xử lý
         AiTaskResponse response = aiService.generateSmartTasks(
-                boardId, 
-                request.projectId(), 
-                request.prompt(), 
-                request.memberIds() // <--- Chìa khóa đây sếp!
+                boardId,
+                request.projectId(),
+                request.prompt(),
+                request.memberIds()
         );
-        
-        return ResponseEntity.ok(response);
-    } catch (Exception e) {
-        return ResponseEntity.badRequest().body(e.getMessage());
+
+        return ResponseFactory.ok("AI tasks generated successfully.", response);
     }
-}
-  
 }
