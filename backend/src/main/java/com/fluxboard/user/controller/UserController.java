@@ -21,7 +21,10 @@ import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.service.UserNotificationPrefService;
 import com.fluxboard.user.service.UserService;
 import jakarta.validation.Valid;
+
 import java.util.List;
+import java.util.Map; // 🚀 Import thêm Map để xử lý JSON linh hoạt
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -36,7 +39,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/users")
@@ -92,7 +94,7 @@ public class UserController {
         return ResponseFactory.ok("User deleted successfully.");
     }
 
-private void verifyUserAccess(String requestedUserId) {
+    private void verifyUserAccess(String requestedUserId) {
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         
         AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
@@ -113,17 +115,38 @@ private void verifyUserAccess(String requestedUserId) {
         throw new AppException(ErrorCode.FORBIDDEN, "Security: You do not have permission to access other users' data!");
     }
 
-    @PostMapping("/{userId}/avatar")
-    public ResponseEntity<ApiResponse<String>> uploadAvatar(
+    @GetMapping("/{userId}/avatar/presigned-url")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getAvatarPresignedUrl(
             @PathVariable String userId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam String fileName,
+            @RequestParam String contentType) {
             
         verifyUserAccess(userId); 
+        
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Only valid image formats are allowed!");
+        }
 
-        String avatarUrl = mediaService.uploadAvatar(file);
-        userService.updateAvatarUrl(userId, avatarUrl);
-        return ResponseFactory.ok("Avatar uploaded successfully.", avatarUrl);
+        Map<String, String> s3Data = mediaService.generatePresignedUrl(fileName, contentType);
+        return ResponseFactory.ok("Presigned URL generated successfully.", s3Data);
     }
+
+    @PutMapping("/{userId}/avatar")
+    public ResponseEntity<ApiResponse<String>> updateAvatarProfile(
+            @PathVariable String userId,
+            @RequestBody Map<String, String> requestBody) {
+            
+        verifyUserAccess(userId); 
+        
+        String avatarUrl = requestBody.get("avatarUrl");
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid image URL!");
+        }
+
+        userService.updateAvatarUrl(userId, avatarUrl);
+        return ResponseFactory.ok("Profile avatar updated successfully.", avatarUrl);
+    }
+    
 
     @GetMapping("/{userId}/notifications/preferences")
     public ResponseEntity<ApiResponse<UserNotificationPrefResponse>> getNotificationPreferences(
