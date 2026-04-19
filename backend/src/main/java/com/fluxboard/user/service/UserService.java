@@ -107,10 +107,12 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         userRepository.save(user);
     }
 
-    /**
-     * Lấy ngữ cảnh nhân sự của một Project để gửi cho AI xử lý.
-     * Fix lỗi static reference bằng cách gọi qua instance projectMemberRepository.
-     */
+    public void updateAvatarUrl(String id, String avatarUrl) {
+        User user = findUserById(id);
+        user.setAvatarUrl(resolveAvatarUrl(avatarUrl));
+        userRepository.save(user);
+    }
+
     public List<String> getAiPersonnelContextByProject(String projectId) {
         List<String> userIds = projectMemberRepository.findByProjectIdAndIsActiveTrue(projectId)
                 .stream()
