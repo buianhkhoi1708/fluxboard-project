@@ -1,19 +1,24 @@
 package com.fluxboard.activity.controller;
 
+import com.fluxboard.activity.dto.request.ActivityFilterRequest;
 import com.fluxboard.activity.dto.response.ActivityResponse;
+import com.fluxboard.activity.enums.ActivityAction;
 import com.fluxboard.activity.enums.ActivitySource;
 import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.rbac.annotation.RequirePermission;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,9 +35,28 @@ public class ActivityController {
     @RequirePermission("ACTIVITY_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivities(
+            @RequestParam(required = false) List<ActivitySource> sourceTypes,
+            @RequestParam(required = false) List<ActivityAction> actions,
+            @RequestParam(required = false) List<String> actorUserIds,
+            @RequestParam(required = false) String sourceId,
+            @RequestParam(required = false) String projectId,
+            @RequestParam(required = false) String boardId,
+            @RequestParam(required = false) String taskId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        Page<ActivityResponse> page = activityService.getPage(pageable);
+        ActivityFilterRequest filter = new ActivityFilterRequest(
+                sourceTypes,
+                actions,
+                actorUserIds,
+                sourceId,
+                projectId,
+                boardId,
+                taskId,
+                from,
+                to);
+        Page<ActivityResponse> page = activityService.getPage(filter, pageable);
         return ResponseFactory.paged("Activities retrieved successfully.", page);
     }
 

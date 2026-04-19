@@ -2,6 +2,7 @@ package com.fluxboard.activity.service;
 
 import com.fluxboard.activity.dto.response.ActivityActorResponse;
 import com.fluxboard.activity.dto.response.ActivityResponse;
+import com.fluxboard.activity.dto.request.ActivityFilterRequest;
 import com.fluxboard.activity.entity.ActivityEntity;
 import com.fluxboard.activity.enums.ActivityAction;
 import com.fluxboard.activity.enums.ActivitySource;
@@ -11,6 +12,7 @@ import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -40,7 +42,13 @@ public class ActivityService {
     }
 
     public Page<ActivityResponse> getPage(Pageable pageable) {
-        return toResponsePage(activityRepository.findByDeletedFalse(pageable));
+        return getPage(null, pageable);
+    }
+
+    public Page<ActivityResponse> getPage(ActivityFilterRequest filter, Pageable pageable) {
+        ActivityFilterRequest normalizedFilter = normalizeFilter(filter);
+        validateFilter(normalizedFilter);
+        return toResponsePage(activityRepository.findByFilter(normalizedFilter, pageable));
     }
 
     public Page<ActivityResponse> getPageByTask(String taskId, Pageable pageable) {
@@ -251,6 +259,58 @@ public class ActivityService {
                 message);
     }
 
+    public void logBoardCreated(String boardId, String projectId, String actorUserId, String boardName) {
+        log(
+                ActivitySource.BOARD,
+                boardId,
+                projectId,
+                boardId,
+                null,
+                actorUserId,
+                ActivityAction.CREATE,
+                null,
+                null,
+                null,
+                buildMessage("Board created", boardName));
+    }
+
+    public void logBoardUpdated(
+            String boardId,
+            String projectId,
+            String actorUserId,
+            String field,
+            String oldValue,
+            String newValue,
+            String boardName) {
+        log(
+                ActivitySource.BOARD,
+                boardId,
+                projectId,
+                boardId,
+                null,
+                actorUserId,
+                ActivityAction.UPDATE,
+                TextUtils.trimToNull(field),
+                TextUtils.trimToNull(oldValue),
+                TextUtils.trimToNull(newValue),
+                buildMessage("Board updated", boardName));
+    }
+
+    public void logBoardDeleted(String boardId, String projectId, String actorUserId, String boardName) {
+        log(
+                ActivitySource.BOARD,
+                boardId,
+                projectId,
+                boardId,
+                null,
+                actorUserId,
+                ActivityAction.DELETE,
+                null,
+                null,
+                null,
+                buildMessage("Board deleted", boardName));
+    }
+
     public ActivityEntity log(
             ActivitySource sourceType,
             String sourceId,
@@ -289,6 +349,32 @@ public class ActivityService {
     private ActivityEntity findById(String activityId) {
         return activityRepository.findByIdAndDeletedFalse(TextUtils.trim(activityId))
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Activity not found."));
+    }
+
+    private ActivityFilterRequest normalizeFilter(ActivityFilterRequest filter) {
+        if (filter == null) {
+            return new ActivityFilterRequest(null, null, null, null, null, null, null, null, null);
+        }
+
+        return new ActivityFilterRequest(
+                normalizeValues(filter.sourceTypes()),
+                normalizeValues(filter.actions()),
+                normalizeIds(filter.actorUserIds()),
+                TextUtils.trimToNull(filter.sourceId()),
+                TextUtils.trimToNull(filter.projectId()),
+                TextUtils.trimToNull(filter.boardId()),
+                TextUtils.trimToNull(filter.taskId()),
+                filter.from(),
+                filter.to());
+    }
+
+    private void validateFilter(ActivityFilterRequest filter) {
+        Instant from = filter.from();
+        Instant to = filter.to();
+
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "'from' must be less than or equal to 'to'.");
+        }
     }
 
     private Page<ActivityResponse> toResponsePage(Page<ActivityEntity> entityPage) {
@@ -393,5 +479,32 @@ public class ActivityService {
             return "unknown";
         }
         return value.length() <= 6 ? value : value.substring(0, 6);
+    }
+
+    private <T> List<T> normalizeValues(List<T> values) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+
+        List<T> normalized = values.stream()
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private List<String> normalizeIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return null;
+        }
+
+        List<String> normalized = ids.stream()
+                .map(TextUtils::trimToNull)
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+
+        return normalized.isEmpty() ? null : normalized;
     }
 }

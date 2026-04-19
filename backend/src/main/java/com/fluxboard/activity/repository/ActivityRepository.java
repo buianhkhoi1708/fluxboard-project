@@ -7,7 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface ActivityRepository extends MongoRepository<ActivityEntity, String> {
+public interface ActivityRepository extends MongoRepository<ActivityEntity, String>, ActivityRepositoryCustom {
 
     Optional<ActivityEntity> findByIdAndDeletedFalse(String id);
 
