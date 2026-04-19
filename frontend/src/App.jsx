@@ -11,9 +11,8 @@ import LoginPage from "./pages/LoginPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-
-// 🚀 1. Import trang SettingsPage vào đây
 import SettingsPage from "./pages/SettingsPage";
+import DashboardPage from "./pages/DashboardPage";
 
 function App() {
   return (
@@ -32,7 +31,7 @@ function App() {
               <Route path="/adminrbac" element={<AdminRBACPage />} />
               
               <Route path="/settings" element={<SettingsPage />} />
-              
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/workspaces" element={<WorkspacesPage />} />
               <Route path="/board/:id" element={<BoardView />} />
               <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />}/>
