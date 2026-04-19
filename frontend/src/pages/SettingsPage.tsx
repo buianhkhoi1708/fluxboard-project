@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ChangePasswordForm from '../features/board/components/ChangePasswordForm';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
-// 🚀 1. Import userApi vào đây
 import { userApi } from '../features/user/api/userApi';
 
 const SettingsPage = () => {
@@ -72,12 +71,10 @@ const ProfileTab = () => {
   const [name, setName] = useState(user?.full_name || '');
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || `https://ui-avatars.com/api/?name=${name || 'User'}&background=random`);
   
-  // 🚀 2. Thêm state lưu file thực tế và thông báo UI
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Đồng bộ data khi user load xong
   useEffect(() => {
     if (user) {
       setName(user.full_name || '');
@@ -88,37 +85,42 @@ const ProfileTab = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFile(file); // Lưu lại file để đẩy lên API
+      setSelectedFile(file); 
       const imageUrl = URL.createObjectURL(file);
-      setAvatarPreview(imageUrl); // Preview tạm thời
+      setAvatarPreview(imageUrl); 
     }
   };
 
-  // 🚀 3. Logic gọi API thật
+  // 🚀 LOGIC GỌI API ĐÃ ĐƯỢC ĐỒNG BỘ VỚI BACKEND JAVA
   const handleSave = async () => {
     setIsSaving(true);
     setMessage({ type: '', text: '' });
 
+    if (!user?.id) {
+      setMessage({ type: 'error', text: 'Không tìm thấy ID người dùng.' });
+      setIsSaving(false);
+      return;
+    }
+
     try {
-      // Dùng FormData để gửi cả chữ và file
-      const formData = new FormData();
-      formData.append('full_name', name); // Sửa key 'full_name' hoặc 'name' cho khớp với backend của bạn
-      
+      // 1. CẬP NHẬT TÊN (Gửi JSON)
+      // Dùng hàm updateUser của userApi (ánh xạ tới PUT /users/{userId})
+      await userApi.updateUser(user.id, { full_name: name });
+
+      let newAvatarUrl = avatarPreview;
+
+      // 2. NẾU CÓ CHỌN ẢNH MỚI THÌ GỌI API UPLOAD ẢNH (Gửi FormData)
+      // Dùng hàm uploadAvatar của userApi (ánh xạ tới POST /users/{userId}/avatar)
       if (selectedFile) {
-        formData.append('avatar', selectedFile);
+        const uploadResponse = await userApi.uploadAvatar(user.id, selectedFile);
+        newAvatarUrl = uploadResponse.data?.data || uploadResponse.data;
       }
 
-      // Gọi API lên Backend
-      const response = await userApi.updateProfile(formData);
-      
-      // Giả sử Backend trả về data user mới nhất có chứa link ảnh mới (response.data.avatar_url)
-      const updatedAvatarUrl = response.data?.avatar_url || avatarPreview;
-
-      // Cập nhật lại Zustand Global Store để Navbar/Sidebar tự đổi ảnh theo
-      updateUserProfile({ full_name: name, avatar_url: updatedAvatarUrl });
+      // 3. Cập nhật Zustand Store
+      updateUserProfile({ full_name: name, avatar_url: newAvatarUrl });
       
       setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
-      setSelectedFile(null); // Clear file sau khi upload xong
+      setSelectedFile(null); 
       
     } catch (error: any) {
       console.error("Lỗi cập nhật profile:", error);
@@ -135,7 +137,6 @@ const ProfileTab = () => {
     <div className="max-w-2xl animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800 mb-8">Hồ sơ cá nhân</h2>
       
-      {/* 🚀 4. Khung hiển thị báo lỗi/thành công */}
       {message.text && (
         <div className={`p-3 mb-6 rounded-xl text-sm font-medium border ${
           message.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
