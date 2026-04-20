@@ -120,6 +120,12 @@ public class UserController {
             @PathVariable String userId,
             @RequestParam String fileName,
             @RequestParam String contentType) {
+
+        if ("me".equals(userId)) {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        userId = currentUser.userId();
+        }
             
         verifyUserAccess(userId); 
         
@@ -135,6 +141,12 @@ public class UserController {
     public ResponseEntity<ApiResponse<String>> updateAvatarProfile(
             @PathVariable String userId,
             @RequestBody Map<String, String> requestBody) {
+
+        if ("me".equals(userId)) {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        userId = currentUser.userId();
+        }
             
         verifyUserAccess(userId); 
         
