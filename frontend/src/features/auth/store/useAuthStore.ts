@@ -9,6 +9,7 @@ export interface UserProfile {
   avatar_url?: string | null;
   department?: string | null;
   system_role?: string;
+  role_id?: string;
   // Bạn có thể thêm các trường khác ở đây nếu API trả về thêm (vd: phone, status...)
 }
 

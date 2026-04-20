@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ChangePasswordForm from '../features/board/components/ChangePasswordForm';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
 import { userApi } from '../features/user/api/userApi';
+import { useRbacStore } from '../features/rbac/store/useRbacStore'; 
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
@@ -63,10 +64,13 @@ const SettingsPage = () => {
 };
 
 // ==========================================
-// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN (ĐÃ NỐI API)
+// COMPONENT TAB 1: HỒ SƠ CÁ NHÂN
 // ==========================================
 const ProfileTab = () => {
   const { user, updateUserProfile } = useAuthStore();
+  
+  // 🚀 2. Lấy danh sách roles và hàm fetch từ RBAC Store
+  const { roles, fetchInitialData } = useRbacStore();
 
   const [name, setName] = useState(user?.full_name || '');
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || `https://ui-avatars.com/api/?name=${name || 'User'}&background=random`);
@@ -75,12 +79,31 @@ const ProfileTab = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  // 🚀 3. Tự động load danh sách Roles nếu chưa có
+  useEffect(() => {
+    if (roles.length === 0) {
+      fetchInitialData();
+    }
+  }, [roles.length, fetchInitialData]);
+
+  // Đồng bộ data từ Auth Store
   useEffect(() => {
     if (user) {
       setName(user.full_name || '');
       if (user.avatar_url) setAvatarPreview(user.avatar_url);
     }
   }, [user]);
+
+  // 🚀 4. Logic bóc tách tên Role thật từ danh sách Roles
+  // Dò tìm role trong mảng roles có id hoặc name khớp với system_role / role_id của user
+  const matchedRole = roles.find((r: any) => 
+    r.id === user?.role_id || 
+    r.name === user?.system_role || 
+    r.id === user?.system_role
+  );
+  
+  // Nếu tìm thấy thì hiển thị tên chuẩn, nếu không thì dùng tên thô từ Backend, bí quá thì để "Chưa xác định"
+  const displayRoleName = matchedRole?.name || user?.system_role || 'Chưa xác định';
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,7 +114,6 @@ const ProfileTab = () => {
     }
   };
 
-  // 🚀 LOGIC GỌI API ĐÃ ĐƯỢC ĐỒNG BỘ VỚI BACKEND JAVA
   const handleSave = async () => {
     setIsSaving(true);
     setMessage({ type: '', text: '' });
@@ -103,20 +125,14 @@ const ProfileTab = () => {
     }
 
     try {
-      // 1. CẬP NHẬT TÊN (Gửi JSON)
-      // Dùng hàm updateUser của userApi (ánh xạ tới PUT /users/{userId})
       await userApi.updateUser(user.id, { full_name: name });
 
       let newAvatarUrl = avatarPreview;
-
-      // 2. NẾU CÓ CHỌN ẢNH MỚI THÌ GỌI API UPLOAD ẢNH (Gửi FormData)
-      // Dùng hàm uploadAvatar của userApi (ánh xạ tới POST /users/{userId}/avatar)
       if (selectedFile) {
         const uploadResponse = await userApi.uploadAvatar(user.id, selectedFile);
         newAvatarUrl = uploadResponse.data?.data || uploadResponse.data;
       }
 
-      // 3. Cập nhật Zustand Store
       updateUserProfile({ full_name: name, avatar_url: newAvatarUrl });
       
       setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
@@ -166,7 +182,6 @@ const ProfileTab = () => {
           />
         </div>
 
-        {/* Các trường Read-only được làm màu xám nhạt tự nhiên */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
@@ -178,7 +193,8 @@ const ProfileTab = () => {
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Vai trò (Role)</label>
-            <input type="text" value={user?.system_role || 'ADMIN'} readOnly className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" />
+            {/* 🚀 5. Đưa tên Role chuẩn đã bóc tách được vào UI */}
+            <input type="text" value={displayRoleName} readOnly className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" />
           </div>
         </div>
 
@@ -201,7 +217,10 @@ const ProfileTab = () => {
     </div>
   );
 };
+
+// ==========================================
 // COMPONENT TAB 3: THÔNG BÁO 
+// ==========================================
 const NotificationTab = () => {
   const [toggles, setToggles] = useState({
     tasks: true,
