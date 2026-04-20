@@ -6,7 +6,6 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
 
 public interface TaskRepository extends MongoRepository<TaskEntity, String> {
 
@@ -26,9 +25,6 @@ public interface TaskRepository extends MongoRepository<TaskEntity, String> {
             String columnId,
             int order
     );
-
-    @Query("{ 'project_id': ?0, 'status': ?1, 'ai_suggested_point': { $exists: true, $ne: null } }")
-    List<TaskEntity> findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(String projectId, String status);
 
     List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(String columnId, int order);
 }
