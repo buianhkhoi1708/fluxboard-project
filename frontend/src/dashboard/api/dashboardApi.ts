@@ -4,20 +4,33 @@
 // import axiosClient from '../../../lib/axiosClient';
 
 const mockData = {
-  SYSTEM_ADMIN: {
+ SYSTEM_ADMIN: {
     cards: {
-      total_users: 1248,
-      active_projects: 64,
-      total_departments: 12
+      total_users: 1250,
+      total_members: 1034, // Những người đang có dự án
+      projects: {
+        active: 45,
+        archived: 10,
+        total: 55
+      },
+      total_departments: 15
     },
+    // Danh sách dự án đang bị báo động đỏ (At Risk)
+    at_risk_projects: [
+      { id: 'P1', name: 'Domnimors', status: 'At Risk' },
+      { id: 'P2', name: 'Transparency status', status: 'At Risk' },
+      { id: 'P3', name: 'Project projects', status: 'At Risk' }
+    ],
+    // Dữ liệu cho Bar Chart
     project_status_distribution: [
-      { status: "ON_TRACK", count: 45, color: "#10b981" },
-      { status: "AT_RISK", count: 12, color: "#f59e0b" },
-      { status: "DELAYED", count: 7, color: "#ef4444" }
+      { status: "Active", count: 45, color: "#3b82f6" },   // Màu xanh dương
+      { status: "At Risk", count: 12, color: "#10b981" },  // Màu xanh lá
+      { status: "Delayed", count: 7, color: "#f59e0b" },   // Màu cam
+      { status: "Archived", count: 10, color: "#64748b" }  // Màu xám
     ],
     audit_logs: [
-      { id: "LOG_001", actor_name: "Hán Long", action: "UPDATE_ROLE", target: "User Dev_01 to MANAGER", created_at: "2026-04-19T10:00:00Z", severity: "WARNING" },
-      { id: "LOG_002", actor_name: "System", action: "DELETE_PROJECT", target: "Project 'Old_Marketing_2024'", created_at: "2026-04-19T09:00:00Z", severity: "CRITICAL" }
+      { id: "LOG_1", action: "Admin changed user roles for Team Alpha", actor: "System" },
+      { id: "LOG_2", action: "User 123 deleted project archives", actor: "User 123" }
     ]
   },
   MANAGER: {
