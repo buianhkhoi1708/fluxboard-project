@@ -1,6 +1,8 @@
 package com.fluxboard.board.task.repository;
 
 import com.fluxboard.board.task.entity.TaskEntity;
+
+import java.time.Instant; 
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -31,4 +33,7 @@ public interface TaskRepository extends MongoRepository<TaskEntity, String> {
     List<TaskEntity> findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(String projectId, String status);
 
     List<TaskEntity> findByColumnIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(String columnId, int order);
+
+    @Query("{ 'status': { $ne: 'DONE' }, 'is_deleted': false, 'due_date': { $gte: ?0, $lte: ?1 } }")
+    List<TaskEntity> findTasksApproachingDeadline(Instant start, Instant end);
 }

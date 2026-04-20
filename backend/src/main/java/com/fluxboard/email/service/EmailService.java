@@ -20,6 +20,9 @@ public class EmailService {
         this.javaMailSender = javaMailSender;
     }
 
+    // =======================================================================
+    // CODE CŨ CỦA BẠN (Gửi mail Reset Password) - GIỮ NGUYÊN 100%
+    // =======================================================================
     public void sendPasswordResetEmail(String toEmail, String resetLink) {
         CompletableFuture.runAsync(() -> {
             try {
@@ -50,6 +53,23 @@ public class EmailService {
                 javaMailSender.send(message);
             } catch (Exception e) {
                 System.err.println("Email sending error to " + toEmail + ": " + e.getMessage());
+            }
+        });
+    }
+    public void sendHtmlEmail(String toEmail, String subject, String htmlContent) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                MimeMessage message = javaMailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+                helper.setFrom(systemEmail);
+                helper.setTo(toEmail);
+                helper.setSubject(subject);
+                helper.setText(htmlContent, true);
+
+                javaMailSender.send(message);
+            } catch (Exception e) {
+                System.err.println("Notification Email sending error to " + toEmail + ": " + e.getMessage());
             }
         });
     }
