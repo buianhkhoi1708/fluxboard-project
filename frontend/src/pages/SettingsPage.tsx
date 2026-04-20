@@ -178,7 +178,7 @@ const ProfileTab = () => {
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Vai trò (Role)</label>
-            <input type="text" value={user?.system_role || 'MEMBER'} readOnly className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" />
+            <input type="text" value={user?.system_role || 'ADMIN'} readOnly className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" />
           </div>
         </div>
 
@@ -201,10 +201,7 @@ const ProfileTab = () => {
     </div>
   );
 };
-
-// ==========================================
-// COMPONENT TAB 3: THÔNG BÁO (TOGGLE UI)
-// ==========================================
+// COMPONENT TAB 3: THÔNG BÁO 
 const NotificationTab = () => {
   const [toggles, setToggles] = useState({
     tasks: true,
