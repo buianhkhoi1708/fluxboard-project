@@ -1,38 +1,80 @@
 import { create } from 'zustand';
 import { projectApi } from '../api/projectApi';
+import { useUserStore, IncomingUser } from '../../user/store/useUserStore'; 
 
-const useProjectStore = create((set) => ({
+// ==========================================
+// 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU (INTERFACES)
+// ==========================================
+
+export interface Project {
+  id?: string;
+  _id?: string;
+  name?: string;
+  is_deleted?: boolean;
+  [key: string]: any; // Mở rộng nếu Backend trả thêm field
+}
+
+export interface Board {
+  id?: string;
+  _id?: string;
+  name?: string;
+  [key: string]: any;
+}
+
+export interface NormalizedProject {
+  project: Project;
+  boards: Board[];
+  members: IncomingUser[]; // Dùng Type của User để xài chung
+}
+
+interface ProjectStore {
+  projects: NormalizedProject[];
+  isLoading: boolean;
+  fetchProjects: () => Promise<void>;
+  addProject: (newProject: Project) => void;
+  addBoardToProject: (projectId: string, newBoard: Board) => void;
+  fetchProjectMembers: (projectId: string) => Promise<void>;
+}
+
+// ==========================================
+// 2. LOGIC STORE
+// ==========================================
+
+const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [], 
   isLoading: false,
 
   fetchProjects: async () => {
     set({ isLoading: true });
     try {
-      // MỚI: Đổi thành getProjectOverviews
-const response = await projectApi.getProjectOverviews({ page: 0, size: 50 });
+      const response = await projectApi.getProjectOverviews({ page: 0, size: 50 });
       if (response.success) {
-        const rawData = response.data.content || response.data;
+        // Ép kiểu (as any) tạm thời để bắt linh hoạt các dạng response
+        const rawData: any[] = (response.data as any)?.content || response.data;
         
-        // 🚀 BƯỚC 1: CHUẨN HÓA DỮ LIỆU (Bao sân cả 2 loại Backend)
-        const normalizedProjects = rawData.map(item => {
-          // Nếu backend ĐÃ cập nhật DTO mới (có cục project bên trong)
-          if (item.project) {
-            return item; 
-          }
-          // Nếu backend VẪN dùng DTO cũ (bản thân item chính là project)
+        const normalizedProjects: NormalizedProject[] = rawData.map(item => {
+          if (item.project) return item; 
           return {
             project: item, 
-            boards: item.boards || [] // Nếu API chưa gộp boards thì để mảng rỗng
+            boards: item.boards || [],
+            members: item.members || [] 
           };
         });
 
-        // 👉 BƯỚC 2: LỌC DỮ LIỆU ĐÃ CHUẨN HÓA
         const activeProjects = normalizedProjects.filter(item => {
           const p = item.project;
           return p && (p.is_deleted === false || p.is_deleted === undefined);
         });
         
         set({ projects: activeProjects });
+
+        // TỰ ĐỘNG GỌI MEMBER CHO TỪNG PROJECT
+        activeProjects.forEach(item => {
+          const pid = item.project?.id || item.project?._id;
+          if (pid) {
+            get().fetchProjectMembers(pid); 
+          }
+        });
       }
     } catch (error) {
       console.error("Store Fetch Error:", error);
@@ -42,7 +84,7 @@ const response = await projectApi.getProjectOverviews({ page: 0, size: 50 });
   },
 
   addProject: (newProject) => set((state) => ({ 
-    projects: [{ project: newProject, boards: [] }, ...state.projects] 
+    projects: [{ project: newProject, boards: [], members: [] }, ...state.projects] 
   })),
 
   addBoardToProject: (projectId, newBoard) => set((state) => ({
@@ -56,6 +98,30 @@ const response = await projectApi.getProjectOverviews({ page: 0, size: 50 });
       return item;
     })
   })),
+
+  fetchProjectMembers: async (projectId) => {
+    try {
+      const response = await projectApi.getProjectMembers(projectId);
+      const membersData: IncomingUser[] = (response.data as any)?.content || (response.data as any)?.data || response.data || [];
+
+      // 🚀 BƯỚC QUAN TRỌNG NHẤT: Bơm data vào Kho Toàn Cục!
+      // Việc này giúp thẻ Task ở bên trong Board nhận diện được Avatar lập tức
+      useUserStore.getState().saveUsersToCache(membersData, projectId);
+
+      // Cập nhật vào mảng projects của Workspaces
+      set((state) => ({
+        projects: state.projects.map((item) => {
+          if (item.project && (item.project.id === projectId || item.project._id === projectId)) {
+            return { ...item, members: membersData };
+          }
+          return item; 
+        })
+      }));
+    } catch (error) {
+      console.error(`Lỗi khi lấy member cho project ${projectId}:`, error);
+    }
+  }
+
 }));
 
 export default useProjectStore;

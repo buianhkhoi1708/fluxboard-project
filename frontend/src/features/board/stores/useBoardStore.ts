@@ -1,22 +1,26 @@
 import { create } from 'zustand';
 import { boardApi } from '../api/boardApi';
+import { useUserStore } from '../../user/store/useUserStore'; // 🚀 Import Kho Toàn Cục
 
 interface IBoardState {
   board: any | null; 
   isLoading: boolean; 
-  projectMembers: any[]; // ✅ Mới: Danh bạ thành viên
+  // Đã xóa sạch projectMembers, fetchProjectMembers, và getMemberById cho nhẹ Store
+  
   fetchBoardData: (boardId: string) => Promise<void>;
-  fetchProjectMembers: (projectId: string) => Promise<void>; // ✅ Mới
-  getMemberById: (userId: string) => any; // ✅ Mới
   setBoard: (newBoard: any) => void; 
+  
   addList: (listName: string) => void;
   deleteList: (columnId: string) => void;
+  
   addTask: (columnId: string, taskData: any) => Promise<void>;
   deleteTask: (columnId: string, taskId: string) => void;
   updateTask: (columnId: string, taskId: string, updates: any) => void;
+  updateTaskPositionApi: (taskId: string, newColumnId: string, newOrder: number) => Promise<void>;
+  
   addSubtask: (columnId: string, parentTaskId: string, title: string) => Promise<void>; 
   toggleSubtask: (columnId: string, parentTaskId: string, subtaskId: string) => void;
-  updateTaskPositionApi: (taskId: string, newColumnId: string, newOrder: number) => Promise<void>;
+  
   getColumnTotalPoints: (columnId: string) => number;
   getBoardTotalPoints: () => number;
 }
@@ -24,32 +28,33 @@ interface IBoardState {
 export const useBoardStore = create<IBoardState>((set, get) => ({
   board: null, 
   isLoading: false,
-  projectMembers: [], // Khởi tạo mảng rỗng
 
+  // ==========================================
+  // 1. DATA FETCHING & SYNC
+  // ==========================================
+  
   fetchBoardData: async (boardId: string) => {
     set({ isLoading: true });
     try {
       const response = await boardApi.getBoard(boardId);
       
-      // 🚀 BƯỚC 1: Lột vỏ ApiResponse triệt để
       let coreData = response;
-      // Cứ hễ còn bọc trong field 'data' mà chưa thấy 'projectId' thì ta lột tiếp
       while (coreData && coreData.data && !coreData.projectId && !coreData.project_id) {
         coreData = coreData.data;
       }
-      
-      console.log("🔍 Dữ liệu Board sau khi bóc tách:", coreData);
 
-      // 🚀 BƯỚC 2: Kiểm tra Project ID (Thử cả 2 kiểu đặt tên cho chắc)
       const projectId = coreData?.projectId || coreData?.project_id;
 
       if (projectId) {
-        console.log("🎯 Đã thấy Project ID:", projectId);
-        // Gọi hàm fetch member từ project_members
-        get().fetchProjectMembers(projectId);
-      } else {
-        // Nếu sếp vẫn thấy log này, sếp hãy nhìn console.log ở trên xem object coreData đang có gì
-        console.warn("💀 Vẫn không thấy Project ID. Object keys hiện có:", Object.keys(coreData || {}));
+        // 🚀 BƠM DATA VÀO KHO TOÀN CỤC (Tự động chạy ngầm không cần UI gọi)
+        boardApi.getProjectMembers(projectId)
+          .then(res => {
+            // Xử lý linh hoạt vỏ bọc của API
+            const members = (res as any)?.data?.content || (res as any)?.data || res || [];
+            // Bắn data sang Kho Toàn Cục
+            useUserStore.getState().saveUsersToCache(members, projectId);
+          })
+          .catch(err => console.error("❌ Lỗi đồng bộ danh bạ dự án:", err));
       }
 
       set({ board: coreData, isLoading: false });
@@ -59,63 +64,36 @@ export const useBoardStore = create<IBoardState>((set, get) => ({
     }
   },
 
-  // 🚀 MỚI: Hàm fetch danh sách thành viên dự án
-  fetchProjectMembers: async (projectId: string) => {
-    try {
-      const response = await boardApi.getProjectMembers(projectId);
-      const members = response?.data || response || [];
-      set({ projectMembers: members });
-    } catch (error) {
-      console.error("❌ Lỗi fetchProjectMembers:", error);
-    }
-  },
-
-  // 🚀 MỚI: Hàm tra cứu nhanh thông tin từ ID
-getMemberById: (userId: string) => {
-    const { projectMembers } = get();
-    if (!projectMembers || projectMembers.length === 0) return null;
-
-    // Tìm member khớp ID
-    const member = projectMembers.find((m: any) => 
-      m.id === userId || m._id === userId
-    );
-
-    if (member) {
-      // 🚀 FIX Ở ĐÂY: Ưu tiên lấy full_name vì Backend đang trả về thế kia
-      return {
-        ...member,
-        name: member.full_name || member.fullName || member.name || "Unnamed",
-        avatar: member.avatar_url || member.avatarUrl
-      };
-    }
-
-    return null;
-  },
-
-  updateTaskPositionApi: async (taskId: string, newColumnId: string, newOrder: number) => {
-    try {
-      const board = get().board;
-      const boardId = board?.id || board?._id;
-      if (!boardId) return;
-      await boardApi.moveTask(taskId, newColumnId, newOrder, boardId);
-    } catch (error) {
-      const currentBoardId = get().board?.id || get().board?._id;
-      if (currentBoardId) get().fetchBoardData(currentBoardId); 
-    }
-  },
-
   setBoard: (newBoard) => set({ board: newBoard }),
+
+  // ==========================================
+  // 2. COLUMN (LIST) ACTIONS
+  // ==========================================
 
   addList: (listName) => set((state) => {
     if (!state.board) return state;
-    const newColumn = { id: `col-${Date.now()}`, list_name: listName, order: (state.board.columns?.length || 0) + 1, tasks: [] };
+    const newColumn = { 
+      id: `col-${Date.now()}`, 
+      list_name: listName, 
+      order: (state.board.columns?.length || 0) + 1, 
+      tasks: [] 
+    };
     return { board: { ...state.board, columns: [...(state.board.columns || []), newColumn] } };
   }),
 
   deleteList: (columnId) => set((state) => {
     if (!state.board) return state;
-    return { board: { ...state.board, columns: state.board.columns.filter((c: any) => c.id !== columnId && c._id !== columnId) } };
+    return { 
+      board: { 
+        ...state.board, 
+        columns: state.board.columns.filter((c: any) => c.id !== columnId && c._id !== columnId) 
+      } 
+    };
   }),
+
+  // ==========================================
+  // 3. TASK ACTIONS
+  // ==========================================
 
   addTask: async (columnId: string, taskData: any) => {
     try {
@@ -140,6 +118,8 @@ getMemberById: (userId: string) => {
   deleteTask: async (columnId, taskId) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
+    
+    // Optimistic Update
     set((state: any) => ({
       board: {
         ...state.board,
@@ -150,6 +130,7 @@ getMemberById: (userId: string) => {
         )
       }
     }));
+    
     try {
       await boardApi.deleteTask(taskId);
     } catch (error) {
@@ -160,6 +141,7 @@ getMemberById: (userId: string) => {
   updateTask: async (columnId, taskId, updates) => {
     const { board, fetchBoardData } = get();
     if (!board) return;
+    
     const col = board.columns?.find((c: any) => c.id === columnId || c._id === columnId);
     const task = col?.tasks?.find((t: any) => t.id === taskId || t._id === taskId);
     if (!task) return;
@@ -183,6 +165,22 @@ getMemberById: (userId: string) => {
       fetchBoardData(board.id || board._id); 
     }
   },
+
+  updateTaskPositionApi: async (taskId: string, newColumnId: string, newOrder: number) => {
+    try {
+      const board = get().board;
+      const boardId = board?.id || board?._id;
+      if (!boardId) return;
+      await boardApi.moveTask(taskId, newColumnId, newOrder, boardId);
+    } catch (error) {
+      const currentBoardId = get().board?.id || get().board?._id;
+      if (currentBoardId) get().fetchBoardData(currentBoardId); 
+    }
+  },
+
+  // ==========================================
+  // 4. SUBTASK ACTIONS
+  // ==========================================
 
   addSubtask: async (columnId: string, parentTaskId: string, title: string) => {
     try {
@@ -231,6 +229,10 @@ getMemberById: (userId: string) => {
       console.error("❌ Lỗi update subtask:", error);
     }
   },
+
+  // ==========================================
+  // 5. GETTERS (TÍNH TOÁN)
+  // ==========================================
 
   getColumnTotalPoints: (columnId) => {
     const board = get().board;
