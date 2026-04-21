@@ -1,14 +1,30 @@
 package com.fluxboard.user.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import com.fluxboard.activity.dto.response.LoginHistoryResponse;
+import com.fluxboard.activity.service.ActivityService;
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser; 
 import com.fluxboard.common.dto.ApiResponse;
+import com.fluxboard.common.exception.AppException;
+import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.media.service.MediaService;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import com.fluxboard.user.dto.request.CreateUserRequest;
+import com.fluxboard.user.dto.request.UpdateNotificationPrefRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.dto.response.UserResponse;
+import com.fluxboard.user.service.UserNotificationPrefService;
 import com.fluxboard.user.service.UserService;
 import jakarta.validation.Valid;
+
 import java.util.List;
+import java.util.Map; // 🚀 Import thêm Map để xử lý JSON linh hoạt
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -21,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -28,9 +45,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final MediaService mediaService;
+    private final UserNotificationPrefService notificationPrefService;
+    private final ActivityService activityService;
 
-    public UserController(UserService userService) {
+    public UserController(
+            UserService userService,
+            MediaService mediaService,
+            UserNotificationPrefService notificationPrefService,
+            ActivityService activityService) {
         this.userService = userService;
+        this.mediaService = mediaService;
+        this.notificationPrefService = notificationPrefService;
+        this.activityService = activityService;
     }
 
     @PostMapping
@@ -65,5 +92,109 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String userId) {
         userService.delete(userId);
         return ResponseFactory.ok("User deleted successfully.");
+    }
+
+    private void verifyUserAccess(String requestedUserId) {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Security: Please log in first!");
+        }
+
+        if (requestedUserId.equals(currentUser.userId())) {
+            return;
+        }
+
+        String roleName = String.valueOf(currentUser.roleId());
+        if (roleName.contains("ADMIN")) {
+            return; 
+        }
+        
+        throw new AppException(ErrorCode.FORBIDDEN, "Security: You do not have permission to access other users' data!");
+    }
+
+    @GetMapping("/{userId}/avatar/presigned-url")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getAvatarPresignedUrl(
+            @PathVariable String userId,
+            @RequestParam String fileName,
+            @RequestParam String contentType) {
+
+        if ("me".equals(userId)) {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        userId = currentUser.userId();
+        }
+            
+        verifyUserAccess(userId); 
+        
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Only valid image formats are allowed!");
+        }
+
+        Map<String, String> s3Data = mediaService.generatePresignedUrl(fileName, contentType);
+        return ResponseFactory.ok("Presigned URL generated successfully.", s3Data);
+    }
+
+    @PutMapping("/{userId}/avatar")
+    public ResponseEntity<ApiResponse<String>> updateAvatarProfile(
+            @PathVariable String userId,
+            @RequestBody Map<String, String> requestBody) {
+
+        if ("me".equals(userId)) {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        userId = currentUser.userId();
+        }
+            
+        verifyUserAccess(userId); 
+        
+        String avatarUrl = requestBody.get("avatarUrl");
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid image URL!");
+        }
+
+        userService.updateAvatarUrl(userId, avatarUrl);
+        return ResponseFactory.ok("Profile avatar updated successfully.", avatarUrl);
+    }
+    
+
+    @GetMapping("/{userId}/notifications/preferences")
+    public ResponseEntity<ApiResponse<UserNotificationPrefResponse>> getNotificationPreferences(
+            @PathVariable String userId) {
+            
+        verifyUserAccess(userId);
+
+        return ResponseFactory.ok(
+                "Notification preferences retrieved.", 
+                notificationPrefService.getPreferencesByUserId(userId)
+        );
+    }
+
+    @PutMapping("/{userId}/notifications/preferences")
+    public ResponseEntity<ApiResponse<UserNotificationPrefResponse>> updateNotificationPreferences(
+            @PathVariable String userId,
+            @Valid @RequestBody UpdateNotificationPrefRequest request) {
+            
+        verifyUserAccess(userId);
+
+        return ResponseFactory.ok(
+                "Notification preferences updated.", 
+                notificationPrefService.updatePreferences(userId, request)
+        );
+    }
+
+    @GetMapping("/{userId}/activities/logins")
+    public ResponseEntity<ApiResponse<List<LoginHistoryResponse>>> getLoginHistories(
+            @PathVariable String userId,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        verifyUserAccess(userId); 
+            
+        return ResponseFactory.ok(
+                "Login histories retrieved successfully.", 
+                activityService.getLoginHistories(userId, pageable)
+        );
     }
 }

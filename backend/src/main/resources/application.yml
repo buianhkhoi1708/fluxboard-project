@@ -29,6 +29,10 @@ spring:
   web:
     resources:
       add-mappings: false
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 server:
   address: ${SERVER_HOST:localhost}
@@ -41,6 +45,13 @@ management:
     web:
       exposure:
         include: health,info
+
+aws:
+  s3:
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+    region: ${AWS_REGION}
+    bucket-name: ${AWS_S3_BUCKET}
 
 auth:
   jwt:
