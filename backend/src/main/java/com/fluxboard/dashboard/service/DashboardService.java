@@ -58,14 +58,12 @@ public class DashboardService {
         Map<String, Object> data = new HashMap<>();
         Map<String, String> userNames = getUserNameMap();
 
-        // 1.1 Cards
         Map<String, Object> cards = new HashMap<>();
         cards.put("total_users", userRepository.countByDeletedFalse());
         cards.put("active_projects", projectRepository.countByDeletedFalse());
         cards.put("total_departments", 5); 
         data.put("cards", cards);
 
-        // 1.2 Project Status Distribution
         List<ProjectEntity> projects = projectRepository.findByDeletedFalse();
         Map<String, Long> statusCount = projects.stream()
                 .filter(p -> p.getStatus() != null)
@@ -81,7 +79,6 @@ public class DashboardService {
         });
         data.put("project_status_distribution", projectDistribution);
 
-        // 1.3 Audit Logs
         List<ActivityEntity> recentActivities = activityRepository.findTop10ByOrderByCreatedAtDesc();
         List<Map<String, Object>> auditLogs = recentActivities.stream().map(act -> {
             Map<String, Object> log = new HashMap<>();
@@ -104,7 +101,6 @@ public class DashboardService {
         Map<String, Object> data = new HashMap<>();
         List<TaskEntity> allTasks = taskRepository.findByDeletedFalse();
 
-        // 2.1 AI vs Actual Points (Những task có đánh giá AI)
         List<Map<String, Object>> aiPoints = allTasks.stream()
                 .filter(t -> t.getAiSuggestedPoint() != null && t.getStoryPoint() != null)
                 .map(t -> {
@@ -114,11 +110,10 @@ public class DashboardService {
                     map.put("actual_point", t.getStoryPoint());
                     return map;
                 })
-                .limit(10) // Lấy 10 task tiêu biểu
+                .limit(10)
                 .collect(Collectors.toList());
         data.put("ai_vs_actual_points", aiPoints);
 
-        // 2.2 Task Completion General
         long totalTasks = allTasks.size();
         long completedTasks = allTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
         double percentage = totalTasks == 0 ? 0 : Math.round(((double) completedTasks / totalTasks) * 100);
@@ -138,7 +133,6 @@ public class DashboardService {
         List<TaskEntity> allTasks = taskRepository.findByDeletedFalse();
         Map<String, String> userNames = getUserNameMap();
 
-        // 3.1 Team Workload (Tổng Story Point đang gánh)
         Map<String, Integer> workloadMap = new HashMap<>();
         for (TaskEntity task : allTasks) {
             if (task.getAssigneesUserId() != null && !"DONE".equalsIgnoreCase(task.getStatus()) && task.getStoryPoint() != null) {
@@ -196,6 +190,16 @@ public class DashboardService {
         List<Map<String, Object>> myFocus = myTasks.stream()
                 .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()))
                 .filter(t -> "HIGH".equalsIgnoreCase(String.valueOf(t.getPriority())) || "CRITICAL".equalsIgnoreCase(String.valueOf(t.getPriority())))
+                .sorted((t1, t2) -> {
+                    // Cả 2 đều không có ngày hạn -> Xem như bằng nhau
+                    if (t1.getDueDate() == null && t2.getDueDate() == null) return 0;
+                    // T1 không có ngày hạn -> Đẩy T1 xuống dưới
+                    if (t1.getDueDate() == null) return 1;
+                    // T2 không có ngày hạn -> Đẩy T2 xuống dưới
+                    if (t2.getDueDate() == null) return -1;
+                    // Cả 2 đều có ngày hạn -> So sánh ngày, ngày nào nhỏ hơn (gần quá khứ hơn) lên đầu
+                    return t1.getDueDate().compareTo(t2.getDueDate());
+                })
                 .map(t -> {
                     Map<String, Object> map = new HashMap<>();
                     map.put("id", t.getId());

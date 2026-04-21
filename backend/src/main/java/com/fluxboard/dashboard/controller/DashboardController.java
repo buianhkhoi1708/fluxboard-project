@@ -7,6 +7,10 @@ import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.dashboard.service.DashboardService;
+
+import com.fluxboard.rbac.entity.RoleEntity;
+import com.fluxboard.rbac.repository.RoleRepository;
+
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,9 +26,11 @@ import java.util.Map;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final RoleRepository roleRepository; 
 
-    public DashboardController(DashboardService dashboardService) {
+    public DashboardController(DashboardService dashboardService, RoleRepository roleRepository) {
         this.dashboardService = dashboardService;
+        this.roleRepository = roleRepository;
     }
 
     @GetMapping("/metrics")
@@ -37,8 +43,14 @@ public class DashboardController {
             throw new AppException(ErrorCode.UNAUTHORIZED, "Security: Please log in to view the Dashboard.");
         }
 
-        String roleName = String.valueOf(currentUser.roleId());
         String currentUserId = currentUser.userId(); 
+        
+        String roleId = currentUser.roleId(); 
+
+        RoleEntity role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User permissions not found."));
+        
+        String roleName = role.getName().name();
 
         Map<String, Object> metrics = dashboardService.getDashboardMetrics(roleName, currentUserId);
 
