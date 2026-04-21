@@ -36,4 +36,8 @@ public interface TaskRepository extends MongoRepository<TaskEntity, String> {
 
     @Query("{ 'status': { $ne: 'DONE' }, 'is_deleted': false, 'due_date': { $gte: ?0, $lte: ?1 } }")
     List<TaskEntity> findTasksApproachingDeadline(Instant start, Instant end);
+
+    List<TaskEntity> findByDeletedFalse();
+    
+    List<TaskEntity> findByAssigneesUserIdContainingAndDeletedFalse(String userId);
 }

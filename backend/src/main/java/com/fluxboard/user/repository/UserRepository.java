@@ -26,4 +26,6 @@ public interface UserRepository extends MongoRepository<User, String> {
     boolean existsByIdAndDeletedFalse(String id);
     
     Optional<User> findByResetTokenAndDeletedFalse(String resetToken);
+
+    long countByDeletedFalse();
 }
