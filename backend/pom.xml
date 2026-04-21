@@ -84,14 +84,6 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
-
-        <!-- S3 AWS -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <version>2.25.11</version>
-        </dependency>
-        
         <!-- Bucket4j -->
         <dependency>
             <groupId>com.bucket4j</groupId>

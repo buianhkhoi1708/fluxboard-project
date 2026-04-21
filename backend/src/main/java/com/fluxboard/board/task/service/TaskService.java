@@ -19,12 +19,6 @@ import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
-import com.fluxboard.notification.service.NotificationDispatcher;
-
-// 🚀 THÊM IMPORT ACTIVITY
-import com.fluxboard.activity.entity.ActivityEntity;
-import com.fluxboard.activity.repository.ActivityRepository;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,9 +30,10 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.messaging.simp.SimpMessagingTemplate; 
+import org.springframework.messaging.simp.SimpMessagingTemplate; // 👉 ĐÃ THÊM IMPORT NÀY
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
@@ -48,10 +43,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final UserRepository userRepository;
+    
+    // 👉 ĐÃ THÊM: Cái loa phát thanh của WebSocket
     private final SimpMessagingTemplate messagingTemplate; 
-    private final NotificationDispatcher notificationDispatcher; 
-
-    private final ActivityRepository activityRepository;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -59,9 +53,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
             UserRepository userRepository,
-            SimpMessagingTemplate messagingTemplate,
-            NotificationDispatcher notificationDispatcher,
-            ActivityRepository activityRepository 
+            SimpMessagingTemplate messagingTemplate // 👉 Bơm cái loa vào Constructor
     ) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
@@ -69,10 +61,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         this.boardColumnRepository = boardColumnRepository;
         this.userRepository = userRepository;
         this.messagingTemplate = messagingTemplate; 
-        this.notificationDispatcher = notificationDispatcher;
-        this.activityRepository = activityRepository; 
     }
 
+    // 👉 HÀM PHỤ TRỢ: Rút gọn việc phát thông báo
     private void broadcastBoardChange(String boardId) {
         if (boardId != null) {
             messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
@@ -88,8 +79,6 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
         String boardId = column.getBoardId();
-        
-        BoardEntity board = findBoardById(boardId);
 
         String normalizedAuthorUserId = requireAuthenticatedUserId(authorUserId);
         validateUserExists(normalizedAuthorUserId, "Author user does not exist.");
@@ -121,18 +110,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         TaskEntity saved = taskRepository.save(entity);
         
-        ActivityEntity activity = new ActivityEntity();
-        activity.setProjectId(board.getProjectId());
-        activity.setUserId(normalizedAuthorUserId);
-        activity.setAction("đã thêm task " + saved.getTitle());
-        activityRepository.save(activity);
-        
-        if (saved.getAssigneesUserId() != null && !saved.getAssigneesUserId().isEmpty()) {
-            for (String assigneeId : saved.getAssigneesUserId()) {
-                notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
-            }
-        }
-        
+        // 👉 PHÁT LOA SAU KHI TẠO XONG
         broadcastBoardChange(boardId);
         
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
@@ -244,8 +222,6 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             shiftOrdersAfterDelete(currentColumnId, currentParentTaskId, currentOrder, entity.getId());
         }
 
-        List<String> oldAssignees = entity.getAssigneesUserId() == null ? new ArrayList<>() : new ArrayList<>(entity.getAssigneesUserId());
-
         entity.setTitle(TextUtils.trim(request.title()));
         entity.setDescription(TextUtils.trimToNull(request.description()));
         entity.setColumnId(columnId);
@@ -263,14 +239,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         TaskEntity saved = taskRepository.save(entity);
         
-        if (saved.getAssigneesUserId() != null) {
-            for (String assigneeId : saved.getAssigneesUserId()) {
-                if (!oldAssignees.contains(assigneeId)) {
-                    notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
-                }
-            }
-        }
-
+        // 👉 PHÁT LOA SAU KHI CẬP NHẬT XONG
         broadcastBoardChange(boardId);
 
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
@@ -329,6 +298,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         TaskEntity entity = findTaskById(id);
         String columnId = entity.getColumnId();
         
+        // Lấy boardId trước khi xóa để tý còn phát loa
         BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
         String boardId = columnForBoardId.getBoardId();
 
@@ -358,6 +328,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             taskRepository.saveAll(toResequence);
         }
         
+        // 👉 PHÁT LOA SAU KHI XÓA XONG
         broadcastBoardChange(boardId);
     }
 
@@ -380,6 +351,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         taskRepository.saveAll(tasks);
         
+        // 👉 Phát loa
         broadcastBoardChange(boardId);
     }
 
@@ -397,6 +369,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         taskRepository.saveAll(tasks);
         
+        // 👉 Phát loa
         broadcastBoardChange(boardId);
     }
 
