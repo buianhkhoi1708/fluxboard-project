@@ -5,7 +5,6 @@ const mockData = {
     cards: {
       total_users: 1250,
       total_members: 1034,
-      active_users: 216, // Tính sẵn ở BE để UI không phải tính
       projects: {
         active: 45,
         archived: 10,
@@ -13,12 +12,14 @@ const mockData = {
       },
       total_departments: 15
     },
-    // Đã đổi tên thành project_status_list và thêm cờ isBadge cho chuẩn "Dumb UI"
-    project_status_list: [
-      { id: 'P1', name: 'Domnimors', value: 'At Risk', isBadge: true },
-      { id: 'P3', name: 'Transparency status', value: 'At Risk', isBadge: true },
-      { id: 'P4', name: 'Migration V2', value: 'Delayed', isBadge: true }
+    // Danh sách cho bảng "Project Status" trong Admin Dashboard
+    at_risk_projects: [
+      { id: 'P1', name: 'Domnimors', status: 'At Risk' },
+      { id: 'P2', name: 'Transparency status', status: 'At Risk' },
+      { id: 'P3', name: 'Project projects', status: 'At Risk' },
+      { id: 'P4', name: 'Migration V2', status: 'Delayed' }
     ],
+    // Dữ liệu cho Bar Chart (Có cột Total đầu tiên)
     project_status_distribution: [
       { status: "Total", count: 55, color: "#93c5fd" },
       { status: "Active", count: 45, color: "#3b82f6" },
@@ -97,11 +98,11 @@ const mockData = {
       { id: "T-303", title: "Fix CSS Mobile Responsive", priority: "HIGH", due_date: "22 Apr" }
     ],
     // Dữ liệu Velocity & Transparency Index (PHẦN ĐẮP THỊT QUAN TRỌNG)
-   performance_history: [
-  { name: 'Tháng 2', velocity: 400, transparency: 450, trend: 350 },
-  { name: 'Tháng 3', velocity: 600, transparency: 650, trend: 600 },
-  { name: 'Tháng 4', velocity: 850, transparency: 950, trend: 1000 }
-]
+    sprint_history: [
+      { name: 'Sprint 1', velocity: 400, transparency: 450, trend: 350 },
+      { name: 'Sprint 2', velocity: 600, transparency: 650, trend: 600 },
+      { name: 'Sprint 3', velocity: 850, transparency: 950, trend: 1000 }
+    ]
   }
 };
 
