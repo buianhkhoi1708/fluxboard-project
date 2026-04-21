@@ -24,13 +24,26 @@ const StatCard = ({ title, value, children, className = "" }: any) => (
 const AdminDashboard = ({ data }: { data: any }) => {
   if (!data) return null;
 
-  // 1. Nhận data trực tiếp từ dashboardApi (thông qua props)
+  // ==========================================
+  // 🧠 PHẦN LOGIC
+  // ==========================================
+  
+  // 1. Đọc đúng tên biến từ API Chung kết
   const cards = data?.cards ?? {};
   const projectStatusDistribution = data?.project_status_distribution ?? [];
-  const atRiskProjects = data?.at_risk_projects ?? [];
+  const projectStatusList = data?.project_status_list ?? []; // <-- Lấy chuẩn tên này, list sẽ hết trắng!
   const auditLogs = data?.audit_logs ?? [];
 
-  // 2. CHART DATA: Map trực tiếp, không thêm thắt gì hết
+  // 2. Lấy số liệu (Lấy luôn active_users từ API)
+  const totalUsers = cards.total_users ?? 0;
+  const totalMembers = cards.total_members ?? 0;
+  const activeUsers = cards.active_users ?? 0; 
+  
+  const activeProjects = cards.projects?.active ?? 0;
+  const archivedProjects = cards.projects?.archived ?? 0;
+  const totalDepartments = cards.total_departments ?? 0;
+
+  // 3. Map Chart (Chỉ cần map Chart, List không cần map nữa vì API đã dọn sẵn)
   const chartData = useMemo(() => {
     return projectStatusDistribution.map((item: any) => ({
       name: item.status,
@@ -39,36 +52,31 @@ const AdminDashboard = ({ data }: { data: any }) => {
     }));
   }, [projectStatusDistribution]);
 
-  // 3. PROJECT STATUS LIST: Map trực tiếp từ at_risk_projects
-  const projectStatusList = useMemo(() => {
-    return atRiskProjects.map((project: any) => ({
-      name: project.name,
-      value: project.status,
-      isBadge: project.status === 'At Risk' || project.status === 'Delayed'
-    }));
-  }, [atRiskProjects]);
 
+  // ==========================================
+  // 🎨 PHẦN UI
+  // ==========================================
   return (
     <div className="space-y-5 font-sans text-slate-800 animate-in fade-in zoom-in-95 duration-500 pb-10">
       
       {/* ================= ROW 1: METRICS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard title="Total Users" value={cards.total_users?.toLocaleString()} className="h-[140px]" />
+        <StatCard title="Total Users" value={totalUsers.toLocaleString()} className="h-[140px]" />
         
         <StatCard title="Active Projects" className="h-[140px]">
           <div className="flex items-end gap-6 pb-1">
             <div className="flex flex-col">
-              <span className="text-[36px] leading-none font-bold text-slate-800">{cards.projects?.active}</span>
+              <span className="text-[36px] leading-none font-bold text-slate-800">{activeProjects}</span>
               <span className="text-sm font-semibold text-slate-500 mt-1">Active</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[22px] leading-none font-bold text-slate-800">{cards.projects?.archived}</span>
+              <span className="text-[22px] leading-none font-bold text-slate-800">{archivedProjects}</span>
               <span className="text-sm font-semibold text-slate-500 mt-1">Archived</span>
             </div>
           </div>
         </StatCard>
 
-        <StatCard title="Departments" value={cards.total_departments} className="h-[140px]" />
+        <StatCard title="Departments" value={totalDepartments} className="h-[140px]" />
 
         <StatCard title="Audit Log" className="h-[140px]">
           <div className="flex-1 overflow-hidden space-y-3 mt-1">
@@ -77,7 +85,11 @@ const AdminDashboard = ({ data }: { data: any }) => {
             ) : (
               auditLogs.slice(0, 2).map((log: any, idx: number) => (
                 <div key={log.id || idx} className="flex items-start gap-2.5 group cursor-pointer">
-                  {log.actor === 'System' ? <UserCog size={16} className="text-slate-400 group-hover:text-indigo-500 shrink-0 mt-0.5" /> : <Trash2 size={16} className="text-slate-400 group-hover:text-rose-500 shrink-0 mt-0.5" />}
+                  {log.actor === 'System' ? (
+                    <UserCog size={16} className="text-slate-400 group-hover:text-indigo-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <Trash2 size={16} className="text-slate-400 group-hover:text-rose-500 shrink-0 mt-0.5" />
+                  )}
                   <p className="text-[13px] leading-snug font-medium text-slate-600 group-hover:text-slate-800 line-clamp-2">{log.action}</p>
                 </div>
               ))
@@ -91,17 +103,20 @@ const AdminDashboard = ({ data }: { data: any }) => {
         
         {/* Members Info */}
         <div className="flex flex-col gap-5">
-          <StatCard title="Members" value={cards.total_members?.toLocaleString()} className="h-[140px]" />
+          <StatCard title="Members" value={totalMembers.toLocaleString()} className="h-[140px]" />
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col justify-center">
              <div className="space-y-4">
                <div className="flex justify-between items-center text-[14px] font-bold text-slate-700">
-                 <span className="text-slate-500">Users</span><span>{cards.total_users?.toLocaleString()}</span>
+                 <span className="text-slate-500">Users</span>
+                 <span>{totalUsers.toLocaleString()}</span>
                </div>
                <div className="flex justify-between items-center text-[14px] font-bold text-slate-700">
-                 <span className="text-slate-500">Active:</span><span className="text-emerald-600">{(cards.total_users - cards.total_members)?.toLocaleString()}</span>
+                 <span className="text-slate-500">Active:</span>
+                 <span className="text-emerald-600">{activeUsers.toLocaleString()}</span>
                </div>
                <div className="flex justify-between items-center text-[14px] font-bold text-slate-700">
-                 <span className="text-slate-500">Archived</span><span>{cards.projects?.archived}</span>
+                 <span className="text-slate-500">Archived</span>
+                 <span>{archivedProjects}</span>
                </div>
              </div>
           </div>
@@ -115,7 +130,7 @@ const AdminDashboard = ({ data }: { data: any }) => {
           </div>
           <div className="flex-1 flex flex-col gap-1 overflow-y-auto no-scrollbar">
             {projectStatusList.map((item: any, idx: number) => (
-              <div key={idx} className="group flex justify-between items-center py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 -mx-2 rounded-lg transition-colors">
+              <div key={item.id || idx} className="group flex justify-between items-center py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 -mx-2 rounded-lg transition-colors">
                 <span className="text-[13px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate pr-2">{item.name}</span>
                 {item.isBadge ? (
                   <span className={`px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide uppercase shadow-sm shrink-0 ${item.value === 'At Risk' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>

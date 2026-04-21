@@ -12,7 +12,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import SettingsPage from "./pages/SettingsPage";
-import DashboardPage from "./dashboard/DashboardPage";
+import DashboardPage from "./pages/DashboardPage";
 
 function App() {
   return (
