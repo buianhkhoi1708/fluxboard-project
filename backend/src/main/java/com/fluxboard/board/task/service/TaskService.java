@@ -16,32 +16,26 @@ import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
-import com.fluxboard.notification.service.NotificationDispatcher;
-
-// 🚀 THÊM IMPORT ACTIVITY
-import com.fluxboard.activity.entity.ActivityEntity;
-import com.fluxboard.activity.repository.ActivityRepository;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.messaging.simp.SimpMessagingTemplate; 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+
 @Service
+@RequiredArgsConstructor
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
 
     private final TaskRepository taskRepository;
@@ -49,42 +43,13 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final UserRepository userRepository;
-    private final SimpMessagingTemplate messagingTemplate; 
-    private final NotificationDispatcher notificationDispatcher; 
-
-    private final ActivityRepository activityRepository;
-    
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationDispatcher notificationDispatcher;
     private final ActivityService activityService;
 
-    public TaskService(
-            TaskRepository taskRepository,
-            ProjectRepository projectRepository,
-            BoardRepository boardRepository,
-            BoardColumnRepository boardColumnRepository,
-            UserRepository userRepository,
-            SimpMessagingTemplate messagingTemplate,
-            NotificationDispatcher notificationDispatcher,
-            ActivityRepository activityRepository 
-            ActivityService activityService
-    ) {
-        this.taskRepository = taskRepository;
-        this.projectRepository = projectRepository;
-        this.boardRepository = boardRepository;
-        this.boardColumnRepository = boardColumnRepository;
-        this.userRepository = userRepository;
-        this.messagingTemplate = messagingTemplate; 
-        this.notificationDispatcher = notificationDispatcher;
-        this.activityRepository = activityRepository; 
-        this.messagingTemplate = messagingTemplate;
-        this.activityService = activityService;
-    }
-
-    private void broadcastBoardChange(String boardId) {
-        if (boardId != null) {
-            messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
-        }
-    }
+    // ========================================================================
+    // 1. PUBLIC CRUD & BUSINESS METHODS
+    // ========================================================================
 
     @Override
     public TaskResponse create(CreateTaskRequest request) {
@@ -95,8 +60,6 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
         String boardId = column.getBoardId();
-        
-        BoardEntity board = findBoardById(boardId);
         String projectId = findBoardById(boardId).getProjectId();
 
         String normalizedAuthorUserId = requireAuthenticatedUserId(authorUserId);
@@ -128,31 +91,21 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAuthorUserId(normalizedAuthorUserId);
 
         TaskEntity saved = taskRepository.save(entity);
-        
-        ActivityEntity activity = new ActivityEntity();
-        activity.setProjectId(board.getProjectId());
-        activity.setUserId(normalizedAuthorUserId);
-        activity.setAction("đã thêm task " + saved.getTitle());
-        activityRepository.save(activity);
-        
+
         if (saved.getAssigneesUserId() != null && !saved.getAssigneesUserId().isEmpty()) {
-            for (String assigneeId : saved.getAssigneesUserId()) {
-                notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
-            }
+            saved.getAssigneesUserId().forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
-        
+
         broadcastBoardChange(boardId);
         activityService.logTaskCreated(saved.getId(), boardId, projectId, normalizedAuthorUserId, saved.getTitle());
-        
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
-        return toResponse(saved, users);
+
+        return toResponse(saved, resolveUserSummaries(List.of(saved)));
     }
 
     @Override
     public TaskResponse getById(String id) {
         TaskEntity entity = findTaskById(id);
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(entity));
-        return toResponse(entity, users);
+        return toResponse(entity, resolveUserSummaries(List.of(entity)));
     }
 
     @Override
@@ -165,22 +118,14 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         findProjectById(normalizedProjectId);
 
         List<String> boardIds = boardRepository.findByProjectIdAndDeletedFalse(normalizedProjectId)
-                .stream()
-                .map(BoardEntity::getId)
-                .toList();
+                .stream().map(BoardEntity::getId).toList();
 
-        if (boardIds.isEmpty()) {
-            return Page.empty(pageable);
-        }
+        if (boardIds.isEmpty()) return Page.empty(pageable);
 
         List<String> columnIds = boardColumnRepository.findByBoardIdInAndDeletedFalseOrderByBoardIdAscOrderAsc(boardIds)
-                .stream()
-                .map(BoardColumnEntity::getId)
-                .toList();
+                .stream().map(BoardColumnEntity::getId).toList();
 
-        if (columnIds.isEmpty()) {
-            return Page.empty(pageable);
-        }
+        if (columnIds.isEmpty()) return Page.empty(pageable);
 
         return toResponsePage(taskRepository.findByColumnIdInAndDeletedFalse(columnIds, pageable));
     }
@@ -189,13 +134,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String normalizedBoardId = TextUtils.trim(boardId);
         findBoardById(normalizedBoardId);
         List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(normalizedBoardId)
-                .stream()
-                .map(BoardColumnEntity::getId)
-                .toList();
+                .stream().map(BoardColumnEntity::getId).toList();
 
-        if (columnIds.isEmpty()) {
-            return Page.empty(pageable);
-        }
+        if (columnIds.isEmpty()) return Page.empty(pageable);
 
         return toResponsePage(taskRepository.findByColumnIdInAndDeletedFalse(columnIds, pageable));
     }
@@ -213,9 +154,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         List<TaskEntity> entities = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(normalizedColumnId);
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
 
-        return entities.stream()
-                .map(entity -> toResponse(entity, users))
-                .toList();
+        return entities.stream().map(entity -> toResponse(entity, users)).toList();
     }
 
     @Override
@@ -245,14 +184,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String currentColumnId = entity.getColumnId();
         String currentParentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
         int currentOrder = entity.getOrder();
-        boolean sameGroup = currentColumnId.equals(columnId)
-                && sameParentTask(currentParentTaskId, parentTaskId);
-        int targetOrder = resolveUpdateOrder(
-                columnId,
-                parentTaskId,
-                request.order(),
-                sameGroup ? currentOrder : null
-        );
+        boolean sameGroup = currentColumnId.equals(columnId) && sameParentTask(currentParentTaskId, parentTaskId);
+        int targetOrder = resolveUpdateOrder(columnId, parentTaskId, request.order(), sameGroup ? currentOrder : null);
 
         if (sameGroup) {
             if (targetOrder != currentOrder) {
@@ -281,64 +214,39 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
 
         TaskEntity saved = taskRepository.save(entity);
-        
+
         if (saved.getAssigneesUserId() != null) {
-            for (String assigneeId : saved.getAssigneesUserId()) {
-                if (!oldAssignees.contains(assigneeId)) {
-                    notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
-                }
-            }
+            saved.getAssigneesUserId().stream()
+                    .filter(assigneeId -> !oldAssignees.contains(assigneeId))
+                    .forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
 
         broadcastBoardChange(boardId);
         String normalizedActorUserId = TextUtils.trimToNull(actorUserId);
+
         if (!sameText(previousColumnId, saved.getColumnId())) {
-            activityService.logTaskMoved(
-                    saved.getId(),
-                    boardId,
-                    projectId,
-                    normalizedActorUserId,
-                    previousColumnId,
-                    saved.getColumnId(),
-                    saved.getTitle()
-            );
+            activityService.logTaskMoved(saved.getId(), boardId, projectId, normalizedActorUserId, previousColumnId, saved.getColumnId(), saved.getTitle());
         } else {
             String changedField = null;
             String oldValue = null;
             String newValue = null;
 
             if (!sameText(previousTitle, saved.getTitle())) {
-                changedField = "title";
-                oldValue = previousTitle;
-                newValue = saved.getTitle();
+                changedField = "title"; oldValue = previousTitle; newValue = saved.getTitle();
             } else if (!sameText(previousStatus, saved.getStatus())) {
-                changedField = "status";
-                oldValue = previousStatus;
-                newValue = saved.getStatus();
+                changedField = "status"; oldValue = previousStatus; newValue = saved.getStatus();
             } else if (previousOrder != saved.getOrder()) {
-                changedField = "order";
-                oldValue = asString(previousOrder);
-                newValue = asString(saved.getOrder());
+                changedField = "order"; oldValue = asString(previousOrder); newValue = asString(saved.getOrder());
             } else if (!sameText(previousDueDate, asString(saved.getDueDate()))) {
-                changedField = "dueDate";
-                oldValue = previousDueDate;
-                newValue = asString(saved.getDueDate());
+                changedField = "dueDate"; oldValue = previousDueDate; newValue = asString(saved.getDueDate());
             }
 
-            activityService.logTaskUpdated(
-                    saved.getId(),
-                    boardId,
-                    projectId,
-                    normalizedActorUserId,
-                    changedField,
-                    oldValue,
-                    newValue,
-                    saved.getTitle()
-            );
+            if (changedField != null) {
+                activityService.logTaskUpdated(saved.getId(), boardId, projectId, normalizedActorUserId, changedField, oldValue, newValue, saved.getTitle());
+            }
         }
 
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
-        return toResponse(saved, users);
+        return toResponse(saved, resolveUserSummaries(List.of(saved)));
     }
 
     @Transactional
@@ -351,10 +259,11 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         try {
             TaskEntity entity = findTaskById(id);
             String currentColumnId = entity.getColumnId();
-
             String newColumnId = TextUtils.trim(request.newColumnId());
+            
             BoardColumnEntity newColumn = findBoardColumnById(newColumnId);
             BoardColumnEntity currentColumn = findBoardColumnById(currentColumnId);
+            
             if (!currentColumn.getBoardId().equals(newColumn.getBoardId())) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Validation Error: Cannot move task to a different board.");
             }
@@ -363,15 +272,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             String projectId = findBoardById(boardId).getProjectId();
             String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
             int currentOrder = entity.getOrder();
-
             boolean sameGroup = currentColumnId.equals(newColumnId);
             
-            int targetOrder = resolveUpdateOrder(
-                    newColumnId,
-                    parentTaskId,
-                    request.newOrder(),
-                    sameGroup ? currentOrder : null
-            );
+            int targetOrder = resolveUpdateOrder(newColumnId, parentTaskId, request.newOrder(), sameGroup ? currentOrder : null);
 
             if (sameGroup) {
                 if (targetOrder != currentOrder) {
@@ -387,18 +290,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
             TaskEntity saved = taskRepository.save(entity);
             broadcastBoardChange(boardId);
-            activityService.logTaskMoved(
-                    saved.getId(),
-                    boardId,
-                    projectId,
-                    TextUtils.trimToNull(actorUserId),
-                    currentColumnId,
-                    newColumnId,
-                    saved.getTitle()
-            );
+            activityService.logTaskMoved(saved.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), currentColumnId, newColumnId, saved.getTitle());
 
-            Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
-            return toResponse(saved, users);
+            return toResponse(saved, resolveUserSummaries(List.of(saved)));
             
         } catch (DuplicateKeyException e) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Conflict: Another move operation is in progress. Please try again.");
@@ -422,20 +316,17 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         Map<String, List<TaskEntity>> childrenByParentId = buildChildrenByParentId(columnTasks);
         Set<String> deletedTaskIds = collectSubtreeTaskIds(entity.getId(), childrenByParentId);
 
-        if (deletedTaskIds.isEmpty()) {
-            return;
-        }
+        if (deletedTaskIds.isEmpty()) return;
 
         List<TaskEntity> toDelete = new ArrayList<>();
         Set<String> affectedGroupKeys = new LinkedHashSet<>();
 
         for (TaskEntity task : columnTasks) {
-            if (!deletedTaskIds.contains(task.getId())) {
-                continue;
+            if (deletedTaskIds.contains(task.getId())) {
+                affectedGroupKeys.add(toGroupKey(task.getParentTaskId()));
+                task.markDeleted();
+                toDelete.add(task);
             }
-            affectedGroupKeys.add(toGroupKey(task.getParentTaskId()));
-            task.markDeleted();
-            toDelete.add(task);
         }
         taskRepository.saveAll(toDelete);
 
@@ -445,35 +336,21 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         
         broadcastBoardChange(boardId);
-        activityService.logTaskDeleted(
-                entity.getId(),
-                boardId,
-                projectId,
-                TextUtils.trimToNull(actorUserId),
-                entity.getTitle()
-        );
+        activityService.logTaskDeleted(entity.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), entity.getTitle());
     }
 
     public void softDeleteByBoardId(String boardId) {
         List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
-                .stream()
-                .map(BoardColumnEntity::getId)
-                .toList();
-        if (columnIds.isEmpty()) {
-            return;
-        }
+                .stream().map(BoardColumnEntity::getId).toList();
+        
+        if (columnIds.isEmpty()) return;
 
         List<TaskEntity> tasks = taskRepository.findByColumnIdInAndDeletedFalse(columnIds);
-        if (tasks.isEmpty()) {
-            return;
+        if (!tasks.isEmpty()) {
+            tasks.forEach(TaskEntity::markDeleted);
+            taskRepository.saveAll(tasks);
+            broadcastBoardChange(boardId);
         }
-
-        for (TaskEntity task : tasks) {
-            task.markDeleted();
-        }
-        taskRepository.saveAll(tasks);
-        
-        broadcastBoardChange(boardId);
     }
 
     public void softDeleteByColumnId(String columnId) {
@@ -481,16 +358,21 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String boardId = columnForBoardId.getBoardId();
         
         List<TaskEntity> tasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(columnId));
-        if (tasks.isEmpty()) {
-            return;
+        if (!tasks.isEmpty()) {
+            tasks.forEach(TaskEntity::markDeleted);
+            taskRepository.saveAll(tasks);
+            broadcastBoardChange(boardId);
         }
+    }
 
-        for (TaskEntity task : tasks) {
-            task.markDeleted();
+    // ========================================================================
+    // 2. PRIVATE HELPER METHODS (VALIDATION & LOGIC)
+    // ========================================================================
+
+    private void broadcastBoardChange(String boardId) {
+        if (boardId != null) {
+            messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
         }
-        taskRepository.saveAll(tasks);
-        
-        broadcastBoardChange(boardId);
     }
 
     private TaskEntity findTaskById(String taskId) {
@@ -506,11 +388,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private BoardEntity findBoardById(String boardId) {
         BoardEntity board = boardRepository.findByIdAndDeletedFalse(boardId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board not found."));
-
         if (!projectRepository.existsByIdAndDeletedFalse(board.getProjectId())) {
             throw new AppException(ErrorCode.NOT_FOUND, "Board not found.");
         }
-
         return board;
     }
 
@@ -521,16 +401,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return column;
     }
 
-    private String validateAndNormalizeParentTask(
-            String parentTaskId,
-            String columnId,
-            String boardId,
-            String selfTaskId
-    ) {
+    private String validateAndNormalizeParentTask(String parentTaskId, String columnId, String boardId, String selfTaskId) {
         String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
-        if (normalizedParentTaskId == null) {
-            return null;
-        }
+        if (normalizedParentTaskId == null) return null;
 
         if (selfTaskId != null && selfTaskId.equals(normalizedParentTaskId)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Task cannot be parent of itself.");
@@ -539,6 +412,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         TaskEntity parentTask = taskRepository.findByIdAndDeletedFalse(normalizedParentTaskId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Parent task does not exist."));
         BoardColumnEntity parentColumn = findBoardColumnById(parentTask.getColumnId());
+        
         if (!boardId.equals(parentColumn.getBoardId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Parent task must belong to the same board.");
         }
@@ -546,9 +420,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             throw new AppException(ErrorCode.BAD_REQUEST, "Subtask must belong to the same column as parent task.");
         }
 
-        if (selfTaskId != null) {
-            validateNoParentCycle(selfTaskId, normalizedParentTaskId);
-        }
+        if (selfTaskId != null) validateNoParentCycle(selfTaskId, normalizedParentTaskId);
 
         return normalizedParentTaskId;
     }
@@ -558,17 +430,11 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         Set<String> visited = new LinkedHashSet<>();
 
         while (cursor != null) {
-            if (!visited.add(cursor)) {
+            if (!visited.add(cursor) || selfTaskId.equals(cursor)) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Circular parent reference is not allowed.");
             }
-
-            if (selfTaskId.equals(cursor)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Circular parent reference is not allowed.");
-            }
-
             TaskEntity current = taskRepository.findByIdAndDeletedFalse(cursor)
                     .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Parent task does not exist."));
-
             cursor = TextUtils.trimToNull(current.getParentTaskId());
         }
     }
@@ -602,47 +468,25 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     }
 
     private List<String> normalizeIdList(List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return List.of();
-        }
-
-        Set<String> unique = new LinkedHashSet<>();
-        for (String value : values) {
-            String normalized = TextUtils.trimToNull(value);
-            if (normalized != null) {
-                unique.add(normalized);
-            }
-        }
-
-        return new ArrayList<>(unique);
+        if (values == null || values.isEmpty()) return List.of();
+        return values.stream()
+                .map(TextUtils::trimToNull)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
-    private int resolveUpdateOrder(
-            String columnId,
-            String parentTaskId,
-            Integer requestedOrder,
-            Integer currentOrderIfSameGroup
-    ) {
+    private int resolveUpdateOrder(String columnId, String parentTaskId, Integer requestedOrder, Integer currentOrderIfSameGroup) {
         if (requestedOrder == null) {
-            if (currentOrderIfSameGroup != null) {
-                return currentOrderIfSameGroup;
-            }
-            return nextOrder(columnId, parentTaskId);
+            return currentOrderIfSameGroup != null ? currentOrderIfSameGroup : nextOrder(columnId, parentTaskId);
         }
-
-        int maxOrder = currentOrderIfSameGroup != null
-                ? Math.max(listSize(columnId, parentTaskId), 1)
-                : nextOrder(columnId, parentTaskId);
-
+        int maxOrder = currentOrderIfSameGroup != null ? Math.max(listSize(columnId, parentTaskId), 1) : nextOrder(columnId, parentTaskId);
         return Math.min(Math.max(requestedOrder, 1), maxOrder);
     }
 
     private int nextOrder(String columnId, String parentTaskId) {
         List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
-        if (tasks.isEmpty()) {
-            return 1;
-        }
-        return tasks.get(tasks.size() - 1).getOrder() + 1;
+        return tasks.isEmpty() ? 1 : tasks.get(tasks.size() - 1).getOrder() + 1;
     }
 
     private int listSize(String columnId, String parentTaskId) {
@@ -652,12 +496,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private void shiftOrdersForInsert(String columnId, String parentTaskId, int fromOrder, String exceptId) {
         List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
-            if (exceptId != null && exceptId.equals(task.getId())) {
-                continue;
-            }
-            if (task.getOrder() >= fromOrder) {
-                task.setOrder(task.getOrder() + 1);
-            }
+            if (exceptId != null && exceptId.equals(task.getId())) continue;
+            if (task.getOrder() >= fromOrder) task.setOrder(task.getOrder() + 1);
         }
         taskRepository.saveAll(tasks);
     }
@@ -665,35 +505,20 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private void shiftOrdersAfterDelete(String columnId, String parentTaskId, int fromOrder, String exceptId) {
         List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
-            if (exceptId != null && exceptId.equals(task.getId())) {
-                continue;
-            }
-            if (task.getOrder() > fromOrder) {
-                task.setOrder(task.getOrder() - 1);
-            }
+            if (exceptId != null && exceptId.equals(task.getId())) continue;
+            if (task.getOrder() > fromOrder) task.setOrder(task.getOrder() - 1);
         }
         taskRepository.saveAll(tasks);
     }
 
-    private void moveInsideColumnGroup(
-            String columnId,
-            String parentTaskId,
-            int currentOrder,
-            int targetOrder,
-            String taskId
-    ) {
+    private void moveInsideColumnGroup(String columnId, String parentTaskId, int currentOrder, int targetOrder, String taskId) {
         List<TaskEntity> tasks = findTasksByColumnAndParent(columnId, parentTaskId);
         for (TaskEntity task : tasks) {
-            if (taskId.equals(task.getId())) {
-                continue;
-            }
-
+            if (taskId.equals(task.getId())) continue;
             int order = task.getOrder();
-            if (targetOrder > currentOrder) {
-                if (order > currentOrder && order <= targetOrder) {
-                    task.setOrder(order - 1);
-                }
-            } else if (order >= targetOrder && order < currentOrder) {
+            if (targetOrder > currentOrder && order > currentOrder && order <= targetOrder) {
+                task.setOrder(order - 1);
+            } else if (targetOrder <= currentOrder && order >= targetOrder && order < currentOrder) {
                 task.setOrder(order + 1);
             }
         }
@@ -708,25 +533,20 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     }
 
     private boolean sameParentTask(String firstParentTaskId, String secondParentTaskId) {
-        String normalizedFirstParentTaskId = TextUtils.trimToNull(firstParentTaskId);
-        String normalizedSecondParentTaskId = TextUtils.trimToNull(secondParentTaskId);
-        if (normalizedFirstParentTaskId == null) {
-            return normalizedSecondParentTaskId == null;
-        }
-        return normalizedFirstParentTaskId.equals(normalizedSecondParentTaskId);
+        String nFirst = TextUtils.trimToNull(firstParentTaskId);
+        String nSecond = TextUtils.trimToNull(secondParentTaskId);
+        if (nFirst == null) return nSecond == null;
+        return nFirst.equals(nSecond);
     }
 
     private Map<String, List<TaskEntity>> buildChildrenByParentId(List<TaskEntity> tasks) {
         Map<String, List<TaskEntity>> result = new HashMap<>();
-
         for (TaskEntity task : tasks) {
             String parentTaskId = TextUtils.trimToNull(task.getParentTaskId());
-            if (parentTaskId == null) {
-                continue;
+            if (parentTaskId != null) {
+                result.computeIfAbsent(parentTaskId, k -> new ArrayList<>()).add(task);
             }
-            result.computeIfAbsent(parentTaskId, ignored -> new ArrayList<>()).add(task);
         }
-
         return result;
     }
 
@@ -737,26 +557,16 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         while (!stack.isEmpty()) {
             String currentTaskId = stack.remove(stack.size() - 1);
-            if (!result.add(currentTaskId)) {
-                continue;
-            }
-
-            List<TaskEntity> children = childrenByParentId.getOrDefault(currentTaskId, List.of());
-            for (TaskEntity child : children) {
-                stack.add(child.getId());
+            if (result.add(currentTaskId)) {
+                List<TaskEntity> children = childrenByParentId.getOrDefault(currentTaskId, List.of());
+                children.forEach(child -> stack.add(child.getId()));
             }
         }
-
         return result;
     }
 
-    private List<TaskEntity> resequenceAfterDelete(
-            List<TaskEntity> columnTasks,
-            Set<String> deletedTaskIds,
-            Set<String> affectedGroupKeys
-    ) {
+    private List<TaskEntity> resequenceAfterDelete(List<TaskEntity> columnTasks, Set<String> deletedTaskIds, Set<String> affectedGroupKeys) {
         List<TaskEntity> result = new ArrayList<>();
-
         for (String groupKey : affectedGroupKeys) {
             String parentTaskId = fromGroupKey(groupKey);
             List<TaskEntity> siblings = columnTasks.stream()
@@ -773,13 +583,12 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
                 expectedOrder++;
             }
         }
-
         return result;
     }
 
     private String toGroupKey(String parentTaskId) {
-        String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
-        return normalizedParentTaskId == null ? "__ROOT__" : normalizedParentTaskId;
+        String normalized = TextUtils.trimToNull(parentTaskId);
+        return normalized == null ? "__ROOT__" : normalized;
     }
 
     private String fromGroupKey(String groupKey) {
@@ -787,12 +596,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     }
 
     private boolean sameText(String first, String second) {
-        String normalizedFirst = TextUtils.trimToNull(first);
-        String normalizedSecond = TextUtils.trimToNull(second);
-        if (normalizedFirst == null) {
-            return normalizedSecond == null;
-        }
-        return normalizedFirst.equals(normalizedSecond);
+        String nFirst = TextUtils.trimToNull(first);
+        String nSecond = TextUtils.trimToNull(second);
+        if (nFirst == null) return nSecond == null;
+        return nFirst.equals(nSecond);
     }
 
     private String asString(Object value) {
@@ -802,87 +609,52 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private Page<TaskResponse> toResponsePage(Page<TaskEntity> entityPage) {
         List<TaskEntity> entities = entityPage.getContent();
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
-
-        List<TaskResponse> responses = entities.stream()
-                .map(entity -> toResponse(entity, users))
-                .toList();
-
+        List<TaskResponse> responses = entities.stream().map(entity -> toResponse(entity, users)).toList();
         return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
     }
 
     private Map<String, TaskUserSummaryResponse> resolveUserSummaries(List<TaskEntity> entities) {
-        if (entities == null || entities.isEmpty()) {
-            return Map.of();
-        }
+        if (entities == null || entities.isEmpty()) return Map.of();
 
         Set<String> userIds = new LinkedHashSet<>();
         for (TaskEntity entity : entities) {
             String authorUserId = TextUtils.trimToNull(entity.getAuthorUserId());
-            if (authorUserId != null) {
-                userIds.add(authorUserId);
-            }
+            if (authorUserId != null) userIds.add(authorUserId);
 
             if (entity.getAssigneesUserId() != null) {
-                for (String assigneeId : entity.getAssigneesUserId()) {
-                    String normalized = TextUtils.trimToNull(assigneeId);
-                    if (normalized != null) {
-                        userIds.add(normalized);
-                    }
-                }
+                entity.getAssigneesUserId().stream()
+                        .map(TextUtils::trimToNull)
+                        .filter(Objects::nonNull)
+                        .forEach(userIds::add);
             }
         }
 
-        if (userIds.isEmpty()) {
-            return Map.of();
-        }
+        if (userIds.isEmpty()) return Map.of();
 
-        List<User> users = userRepository.findByIdInAndDeletedFalse(new ArrayList<>(userIds));
-        Map<String, TaskUserSummaryResponse> result = new HashMap<>();
-        for (User user : users) {
-
-            String userIdStr = String.valueOf(user.getId()); 
-            result.put(userIdStr, new TaskUserSummaryResponse(userIdStr, user.getFullName(), user.getAvatarUrl()));
-        }
-        return result;
+        return userRepository.findByIdInAndDeletedFalse(new ArrayList<>(userIds))
+                .stream()
+                .collect(Collectors.toMap(
+                        user -> String.valueOf(user.getId()),
+                        user -> new TaskUserSummaryResponse(String.valueOf(user.getId()), user.getFullName(), user.getAvatarUrl())
+                ));
     }
 
     private TaskResponse toResponse(TaskEntity entity, Map<String, TaskUserSummaryResponse> users) {
-        List<TaskUserSummaryResponse> assignees = entity.getAssigneesUserId() == null
-                ? List.of()
-                : entity.getAssigneesUserId().stream()
-                .map(TextUtils::trimToNull)
-                .filter(assigneeId -> assigneeId != null)
-                .map(assigneeId -> users.getOrDefault(
-                        assigneeId,
-                        new TaskUserSummaryResponse(assigneeId, "User(" + assigneeId.substring(0, 4) + ")", null)
-                ))
-                .toList();
+        List<TaskUserSummaryResponse> assignees = entity.getAssigneesUserId() == null ? List.of() :
+                entity.getAssigneesUserId().stream()
+                        .map(TextUtils::trimToNull)
+                        .filter(Objects::nonNull)
+                        .map(assigneeId -> users.getOrDefault(assigneeId, new TaskUserSummaryResponse(assigneeId, "User(" + assigneeId.substring(0, 4) + ")", null)))
+                        .toList();
 
         String authorId = TextUtils.trimToNull(entity.getAuthorUserId());
-        TaskUserSummaryResponse author = authorId == null
-                ? null
-                : users.get(authorId);
-                
+        TaskUserSummaryResponse author = authorId == null ? null : users.get(authorId);
 
         return new TaskResponse(
-                entity.getId(),
-                entity.getTitle(),
-                entity.getDescription(),
-                entity.getParentTaskId(),
-                assignees,
-                entity.getPriority(),
-                entity.getStartDate(),
-                entity.getDueDate(),
-                entity.getStatus(),
-                entity.getStoryPoint(),
-                entity.getEstimatedDate(),
-                entity.getOrder(),
-                entity.getAiSuggestedPoint(),
-                entity.getAiEstimatedReason(),
-                author,
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getId(), entity.getTitle(), entity.getDescription(), entity.getParentTaskId(),
+                assignees, entity.getPriority(), entity.getStartDate(), entity.getDueDate(),
+                entity.getStatus(), entity.getStoryPoint(), entity.getEstimatedDate(), entity.getOrder(),
+                entity.getAiSuggestedPoint(), entity.getAiEstimatedReason(), author, entity.getCreatedAt(), entity.getUpdatedAt()
         );
     }
 }
-
