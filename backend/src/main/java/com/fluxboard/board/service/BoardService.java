@@ -1,5 +1,6 @@
 package com.fluxboard.board.service;
 
+import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.column.service.BoardColumnService;
@@ -44,23 +45,29 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
     private final BoardColumnService boardColumnService;
     private final BoardColumnRepository boardColumnRepository;
     private final TaskRepository taskRepository;
+    private final ActivityService activityService;
 
     public BoardService(
             BoardRepository boardRepository,
             ProjectRepository projectRepository,
             BoardColumnService boardColumnService,
             BoardColumnRepository boardColumnRepository,
-            TaskRepository taskRepository
-    ) {
+            TaskRepository taskRepository,
+            ActivityService activityService) {
         this.boardRepository = boardRepository;
         this.projectRepository = projectRepository;
         this.boardColumnService = boardColumnService;
         this.boardColumnRepository = boardColumnRepository;
         this.taskRepository = taskRepository;
+        this.activityService = activityService;
     }
 
     @Override
     public BoardResponse create(CreateBoardRequest request) {
+        return create(request, null);
+    }
+
+    public BoardResponse create(CreateBoardRequest request, String actorUserId) {
         String projectId = TextUtils.trim(request.projectId());
         findProjectById(projectId);
         String name = TextUtils.trim(request.name());
@@ -75,6 +82,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
         BoardEntity saved = boardRepository.save(entity);
         boardColumnService.initializeDefaultColumns(saved.getId());
+        activityService.logBoardCreated(saved.getId(), saved.getProjectId(), actorUserId, saved.getName());
         return toResponse(saved);
     }
 
@@ -85,7 +93,8 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
     public BoardDetailResponse getDetailById(String id) {
         BoardEntity board = findBoardById(id);
-        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(board.getId());
+        List<BoardColumnEntity> columns = boardColumnRepository
+                .findByBoardIdAndDeletedFalseOrderByOrderAsc(board.getId());
         List<String> columnIds = columns.stream()
                 .map(BoardColumnEntity::getId)
                 .toList();
@@ -127,16 +136,14 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
                         rootTasksByColumnId.getOrDefault(column.getId(), List.of())
                                 .stream()
                                 .map(task -> toTaskDetailResponse(task, childrenByParentId))
-                                .toList()
-                ))
+                                .toList()))
                 .toList();
 
         return new BoardDetailResponse(
                 board.getId(),
                 board.getProjectId(),
                 board.getName(),
-                columnResponses
-        );
+                columnResponses);
     }
 
     @Override
@@ -153,28 +160,47 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
     @Override
     public BoardResponse update(String id, UpdateBoardRequest request) {
+        return update(id, request, null);
+    }
+
+    public BoardResponse update(String id, UpdateBoardRequest request, String actorUserId) {
         BoardEntity entity = findBoardById(id);
         String normalizedName = TextUtils.trim(request.name());
 
         if (boardRepository.existsByProjectIdAndNameAndIdNotAndDeletedFalse(
                 entity.getProjectId(),
                 normalizedName,
-                id
-        )) {
+                id)) {
             throw new AppException(ErrorCode.CONFLICT, "Board name already exists in this project.");
         }
 
+        String oldName = entity.getName();
         entity.setName(normalizedName);
+        BoardEntity updated = boardRepository.save(entity);
+        activityService.logBoardUpdated(
+                updated.getId(),
+                updated.getProjectId(),
+                actorUserId,
+                "name",
+                oldName,
+                normalizedName,
+                updated.getName());
 
-        return toResponse(boardRepository.save(entity));
+        return toResponse(updated);
     }
 
     @Override
     public void delete(String id) {
+        delete(id, null);
+    }
+
+    public void delete(String id, String actorUserId) {
         BoardEntity entity = findBoardById(id);
+        String boardName = entity.getName();
         entity.markDeleted();
         boardRepository.save(entity);
         boardColumnService.softDeleteByBoardId(entity.getId());
+        activityService.logBoardDeleted(entity.getId(), entity.getProjectId(), actorUserId, boardName);
     }
 
     private BoardEntity findBoardById(String boardId) {
@@ -195,8 +221,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
     private BoardTaskDetailResponse toTaskDetailResponse(
             TaskEntity task,
-            Map<String, List<TaskEntity>> childrenByParentId
-    ) {
+            Map<String, List<TaskEntity>> childrenByParentId) {
         List<BoardTaskDetailResponse> subtasks = childrenByParentId.getOrDefault(task.getId(), List.of())
                 .stream()
                 .map(child -> toTaskDetailResponse(child, childrenByParentId))
@@ -216,8 +241,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
                 task.getAiSuggestedPoint(),
                 task.getAiEstimatedReason(),
                 task.getStatus(),
-                subtasks
-        );
+                subtasks);
     }
 
     private String formatPriority(TaskPriority priority) {
@@ -242,8 +266,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
         long days = ChronoUnit.DAYS.between(
                 startDate.atZone(ZoneOffset.UTC).toLocalDate(),
-                estimatedDate.atZone(ZoneOffset.UTC).toLocalDate()
-        );
+                estimatedDate.atZone(ZoneOffset.UTC).toLocalDate());
 
         if (days < 0) {
             return null;
@@ -257,7 +280,6 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
                 entity.getProjectId(),
                 entity.getName(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
+                entity.getUpdatedAt());
     }
 }

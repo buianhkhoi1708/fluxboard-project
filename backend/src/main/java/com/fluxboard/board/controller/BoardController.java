@@ -1,5 +1,7 @@
 package com.fluxboard.board.controller;
 
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.board.dto.request.CreateBoardRequest;
 import com.fluxboard.board.dto.request.UpdateBoardRequest;
 import com.fluxboard.board.dto.response.BoardDetailResponse;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,8 +39,12 @@ public class BoardController {
 
     @RequirePermission("BOARD_CREATE")
     @PostMapping
-    public ResponseEntity<ApiResponse<BoardResponse>> createBoard(@Valid @RequestBody CreateBoardRequest request) {
-        return ResponseFactory.created("Board created successfully.", boardService.create(request));
+    public ResponseEntity<ApiResponse<BoardResponse>> createBoard(
+            @Valid @RequestBody CreateBoardRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        return ResponseFactory.created(
+                "Board created successfully.",
+                boardService.create(request, authUser.userId()));
     }
 
     @RequirePermission("BOARD_VIEW")
@@ -67,14 +74,19 @@ public class BoardController {
     @PutMapping("/{boardId}")
     public ResponseEntity<ApiResponse<BoardResponse>> updateBoard(
             @PathVariable String boardId,
-            @Valid @RequestBody UpdateBoardRequest request) {
-        return ResponseFactory.ok("Board updated successfully.", boardService.update(boardId, request));
+            @Valid @RequestBody UpdateBoardRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        return ResponseFactory.ok(
+                "Board updated successfully.",
+                boardService.update(boardId, request, authUser.userId()));
     }
 
     @RequirePermission("BOARD_DELETE")
     @DeleteMapping("/{boardId}")
-    public ResponseEntity<ApiResponse<Void>> deleteBoard(@PathVariable String boardId) {
-        boardService.delete(boardId);
+    public ResponseEntity<ApiResponse<Void>> deleteBoard(
+            @PathVariable String boardId,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        boardService.delete(boardId, authUser.userId());
         return ResponseFactory.ok("Board deleted successfully.");
     }
 }

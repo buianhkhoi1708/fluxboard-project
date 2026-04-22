@@ -4,7 +4,6 @@ import com.fluxboard.activity.entity.ActivityEntity;
 import com.fluxboard.activity.repository.ActivityRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
-import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
@@ -83,7 +82,7 @@ public class DashboardService {
         List<Map<String, Object>> auditLogs = recentActivities.stream().map(act -> {
             Map<String, Object> log = new HashMap<>();
             log.put("id", act.getId());
-            log.put("actor_name", userNames.getOrDefault(act.getUserId(), "System"));
+            log.put("actor_name", userNames.getOrDefault(act.getActorUserId(), "System"));
             log.put("action", act.getAction());
             log.put("created_at", act.getCreatedAt());
             log.put("severity", "INFO");
