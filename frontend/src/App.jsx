@@ -11,6 +11,8 @@ import LoginPage from "./pages/LoginPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import DashboardPage from "./pages/DashboardPage";
+import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
@@ -32,6 +34,9 @@ function App() {
               <Route path="/workspaces" element={<WorkspacesPage />} />
               <Route path="/board/:id" element={<BoardView />} />
               <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
+              <Route path="/dashboard"element={<DashboardPage/>}/>
+              <Route path="/settings"element={<SettingsPage/>}/>
+
             </Route>
           </Route>
         </Routes>

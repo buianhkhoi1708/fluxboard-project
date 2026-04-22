@@ -1,6 +1,7 @@
 package com.fluxboard.project.repository;
 
 import com.fluxboard.project.entity.ProjectEntity;
+
 import java.util.List;
 import java.util.Optional; // Đảm bảo đã import cái này
 import org.springframework.data.domain.Page;
@@ -9,7 +10,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface ProjectRepository extends MongoRepository<ProjectEntity, String> {
 
-    // Thêm dòng này để fix lỗi undefined method
     Optional<ProjectEntity> findByNameAndDeletedFalse(String name);
 
     Optional<ProjectEntity> findByIdAndDeletedFalse(String id);
@@ -22,5 +22,10 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
 
     Page<ProjectEntity> findByDepartmentIdAndDeletedFalse(String departmentId, Pageable pageable);
 
+    // Đếm số lượng project chưa bị xóa (Dùng cho DashboardService)
     long countByDeletedFalse();
+
+    // Lấy danh sách tất cả project chưa bị xóa (Dùng cho DashboardService)
+    List<ProjectEntity> findByDeletedFalse();
+
 }

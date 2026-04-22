@@ -2,6 +2,7 @@ package com.fluxboard.activity.dto.response;
 
 import com.fluxboard.activity.enums.ActivityAction;
 import com.fluxboard.activity.enums.ActivitySource;
+
 import java.time.Instant;
 
 public record ActivityResponse(
@@ -20,5 +21,4 @@ public record ActivityResponse(
         String message,
         Instant createdAt,
         Instant updatedAt
-) {
-}
+) {}
