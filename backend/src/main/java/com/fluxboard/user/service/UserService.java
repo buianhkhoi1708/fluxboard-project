@@ -1,17 +1,17 @@
 package com.fluxboard.user.service;
 
+import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.project.entity.ProjectMember;
+import com.fluxboard.project.repository.ProjectMemberRepository;
 import com.fluxboard.user.dto.request.CreateUserRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
-import com.fluxboard.project.repository.ProjectMemberRepository;
-import com.fluxboard.project.entity.ProjectMember;
-
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,16 +24,26 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final ActivityService activityService;
     private final BCryptPasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, ProjectMemberRepository projectMemberRepository) {
+    public UserService(
+            UserRepository userRepository,
+            ProjectMemberRepository projectMemberRepository,
+            ActivityService activityService
+    ) {
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
+        this.activityService = activityService;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @Override
     public UserResponse create(CreateUserRequest request) {
+        return create(request, null);
+    }
+
+    public UserResponse create(CreateUserRequest request, String actorUserId) {
         String email = TextUtils.trim(request.email());
         if (userRepository.existsByEmailAndDeletedFalse(email)) {
             throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
@@ -48,7 +58,14 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         user.setDepartmentId(TextUtils.trimToNull(request.departmentId()));
         user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        activityService.logUserCreated(
+                saved.getId(),
+                TextUtils.trimToNull(actorUserId),
+                saved.getEmail(),
+                saved.getFullName()
+        );
+        return toResponse(saved);
     }
 
     @Override
@@ -63,7 +80,14 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
     @Override
     public UserResponse update(String id, UpdateUserRequest request) {
+        return update(id, request, null);
+    }
+
+    public UserResponse update(String id, UpdateUserRequest request, String actorUserId) {
         User user = findUserById(id);
+        String previousEmail = user.getEmail();
+        String previousFullName = user.getFullName();
+        String previousRoleId = user.getRoleId();
 
         if (request.email() != null) {
             String email = TextUtils.trim(request.email());
@@ -97,14 +121,46 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
             user.setTeamId(TextUtils.trimToNull(request.teamId()));
         }
 
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        String changedField = null;
+        String oldValue = null;
+        String newValue = null;
+
+        if (!sameText(previousEmail, saved.getEmail())) {
+            changedField = "email";
+            oldValue = previousEmail;
+            newValue = saved.getEmail();
+        } else if (!sameText(previousFullName, saved.getFullName())) {
+            changedField = "fullName";
+            oldValue = previousFullName;
+            newValue = saved.getFullName();
+        } else if (!sameText(previousRoleId, saved.getRoleId())) {
+            changedField = "roleId";
+            oldValue = previousRoleId;
+            newValue = saved.getRoleId();
+        }
+
+        activityService.logUserUpdated(
+                saved.getId(),
+                TextUtils.trimToNull(actorUserId),
+                changedField,
+                oldValue,
+                newValue
+        );
+        return toResponse(saved);
     }
 
     @Override
     public void delete(String id) {
+        delete(id, null);
+    }
+
+    public void delete(String id, String actorUserId) {
         User user = findUserById(id);
+        String deletedEmail = user.getEmail();
         user.markDeleted();
         userRepository.save(user);
+        activityService.logUserDeleted(user.getId(), TextUtils.trimToNull(actorUserId), deletedEmail);
     }
 
     public void updateAvatarUrl(String id, String avatarUrl) {
@@ -151,6 +207,15 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
             throw new AppException(ErrorCode.BAD_REQUEST, "Password must not be blank.");
         }
         return passwordEncoder.encode(normalized);
+    }
+
+    private boolean sameText(String first, String second) {
+        String normalizedFirst = TextUtils.trimToNull(first);
+        String normalizedSecond = TextUtils.trimToNull(second);
+        if (normalizedFirst == null) {
+            return normalizedSecond == null;
+        }
+        return normalizedFirst.equals(normalizedSecond);
     }
 
     private UserResponse toResponse(User user) {

@@ -5,6 +5,7 @@ import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.project.dto.request.AddProjectMemberRequest;
 import com.fluxboard.project.dto.request.CreateProjectRequest;
 import com.fluxboard.project.dto.request.UpdateProjectRequest;
 import com.fluxboard.project.dto.response.ProjectOverviewResponse;
@@ -105,14 +106,19 @@ public class ProjectController {
     @PutMapping("/{projectId}")
     public ResponseEntity<ApiResponse<ProjectResponse>> updateProject(
             @PathVariable String projectId,
-            @Valid @RequestBody UpdateProjectRequest request) {
-        return ResponseFactory.ok("Project updated successfully.", projectService.update(projectId, request));
+            @Valid @RequestBody UpdateProjectRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.ok("Project updated successfully.", projectService.update(projectId, request, authUser.userId()));
     }
 
     @RequirePermission("PROJECT_DELETE")
     @DeleteMapping("/{projectId}")
-    public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable String projectId) {
-        projectService.delete(projectId);
+    public ResponseEntity<ApiResponse<Void>> deleteProject(
+            @PathVariable String projectId,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        projectService.delete(projectId, authUser.userId());
         return ResponseFactory.ok("Project deleted successfully.");
     }
 
@@ -120,9 +126,10 @@ public class ProjectController {
     @PostMapping("/{projectId}/members")
     public ResponseEntity<ApiResponse<Void>> addProjectMember(
             @PathVariable String projectId,
-            @Valid @RequestBody com.fluxboard.project.dto.request.AddProjectMemberRequest request) {
-        
-        projectService.addProjectMember(projectId, request);
+            @Valid @RequestBody AddProjectMemberRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        projectService.addProjectMember(projectId, request, authUser.userId());
         return ResponseFactory.ok("Member added to project successfully.");
     }
 

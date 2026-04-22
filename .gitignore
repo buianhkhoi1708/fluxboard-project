@@ -13,6 +13,8 @@ frontend/build/
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+# # Ignore all .md files in frontend
+# frontend/**/*.md
 
 #BACKEND
 backend/target/
@@ -25,3 +27,6 @@ backend/*.iml
 backend/*.class
 backend/*.jar
 backend/*.war
+# Ignore all .md files in backend except README.md
+backend/*.md
+!backend/README.md

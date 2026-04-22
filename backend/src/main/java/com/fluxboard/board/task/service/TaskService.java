@@ -1,5 +1,6 @@
 package com.fluxboard.board.task.service;
 
+import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.entity.BoardEntity;
@@ -32,11 +33,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate; 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final NotificationDispatcher notificationDispatcher; 
 
     private final ActivityRepository activityRepository;
+    
+    private final SimpMessagingTemplate messagingTemplate;
+    private final ActivityService activityService;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -62,6 +66,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             SimpMessagingTemplate messagingTemplate,
             NotificationDispatcher notificationDispatcher,
             ActivityRepository activityRepository 
+            ActivityService activityService
     ) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
@@ -71,6 +76,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         this.messagingTemplate = messagingTemplate; 
         this.notificationDispatcher = notificationDispatcher;
         this.activityRepository = activityRepository; 
+        this.messagingTemplate = messagingTemplate;
+        this.activityService = activityService;
     }
 
     private void broadcastBoardChange(String boardId) {
@@ -90,6 +97,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String boardId = column.getBoardId();
         
         BoardEntity board = findBoardById(boardId);
+        String projectId = findBoardById(boardId).getProjectId();
 
         String normalizedAuthorUserId = requireAuthenticatedUserId(authorUserId);
         validateUserExists(normalizedAuthorUserId, "Author user does not exist.");
@@ -134,6 +142,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         
         broadcastBoardChange(boardId);
+        activityService.logTaskCreated(saved.getId(), boardId, projectId, normalizedAuthorUserId, saved.getTitle());
         
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
         return toResponse(saved, users);
@@ -211,11 +220,21 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
     @Override
     public TaskResponse update(String id, UpdateTaskRequest request) {
+        return update(id, request, null);
+    }
+
+    public TaskResponse update(String id, UpdateTaskRequest request, String actorUserId) {
         TaskEntity entity = findTaskById(id);
+        String previousTitle = entity.getTitle();
+        String previousStatus = entity.getStatus();
+        String previousColumnId = entity.getColumnId();
+        int previousOrder = entity.getOrder();
+        String previousDueDate = asString(entity.getDueDate());
 
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
         String boardId = column.getBoardId();
+        String projectId = findBoardById(boardId).getProjectId();
 
         List<String> assigneesUserId = normalizeIdList(request.assigneesUserId());
         validateUsersExist(assigneesUserId, "Assignee user does not exist: ");
@@ -272,6 +291,51 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
 
         broadcastBoardChange(boardId);
+        String normalizedActorUserId = TextUtils.trimToNull(actorUserId);
+        if (!sameText(previousColumnId, saved.getColumnId())) {
+            activityService.logTaskMoved(
+                    saved.getId(),
+                    boardId,
+                    projectId,
+                    normalizedActorUserId,
+                    previousColumnId,
+                    saved.getColumnId(),
+                    saved.getTitle()
+            );
+        } else {
+            String changedField = null;
+            String oldValue = null;
+            String newValue = null;
+
+            if (!sameText(previousTitle, saved.getTitle())) {
+                changedField = "title";
+                oldValue = previousTitle;
+                newValue = saved.getTitle();
+            } else if (!sameText(previousStatus, saved.getStatus())) {
+                changedField = "status";
+                oldValue = previousStatus;
+                newValue = saved.getStatus();
+            } else if (previousOrder != saved.getOrder()) {
+                changedField = "order";
+                oldValue = asString(previousOrder);
+                newValue = asString(saved.getOrder());
+            } else if (!sameText(previousDueDate, asString(saved.getDueDate()))) {
+                changedField = "dueDate";
+                oldValue = previousDueDate;
+                newValue = asString(saved.getDueDate());
+            }
+
+            activityService.logTaskUpdated(
+                    saved.getId(),
+                    boardId,
+                    projectId,
+                    normalizedActorUserId,
+                    changedField,
+                    oldValue,
+                    newValue,
+                    saved.getTitle()
+            );
+        }
 
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
         return toResponse(saved, users);
@@ -279,18 +343,24 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
     @Transactional
     public TaskResponse moveTask(String id, TaskMoveRequest request) {
+        return moveTask(id, request, null);
+    }
+
+    @Transactional
+    public TaskResponse moveTask(String id, TaskMoveRequest request, String actorUserId) {
         try {
             TaskEntity entity = findTaskById(id);
-            
+            String currentColumnId = entity.getColumnId();
+
             String newColumnId = TextUtils.trim(request.newColumnId());
             BoardColumnEntity newColumn = findBoardColumnById(newColumnId);
-            
-            BoardColumnEntity currentColumn = findBoardColumnById(entity.getColumnId());
+            BoardColumnEntity currentColumn = findBoardColumnById(currentColumnId);
             if (!currentColumn.getBoardId().equals(newColumn.getBoardId())) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Validation Error: Cannot move task to a different board.");
             }
 
-            String currentColumnId = entity.getColumnId();
+            String boardId = newColumn.getBoardId();
+            String projectId = findBoardById(boardId).getProjectId();
             String parentTaskId = TextUtils.trimToNull(entity.getParentTaskId());
             int currentOrder = entity.getOrder();
 
@@ -316,6 +386,17 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             entity.setOrder(targetOrder);
 
             TaskEntity saved = taskRepository.save(entity);
+            broadcastBoardChange(boardId);
+            activityService.logTaskMoved(
+                    saved.getId(),
+                    boardId,
+                    projectId,
+                    TextUtils.trimToNull(actorUserId),
+                    currentColumnId,
+                    newColumnId,
+                    saved.getTitle()
+            );
+
             Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
             return toResponse(saved, users);
             
@@ -326,11 +407,16 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
     @Override
     public void delete(String id) {
+        delete(id, null);
+    }
+
+    public void delete(String id, String actorUserId) {
         TaskEntity entity = findTaskById(id);
         String columnId = entity.getColumnId();
         
         BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
         String boardId = columnForBoardId.getBoardId();
+        String projectId = findBoardById(boardId).getProjectId();
 
         List<TaskEntity> columnTasks = taskRepository.findByColumnIdAndDeletedFalseOrderByOrderAsc(columnId);
         Map<String, List<TaskEntity>> childrenByParentId = buildChildrenByParentId(columnTasks);
@@ -359,6 +445,13 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         
         broadcastBoardChange(boardId);
+        activityService.logTaskDeleted(
+                entity.getId(),
+                boardId,
+                projectId,
+                TextUtils.trimToNull(actorUserId),
+                entity.getTitle()
+        );
     }
 
     public void softDeleteByBoardId(String boardId) {
@@ -693,6 +786,19 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return "__ROOT__".equals(groupKey) ? null : groupKey;
     }
 
+    private boolean sameText(String first, String second) {
+        String normalizedFirst = TextUtils.trimToNull(first);
+        String normalizedSecond = TextUtils.trimToNull(second);
+        if (normalizedFirst == null) {
+            return normalizedSecond == null;
+        }
+        return normalizedFirst.equals(normalizedSecond);
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
     private Page<TaskResponse> toResponsePage(Page<TaskEntity> entityPage) {
         List<TaskEntity> entities = entityPage.getContent();
         Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
@@ -779,3 +885,4 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         );
     }
 }
+
