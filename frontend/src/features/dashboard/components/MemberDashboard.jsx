@@ -2,7 +2,7 @@ import React from 'react';
 import { PieChart, Pie, ResponsiveContainer, Cell } from 'recharts';
 import { Clock } from 'lucide-react';
 
-const MemberDashboard = ({ data }: { data: any }) => {
+const MemberDashboard = ({ data }) => {
   if (!data) return null;
 
   const focusTasks = Array.isArray(data?.my_focus) ? data.my_focus : [];
@@ -26,7 +26,7 @@ const MemberDashboard = ({ data }: { data: any }) => {
         <div className="space-y-3">
           {focusTasks.length === 0 ? (
              <p className="text-slate-500 p-4 bg-slate-50 rounded-xl text-center">Xong hết việc rồi! Nghỉ tay thôi.</p>
-          ) : focusTasks.map((task: any) => (
+          ) : focusTasks.map((task) => (
             <div key={task.id} className={`p-4 rounded-xl border flex justify-between bg-slate-50 ${task.priority === 'HIGH' || task.priority === 'CRITICAL' ? 'border-rose-300' : 'border-slate-200'}`}>
               <div>
                 <p className="font-bold text-slate-700">{task.title}</p>

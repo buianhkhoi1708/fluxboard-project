@@ -5,7 +5,8 @@ import { userApi } from '../features/user/api/userApi';
 import { useRbacStore } from '../features/rbac/store/useRbacStore'; 
 
 const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
+  // Đã xóa generic <'profile' | 'security' | 'notifications'>
+  const [activeTab, setActiveTab] = useState('profile');
 
   return (
     <div className="p-6 md:p-10 max-w-6xl mx-auto w-full h-full overflow-y-auto bg-slate-50">
@@ -75,7 +76,8 @@ const ProfileTab = () => {
   const [name, setName] = useState(user?.full_name || '');
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || `https://ui-avatars.com/api/?name=${name || 'User'}&background=random`);
   
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Đã xóa generic <File | null>
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -95,8 +97,8 @@ const ProfileTab = () => {
   }, [user]);
 
   // 🚀 4. Logic bóc tách tên Role thật từ danh sách Roles
-  // Dò tìm role trong mảng roles có id hoặc name khớp với system_role / role_id của user
-  const matchedRole = roles.find((r: any) => 
+  // Đã xóa (r: any)
+  const matchedRole = roles.find((r) => 
     r.id === user?.role_id || 
     r.name === user?.system_role || 
     r.id === user?.system_role
@@ -105,7 +107,8 @@ const ProfileTab = () => {
   // Nếu tìm thấy thì hiển thị tên chuẩn, nếu không thì dùng tên thô từ Backend, bí quá thì để "Chưa xác định"
   const displayRoleName = matchedRole?.name || user?.system_role || 'Chưa xác định';
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Đã xóa định kiểu (e: React.ChangeEvent<HTMLInputElement>)
+  const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file); 
@@ -114,55 +117,54 @@ const ProfileTab = () => {
     }
   };
 
+  const handleSave = async () => {
+    setIsSaving(true);
+    setMessage({ type: '', text: '' });
 
-const handleSave = async () => {
-  setIsSaving(true);
-  setMessage({ type: '', text: '' });
+    // ✅ Normalize userId (chống backend đổi field)
+    // Đã xóa ép kiểu (user as any)
+    const userId = user?.id ?? user?.user_id;
 
-  // ✅ Normalize userId (chống backend đổi field)
-  const userId = user?.id ?? (user as any)?.user_id;
-
-  if (!userId) {
-    setMessage({ type: 'error', text: 'Không tìm thấy ID người dùng.' });
-    setIsSaving(false);
-    return;
-  }
-
-  try {
-    // ✅ Update name
-    await userApi.updateUser(userId, { full_name: name });
-
-    let newAvatarUrl = avatarPreview;
-
-    // ✅ Upload avatar nếu có file
-    if (selectedFile) {
-      const uploadedUrl = await userApi.uploadAvatar(userId, selectedFile);
-      if (uploadedUrl) newAvatarUrl = uploadedUrl;
+    if (!userId) {
+      setMessage({ type: 'error', text: 'Không tìm thấy ID người dùng.' });
+      setIsSaving(false);
+      return;
     }
 
-    // ✅ Update store
-    updateUserProfile({
-      full_name: name,
-      avatar_url: newAvatarUrl
-    });
+    try {
+      // ✅ Update name
+      await userApi.updateUser(userId, { full_name: name });
 
-    setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
-    setSelectedFile(null);
+      let newAvatarUrl = avatarPreview;
 
-  } catch (error: any) {
-    console.error("Lỗi cập nhật profile:", error);
+      // ✅ Upload avatar nếu có file
+      if (selectedFile) {
+        const uploadedUrl = await userApi.uploadAvatar(userId, selectedFile);
+        if (uploadedUrl) newAvatarUrl = uploadedUrl;
+      }
 
-    setMessage({
-      type: 'error',
-      text: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại!'
-    });
+      // ✅ Update store
+      updateUserProfile({
+        full_name: name,
+        avatar_url: newAvatarUrl
+      });
 
-  } finally {
-    setIsSaving(false);
-  }
-};
+      setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
+      setSelectedFile(null);
 
+    // Đã xóa (error: any)
+    } catch (error) {
+      console.error("Lỗi cập nhật profile:", error);
 
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại!'
+      });
+
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl animate-in fade-in duration-300">
@@ -246,11 +248,13 @@ const NotificationTab = () => {
     mentions: true,
   });
 
-  const handleToggle = (key: keyof typeof toggles) => {
+  // Đã xóa (key: keyof typeof toggles)
+  const handleToggle = (key) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const ToggleSwitch = ({ label, stateKey }: { label: string, stateKey: keyof typeof toggles }) => (
+  // Đã xóa type annotation cho props
+  const ToggleSwitch = ({ label, stateKey }) => (
     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
       <span className="text-sm font-semibold text-slate-700">{label}</span>
       <button 
