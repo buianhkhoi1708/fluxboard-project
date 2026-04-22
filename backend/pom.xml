@@ -85,11 +85,11 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Cloudinary -->
+        <!-- S3 AWS -->
         <dependency>
-            <groupId>com.cloudinary</groupId>
-            <artifactId>cloudinary-http44</artifactId>
-            <version>1.36.0</version>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.11</version>
         </dependency>
         
         <!-- Bucket4j -->

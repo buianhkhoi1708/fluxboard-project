@@ -20,6 +20,12 @@ import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.notification.service.NotificationDispatcher;
+
+// 🚀 THÊM IMPORT ACTIVITY
+import com.fluxboard.activity.entity.ActivityEntity;
+import com.fluxboard.activity.repository.ActivityRepository;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,10 +36,10 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate; 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
@@ -43,6 +49,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate; 
+    private final NotificationDispatcher notificationDispatcher; 
+
+    private final ActivityRepository activityRepository;
     
     private final SimpMessagingTemplate messagingTemplate;
     private final ActivityService activityService;
@@ -54,6 +64,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             BoardColumnRepository boardColumnRepository,
             UserRepository userRepository,
             SimpMessagingTemplate messagingTemplate,
+            NotificationDispatcher notificationDispatcher,
+            ActivityRepository activityRepository 
             ActivityService activityService
     ) {
         this.taskRepository = taskRepository;
@@ -61,6 +73,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
         this.userRepository = userRepository;
+        this.messagingTemplate = messagingTemplate; 
+        this.notificationDispatcher = notificationDispatcher;
+        this.activityRepository = activityRepository; 
         this.messagingTemplate = messagingTemplate;
         this.activityService = activityService;
     }
@@ -80,6 +95,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
         String boardId = column.getBoardId();
+        
+        BoardEntity board = findBoardById(boardId);
         String projectId = findBoardById(boardId).getProjectId();
 
         String normalizedAuthorUserId = requireAuthenticatedUserId(authorUserId);
@@ -111,6 +128,18 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAuthorUserId(normalizedAuthorUserId);
 
         TaskEntity saved = taskRepository.save(entity);
+        
+        ActivityEntity activity = new ActivityEntity();
+        activity.setProjectId(board.getProjectId());
+        activity.setUserId(normalizedAuthorUserId);
+        activity.setAction("đã thêm task " + saved.getTitle());
+        activityRepository.save(activity);
+        
+        if (saved.getAssigneesUserId() != null && !saved.getAssigneesUserId().isEmpty()) {
+            for (String assigneeId : saved.getAssigneesUserId()) {
+                notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
+            }
+        }
         
         broadcastBoardChange(boardId);
         activityService.logTaskCreated(saved.getId(), boardId, projectId, normalizedAuthorUserId, saved.getTitle());
@@ -234,6 +263,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             shiftOrdersAfterDelete(currentColumnId, currentParentTaskId, currentOrder, entity.getId());
         }
 
+        List<String> oldAssignees = entity.getAssigneesUserId() == null ? new ArrayList<>() : new ArrayList<>(entity.getAssigneesUserId());
+
         entity.setTitle(TextUtils.trim(request.title()));
         entity.setDescription(TextUtils.trimToNull(request.description()));
         entity.setColumnId(columnId);
@@ -251,6 +282,14 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         TaskEntity saved = taskRepository.save(entity);
         
+        if (saved.getAssigneesUserId() != null) {
+            for (String assigneeId : saved.getAssigneesUserId()) {
+                if (!oldAssignees.contains(assigneeId)) {
+                    notificationDispatcher.notifyTaskAssigned(assigneeId, saved);
+                }
+            }
+        }
+
         broadcastBoardChange(boardId);
         String normalizedActorUserId = TextUtils.trimToNull(actorUserId);
         if (!sameText(previousColumnId, saved.getColumnId())) {

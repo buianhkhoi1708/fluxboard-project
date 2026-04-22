@@ -1,7 +1,7 @@
 package com.fluxboard.media.service;
 
-import org.springframework.web.multipart.MultipartFile;
+import java.util.Map;
 
 public interface MediaService {
-    String uploadAvatar(MultipartFile file);
+    Map<String, String> generatePresignedUrl(String fileName, String contentType);
 }
