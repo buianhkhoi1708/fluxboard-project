@@ -1,39 +1,56 @@
 import axiosClient from '../../../lib/axiosClient';
-// 👉 Nhớ import IncomingUser từ file Store hoặc file định nghĩa Type chung của sếp
-import { IncomingUser } from '../store/useUserStore'; 
-
-// Cấu trúc Response bọc ngoài của Backend
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-// 🚀 Tạo một Type riêng cho việc Update để loại bỏ chữ 'any'
-export type UpdateUserPayload = Partial<IncomingUser> & {
-  status?: 'ACTIVE' | 'INACTIVE';
-};
 
 export const userApi = {
-  // ==========================================
-  // 1. LẤY DANH SÁCH USER (Đã gộp & Tối ưu)
-  // ==========================================
-  getAllUsers: (params?: { page?: number; size?: number; search?: string }): Promise<ApiResponse<IncomingUser[]>> => {
-    const finalParams = { page: 0, size: 100, ...params };
-    return axiosClient.get('/users', { params: finalParams });
+  // Lấy danh sách user
+  getUsers: () => axiosClient.get('/users?size=100'),
+
+  getAllUsers: (params = { page: 0, size: 50 }) => {
+    return axiosClient.get('/users', { params });
   },
-  
-  // ==========================================
-  // 2. CẬP NHẬT USER (Đổi Role, Đổi Tên...)
-  // ==========================================
-  updateUser: (userId: string, data: UpdateUserPayload): Promise<ApiResponse<IncomingUser>> => {
+
+  // Update user
+  updateUser: (userId: string | number, data: any) => {
     return axiosClient.put(`/users/${userId}`, data);
   },
-  
-  // ==========================================
-  // 3. VÔ HIỆU HÓA / XÓA USER
-  // ==========================================
-  deleteUser: (userId: string): Promise<ApiResponse<null>> => {
+
+  // Delete user
+  deleteUser: (userId: string | number) => {
     return axiosClient.delete(`/users/${userId}`);
+  },
+
+  // 🚀 Upload avatar (S3 safe)
+uploadAvatar: async (userId: string | number, file: File) => {
+  // 1. Lấy presigned URL
+  const presignRes: any = await axiosClient.get(
+    `/users/${userId}/avatar/presigned-url`,
+    {
+      params: {
+        fileName: file.name,
+        contentType: file.type
+      }
+    }
+  );
+
+  console.log("PresignRes:", presignRes);
+
+  const { uploadUrl, fileUrl } = presignRes.data || {};
+
+  if (!uploadUrl || !fileUrl) {
+    throw new Error("Presigned URL không hợp lệ!");
   }
+
+  // 2. Upload file lên S3
+  await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type
+    },
+    body: file
+  });
+
+  // 3. Return URL
+  return {
+    data: fileUrl
+  };
+}
 };

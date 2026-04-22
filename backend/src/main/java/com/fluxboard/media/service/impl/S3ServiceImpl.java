@@ -20,7 +20,7 @@ public class S3ServiceImpl implements MediaService {
 
     @Value("${aws.s3.bucket-name}")
     private String bucketName;
-    
+
     @Value("${aws.s3.region}")
     private String region;
 
@@ -50,9 +50,7 @@ public class S3ServiceImpl implements MediaService {
 
         Map<String, String> result = new HashMap<>();
         result.put("uploadUrl", presignedRequest.url().toString());
-        result.put("avatarUrl", publicUrl);                   
-        result.put("key", uniqueKey);
-        
+        result.put("fileUrl", publicUrl);
         return result;
     }
 }
