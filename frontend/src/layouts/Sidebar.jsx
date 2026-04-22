@@ -51,6 +51,7 @@ const Sidebar = () => {
       label: "Role Access (RBAC)",
     },
     { path: "/audit-log", icon: <Activity size={20} />, label: "Audit Log" },
+    { path: "/settings", icon: <Settings size={20} />, label: "Settings" },
   ];
 
   // Reusable Navigation Item Component
@@ -86,11 +87,11 @@ const Sidebar = () => {
     <aside
       className="
       fixed bottom-0 left-0 w-full z-50 bg-white border-t border-slate-200 flex flex-row
-      md:relative md:w-64 md:h-full md:flex-col md:border-t-0 md:border-r shrink-0 transition-all
+      md:relative md:w-64 md:h-screen md:flex-col md:border-t-0 md:border-r shrink-0 transition-all
     "
     >
       {/* 2. MENU CONTENT */}
-      <div className="flex-1 flex flex-row md:flex-col gap-1 md:gap-6 overflow-x-auto md:overflow-hidden px-2 py-2 md:px-4 md:py-6">
+      <div className="flex-1 flex flex-row md:flex-col gap-1 md:gap-6 overflow-x-auto md:overflow-y-auto no-scrollbar px-2 py-2 md:px-4 pb-20 md:pb-0">
         {/* EXECUTION SECTION */}
         <div className="flex flex-row md:flex-col gap-1">
           <p className="hidden md:block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-3">
@@ -100,7 +101,7 @@ const Sidebar = () => {
             <NavItem
               key={item.path}
               item={item}
-              isAiHighlight={item.path === "/aigenerateboard"} 
+              isAiHighlight={item.path === "/board"}
             />
           ))}
         </div>
@@ -113,36 +114,17 @@ const Sidebar = () => {
           {managementItems.map((item) => (
             <NavItem key={item.path} item={item} />
           ))}
-        </div>
-
-        {/* Settings cho mobile */}
-        <div className="flex flex-row gap-1 md:hidden border-l pl-1 ml-1 border-slate-200">
-          <NavItem item={{ path: "/settings", icon: <Settings size={20} />, label: "Settings" }} />
           <button
             onClick={logout}
-            className="flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl text-[10px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all min-w-[64px]"
+            className="flex flex-col md:flex-row items-center justify-center md:justify-start w-full gap-1 md:gap-3 px-3 py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0 border border-transparent md:hover:border-rose-100"
           >
-            <LogOut size={20} className="text-slate-400 hover:text-rose-500" />
-            <span>Logout</span>
+            <LogOut
+              size={20}
+              className="text-slate-400 group-hover:text-rose-500 transition-colors"
+            />
+            <span className="whitespace-nowrap">Logout</span>
           </button>
         </div>
-      </div>
-
-      {/* SETTINGS & LOGOUT SECTION (BOTTOM) */}
-      <div className="hidden md:flex flex-col gap-2 p-4 border-t border-slate-200 bg-white mt-auto shrink-0">
-        <NavItem 
-          item={{ path: "/settings", icon: <Settings size={20} />, label: "Settings" }} 
-        />
-        <button
-          onClick={logout}
-          className="flex flex-row items-center justify-start w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all group border border-transparent hover:border-rose-100"
-        >
-          <LogOut
-            size={20}
-            className="text-slate-400 group-hover:text-rose-500 transition-colors"
-          />
-          <span className="whitespace-nowrap">Logout</span>
-        </button>
       </div>
     </aside>
   );

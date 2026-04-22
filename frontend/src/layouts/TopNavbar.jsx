@@ -1,11 +1,8 @@
 import React from 'react';
-import Logo from '../../src/assets/icon.svg';
-import { Bell, ChevronDown, CircleUser, Search, User } from 'lucide-react';
-import { useAuthStore } from '../features/auth/store/useAuthStore'; 
+import Logo from '../../src/assets/icon.svg'; // Check the path if it shows an error
+import { Bell, ChevronDown, CircleUser, Search } from 'lucide-react';
 
 const TopNavbar = () => {
-  const { user } = useAuthStore(); 
-
   return (
     <nav className="flex justify-between items-center px-4 md:px-6 h-[60px] border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
       
@@ -62,17 +59,7 @@ const TopNavbar = () => {
 
         {/* User Profile Button */}
         <button className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          {user?.avatar_url ? (
-            <img src={user.avatar_url} alt="Avatar" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm border border-indigo-200">
-              {user?.full_name?.charAt(0).toUpperCase() || <User size={18}/>}
-            </div>
-          )}
-          <div className="hidden md:flex flex-col items-start">
-             <span className="text-xs font-bold text-slate-700">{user?.full_name || 'Người dùng'}</span>
-             <span className="text-[10px] font-semibold text-slate-400">{user?.system_role || 'MEMBER'}</span>
-          </div>
+          <CircleUser size={32} strokeWidth={1.5} className="text-slate-600" />
         </button>
       </div>
     </nav>
