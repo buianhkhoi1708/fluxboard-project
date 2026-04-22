@@ -11,6 +11,8 @@ import LoginPage from "./pages/LoginPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import SettingsPage from "./pages/SettingsPage";
+import DashboardPage from "./dashboard/DashboardPage";
 
 function App() {
   return (
@@ -22,16 +24,17 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/board" element={<BoardPage />} />
               <Route path="/adminrbac" element={<AdminRBACPage />} />
-              {/* Mốt Long làm trang Settings thì thêm vào đây: */}
+              
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/workspaces" element={<WorkspacesPage />} />
               <Route path="/board/:id" element={<BoardView />} />
-              <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
+              <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />}/>
             </Route>
           </Route>
         </Routes>
