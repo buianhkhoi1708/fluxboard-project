@@ -2,8 +2,8 @@ package com.fluxboard.common.script;
 
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.entity.ProjectEntity;
-import com.fluxboard.project.entity.ProjectMember;
-import com.fluxboard.project.repository.ProjectMemberRepository;
+import com.fluxboard.project.projectmember.entity.ProjectMember;
+import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.rbac.entity.PermissionEntity;
 import com.fluxboard.rbac.entity.RoleEntity;

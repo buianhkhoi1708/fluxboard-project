@@ -1,6 +1,7 @@
 package com.fluxboard.project.repository;
 
 import com.fluxboard.project.entity.ProjectEntity;
+import java.util.List;
 import java.util.Optional; // Đảm bảo đã import cái này
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,7 +16,11 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
 
     boolean existsByIdAndDeletedFalse(String id);
 
+    List<ProjectEntity> findByDeletedFalse();
+
     Page<ProjectEntity> findByDeletedFalse(Pageable pageable);
 
     Page<ProjectEntity> findByDepartmentIdAndDeletedFalse(String departmentId, Pageable pageable);
+
+    long countByDeletedFalse();
 }
