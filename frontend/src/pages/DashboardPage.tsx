@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useDashboardStore } from '../dashboard/store/useDashboardStore';
-
+import { useDashboardStore } from '../features/dashboard/store/useDashboardStore';
 import { useAuthStore } from '../features/auth/store/useAuthStore';
-
-import AdminDashboard from '../dashboard/components/AdminDashboard';
-import ManagerDashboard from '../dashboard/components/ManagerDashboard';
-import LeadDashboard from '../dashboard/components/LeadDashboard';
-import MemberDashboard from '../dashboard/components/MemberDashboard';
+import AdminDashboard from '../features/dashboard/components/AdminDashboard';
+import ManagerDashboard from '../features/dashboard/components/ManagerDashboard';
+import LeadDashboard from '../features/dashboard/components/LeadDashboard';
+import MemberDashboard from '../features/dashboard/components/MemberDashboard';
 
 const DashboardPage = () => {
   // Đặt mặc định là SYSTEM_ADMIN
