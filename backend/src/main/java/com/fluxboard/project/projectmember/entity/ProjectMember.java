@@ -1,4 +1,4 @@
-package com.fluxboard.project.entity;
+package com.fluxboard.project.projectmember.entity;
 
 import com.fluxboard.common.entity.BaseDocument;
 import lombok.*;
