@@ -4,13 +4,21 @@ import com.fluxboard.activity.entity.ActivityEntity;
 import com.fluxboard.activity.repository.ActivityRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
+import com.fluxboard.department.service.DepartmentService;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.WeekFields;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -21,21 +29,35 @@ public class DashboardService {
     private final ProjectRepository projectRepository;
     private final TaskRepository taskRepository;
     private final ActivityRepository activityRepository;
+    private final DepartmentService departmentService;
+    private final MongoTemplate mongoTemplate;
 
     public DashboardService(UserRepository userRepository,
                             ProjectRepository projectRepository,
                             TaskRepository taskRepository,
-                            ActivityRepository activityRepository) {
+                            ActivityRepository activityRepository,
+                            DepartmentService departmentService,
+                            MongoTemplate mongoTemplate) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.activityRepository = activityRepository;
+        this.departmentService = departmentService;
+        this.mongoTemplate = mongoTemplate;
     }
 
-    // Helper: Lấy map User ID -> Full Name để tối ưu truy vấn
     private Map<String, String> getUserNameMap() {
         return userRepository.findAll().stream()
                 .collect(Collectors.toMap(User::getId, User::getFullName, (a, b) -> a));
+    }
+
+    private String getRelativeTime(Instant createdAt) {
+        if (createdAt == null) return "Gần đây";
+        long minutes = Duration.between(createdAt, Instant.now()).toMinutes();
+        if (minutes < 60) return minutes + " phút trước";
+        long hours = minutes / 60;
+        if (hours < 24) return hours + " giờ trước";
+        return (hours / 24) + " ngày trước";
     }
 
     public Map<String, Object> getDashboardMetrics(String roleName, String currentUserId) {
@@ -60,10 +82,13 @@ public class DashboardService {
         Map<String, Object> cards = new HashMap<>();
         cards.put("total_users", userRepository.countByDeletedFalse());
         cards.put("active_projects", projectRepository.countByDeletedFalse());
-        cards.put("total_departments", 5); 
+        cards.put("total_departments", departmentService.getTotalDepartments()); 
         data.put("cards", cards);
 
-        List<ProjectEntity> projects = projectRepository.findByDeletedFalse();
+        Query projQuery = new Query(Criteria.where("is_deleted").is(false));
+        projQuery.fields().include("status");
+        List<ProjectEntity> projects = mongoTemplate.find(projQuery, ProjectEntity.class);
+        
         Map<String, Long> statusCount = projects.stream()
                 .filter(p -> p.getStatus() != null)
                 .collect(Collectors.groupingBy(ProjectEntity::getStatus, Collectors.counting()));
@@ -82,10 +107,14 @@ public class DashboardService {
         List<Map<String, Object>> auditLogs = recentActivities.stream().map(act -> {
             Map<String, Object> log = new HashMap<>();
             log.put("id", act.getId());
-            log.put("actor_name", userNames.getOrDefault(act.getActorUserId(), "System"));
+            log.put("actor_name", act.getActorUserId() != null ? userNames.getOrDefault(act.getActorUserId(), "System") : "System");
             log.put("action", act.getAction());
+            
+            log.put("target", act.getMessage() != null ? act.getMessage() : act.getSourceType().toString() + " update"); 
+            boolean isCritical = act.getAction().toString().contains("DELETE");
+            log.put("severity", isCritical ? "CRITICAL" : "INFO");
+            
             log.put("created_at", act.getCreatedAt());
-            log.put("severity", "INFO");
             return log;
         }).collect(Collectors.toList());
         data.put("audit_logs", auditLogs);
@@ -98,9 +127,96 @@ public class DashboardService {
     // ==========================================
     private Map<String, Object> getManagerMetrics() {
         Map<String, Object> data = new HashMap<>();
-        List<TaskEntity> allTasks = taskRepository.findByDeletedFalse();
+        Map<String, String> userNames = getUserNameMap();
 
-        List<Map<String, Object>> aiPoints = allTasks.stream()
+        Query taskQuery = new Query(Criteria.where("is_deleted").is(false));
+        taskQuery.fields().include("assigneesUserId", "status", "aiSuggestedPoint", "storyPoint", "title");
+        List<TaskEntity> optimizedTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
+
+        Query projQuery = new Query(Criteria.where("is_deleted").is(false));
+        projQuery.fields().include("name", "title"); 
+        List<ProjectEntity> allProjects = mongoTemplate.find(projQuery, ProjectEntity.class);
+        Map<String, String> projectNames = new HashMap<>();
+        for (ProjectEntity p : allProjects) {
+            String pName = p.getName() != null ? p.getName() : "Dự án " + p.getId().substring(0, 4);
+            projectNames.put(p.getId(), pName);
+        }
+
+        Instant fourWeeksAgo = Instant.now().minus(Duration.ofDays(28));
+        Query actQuery = new Query(Criteria.where("is_deleted").is(false).and("created_at").gte(fourWeeksAgo));
+        actQuery.fields().include("projectId", "createdAt");
+        List<ActivityEntity> recentActs = mongoTemplate.find(actQuery, ActivityEntity.class);
+
+        WeekFields weekFields = WeekFields.of(Locale.getDefault());
+        Map<String, Map<String, Integer>> weeklyStats = new TreeMap<>(); 
+
+        for (ActivityEntity act : recentActs) {
+            if (act.getProjectId() == null || act.getCreatedAt() == null) continue;
+            
+            ZonedDateTime zdt = act.getCreatedAt().atZone(ZoneId.systemDefault());
+            int weekNum = zdt.get(weekFields.weekOfWeekBasedYear());
+            String weekStr = "W" + weekNum;
+            
+            String pName = projectNames.getOrDefault(act.getProjectId(), "Khác");
+            
+            weeklyStats.putIfAbsent(weekStr, new HashMap<>());
+            Map<String, Integer> projCount = weeklyStats.get(weekStr);
+            projCount.put(pName, projCount.getOrDefault(pName, 0) + 1);
+        }
+
+        List<Map<String, Object>> weeklyProgress = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Integer>> entry : weeklyStats.entrySet()) {
+            Map<String, Object> weekData = new HashMap<>();
+            weekData.put("week", entry.getKey()); 
+            for (Map.Entry<String, Integer> pEntry : entry.getValue().entrySet()) {
+                weekData.put(pEntry.getKey(), pEntry.getValue()); 
+            }
+            weeklyProgress.add(weekData);
+        }
+        
+        if (weeklyProgress.isEmpty()) {
+            Map<String, Object> emptyWeek = new HashMap<>();
+            int currentWeek = ZonedDateTime.now().get(weekFields.weekOfWeekBasedYear());
+            emptyWeek.put("week", "W" + currentWeek);
+            emptyWeek.put("Chưa có dữ liệu", 0);
+            weeklyProgress.add(emptyWeek);
+        }
+
+        data.put("weekly_progress", weeklyProgress);
+
+        // --- TASK COMPLETION BY TEAM ---
+        Map<String, int[]> userTaskStats = new HashMap<>(); 
+        for (TaskEntity task : optimizedTasks) {
+            if (task.getAssigneesUserId() != null && !task.getAssigneesUserId().isEmpty()) {
+                for (String userId : task.getAssigneesUserId()) {
+                    userTaskStats.putIfAbsent(userId, new int[]{0, 0});
+                    userTaskStats.get(userId)[0]++; 
+                    if ("DONE".equalsIgnoreCase(task.getStatus())) {
+                        userTaskStats.get(userId)[1]++; 
+                    }
+                }
+            }
+        }
+        
+        List<Map<String, Object>> completionByTeam = new ArrayList<>();
+        for (Map.Entry<String, int[]> entry : userTaskStats.entrySet()) {
+            String userId = entry.getKey();
+            int totalTasks = entry.getValue()[0];
+            int completedTasks = entry.getValue()[1];
+            double percentage = totalTasks == 0 ? 0 : Math.round(((double) completedTasks / totalTasks) * 100);
+            
+            Map<String, Object> stat = new HashMap<>();
+            stat.put("team", userNames.getOrDefault(userId, "Ẩn danh"));
+            stat.put("percentage", percentage);
+            completionByTeam.add(stat);
+        }
+        if (completionByTeam.isEmpty()) {
+            completionByTeam.add(Map.of("team", "Chưa có dữ liệu", "percentage", 0));
+        }
+        data.put("task_completion_by_team", completionByTeam);
+
+        // --- AI VS ACTUAL POINTS ---
+        List<Map<String, Object>> aiPoints = optimizedTasks.stream()
                 .filter(t -> t.getAiSuggestedPoint() != null && t.getStoryPoint() != null)
                 .map(t -> {
                     Map<String, Object> map = new HashMap<>();
@@ -113,14 +229,6 @@ public class DashboardService {
                 .collect(Collectors.toList());
         data.put("ai_vs_actual_points", aiPoints);
 
-        long totalTasks = allTasks.size();
-        long completedTasks = allTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
-        double percentage = totalTasks == 0 ? 0 : Math.round(((double) completedTasks / totalTasks) * 100);
-        
-        List<Map<String, Object>> completionByTeam = new ArrayList<>();
-        completionByTeam.add(Map.of("team", "Toàn hệ thống", "percentage", percentage));
-        data.put("task_completion_by_team", completionByTeam);
-
         return data;
     }
 
@@ -129,11 +237,14 @@ public class DashboardService {
     // ==========================================
     private Map<String, Object> getLeadMetrics() {
         Map<String, Object> data = new HashMap<>();
-        List<TaskEntity> allTasks = taskRepository.findByDeletedFalse();
         Map<String, String> userNames = getUserNameMap();
 
+        Query taskQuery = new Query(Criteria.where("is_deleted").is(false));
+        taskQuery.fields().include("assigneesUserId", "status", "storyPoint", "dueDate", "title", "priority");
+        List<TaskEntity> optimizedTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
+
         Map<String, Integer> workloadMap = new HashMap<>();
-        for (TaskEntity task : allTasks) {
+        for (TaskEntity task : optimizedTasks) {
             if (task.getAssigneesUserId() != null && !"DONE".equalsIgnoreCase(task.getStatus()) && task.getStoryPoint() != null) {
                 for (String userId : task.getAssigneesUserId()) {
                     workloadMap.put(userId, workloadMap.getOrDefault(userId, 0) + task.getStoryPoint());
@@ -154,19 +265,36 @@ public class DashboardService {
         data.put("team_workload", teamWorkload);
 
         Instant now = Instant.now();
-        List<Map<String, Object>> atRiskTasks = allTasks.stream()
+        List<Map<String, Object>> atRiskTasks = optimizedTasks.stream()
                 .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()) && t.getDueDate() != null && t.getDueDate().isBefore(now))
                 .map(t -> {
                     Map<String, Object> map = new HashMap<>();
                     map.put("id", t.getId());
                     map.put("title", t.getTitle());
-                    map.put("due_date", t.getDueDate());
-                    map.put("priority", t.getPriority());
+                    map.put("due_date", t.getDueDate().toString().substring(0, 10)); 
+                    map.put("priority", t.getPriority() != null ? t.getPriority() : "HIGH");
                     map.put("reason", "OVERDUE");
                     return map;
                 })
+                .limit(10)
                 .collect(Collectors.toList());
         data.put("at_risk_tasks", atRiskTasks);
+
+        List<ActivityEntity> recentActivities = activityRepository.findTop10ByOrderByCreatedAtDesc();
+        List<Map<String, Object>> recentActs = recentActivities.stream()
+                .limit(5)
+                .map(act -> {
+                    Map<String, Object> map = new HashMap<>();
+                    String userName = act.getActorUserId() != null ? userNames.getOrDefault(act.getActorUserId(), "System") : "System";
+                    String[] nameParts = userName.split(" ");
+                    String shortName = nameParts[nameParts.length - 1]; 
+                    
+                    map.put("user", shortName);
+                    map.put("content", act.getMessage() != null ? act.getMessage() : String.valueOf(act.getAction()));
+                    map.put("time", getRelativeTime(act.getCreatedAt())); 
+                    return map;
+                }).collect(Collectors.toList());
+        data.put("recent_activities", recentActs);
 
         return data;
     }
@@ -176,7 +304,10 @@ public class DashboardService {
     // ==========================================
     private Map<String, Object> getMemberMetrics(String userId) {
         Map<String, Object> data = new HashMap<>();
-        List<TaskEntity> myTasks = taskRepository.findByAssigneesUserIdContainingAndDeletedFalse(userId);
+        
+        Query taskQuery = new Query(Criteria.where("is_deleted").is(false).and("assigneesUserId").is(userId));
+        taskQuery.fields().include("status", "priority", "dueDate", "title");
+        List<TaskEntity> myTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
 
         long totalAssigned = myTasks.size();
         long completed = myTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
@@ -190,13 +321,9 @@ public class DashboardService {
                 .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()))
                 .filter(t -> "HIGH".equalsIgnoreCase(String.valueOf(t.getPriority())) || "CRITICAL".equalsIgnoreCase(String.valueOf(t.getPriority())))
                 .sorted((t1, t2) -> {
-                    // Cả 2 đều không có ngày hạn -> Xem như bằng nhau
                     if (t1.getDueDate() == null && t2.getDueDate() == null) return 0;
-                    // T1 không có ngày hạn -> Đẩy T1 xuống dưới
                     if (t1.getDueDate() == null) return 1;
-                    // T2 không có ngày hạn -> Đẩy T2 xuống dưới
                     if (t2.getDueDate() == null) return -1;
-                    // Cả 2 đều có ngày hạn -> So sánh ngày, ngày nào nhỏ hơn (gần quá khứ hơn) lên đầu
                     return t1.getDueDate().compareTo(t2.getDueDate());
                 })
                 .map(t -> {
@@ -204,7 +331,17 @@ public class DashboardService {
                     map.put("id", t.getId());
                     map.put("title", t.getTitle());
                     map.put("priority", t.getPriority());
-                    map.put("due_date", t.getDueDate());
+                    
+                    String dueDateStr = "Chưa rõ";
+                    if(t.getDueDate() != null) {
+                       long days = Duration.between(Instant.now(), t.getDueDate()).toDays();
+                       if (days == 0) dueDateStr = "Hôm nay";
+                       else if (days == 1) dueDateStr = "Ngày mai";
+                       else if (days < 0) dueDateStr = "Quá hạn";
+                       else dueDateStr = t.getDueDate().toString().substring(0, 10);
+                    }
+                    map.put("due_date", dueDateStr);
+                    
                     return map;
                 })
                 .limit(5)
