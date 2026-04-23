@@ -23,9 +23,9 @@ public class DashboardService {
     private final ActivityRepository activityRepository;
 
     public DashboardService(UserRepository userRepository,
-                            ProjectRepository projectRepository,
-                            TaskRepository taskRepository,
-                            ActivityRepository activityRepository) {
+            ProjectRepository projectRepository,
+            TaskRepository taskRepository,
+            ActivityRepository activityRepository) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
@@ -60,7 +60,8 @@ public class DashboardService {
         Map<String, Object> cards = new HashMap<>();
         cards.put("total_users", userRepository.countByDeletedFalse());
         cards.put("active_projects", projectRepository.countByDeletedFalse());
-        cards.put("total_departments", 5); 
+        cards.put("total_departments", 5);
+        cards.put("total_teams", 8);
         data.put("cards", cards);
 
         List<ProjectEntity> projects = projectRepository.findByDeletedFalse();
@@ -94,7 +95,7 @@ public class DashboardService {
     }
 
     // ==========================================
-    // 2. DATA CHO MANAGER 
+    // 2. DATA CHO MANAGER
     // ==========================================
     private Map<String, Object> getManagerMetrics() {
         Map<String, Object> data = new HashMap<>();
@@ -116,7 +117,7 @@ public class DashboardService {
         long totalTasks = allTasks.size();
         long completedTasks = allTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
         double percentage = totalTasks == 0 ? 0 : Math.round(((double) completedTasks / totalTasks) * 100);
-        
+
         List<Map<String, Object>> completionByTeam = new ArrayList<>();
         completionByTeam.add(Map.of("team", "Toàn hệ thống", "percentage", percentage));
         data.put("task_completion_by_team", completionByTeam);
@@ -134,7 +135,8 @@ public class DashboardService {
 
         Map<String, Integer> workloadMap = new HashMap<>();
         for (TaskEntity task : allTasks) {
-            if (task.getAssigneesUserId() != null && !"DONE".equalsIgnoreCase(task.getStatus()) && task.getStoryPoint() != null) {
+            if (task.getAssigneesUserId() != null && !"DONE".equalsIgnoreCase(task.getStatus())
+                    && task.getStoryPoint() != null) {
                 for (String userId : task.getAssigneesUserId()) {
                     workloadMap.put(userId, workloadMap.getOrDefault(userId, 0) + task.getStoryPoint());
                 }
@@ -155,7 +157,8 @@ public class DashboardService {
 
         Instant now = Instant.now();
         List<Map<String, Object>> atRiskTasks = allTasks.stream()
-                .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()) && t.getDueDate() != null && t.getDueDate().isBefore(now))
+                .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()) && t.getDueDate() != null
+                        && t.getDueDate().isBefore(now))
                 .map(t -> {
                     Map<String, Object> map = new HashMap<>();
                     map.put("id", t.getId());
@@ -172,7 +175,7 @@ public class DashboardService {
     }
 
     // ==========================================
-    // 4. DATA CHO MEMBER 
+    // 4. DATA CHO MEMBER
     // ==========================================
     private Map<String, Object> getMemberMetrics(String userId) {
         Map<String, Object> data = new HashMap<>();
@@ -188,15 +191,20 @@ public class DashboardService {
 
         List<Map<String, Object>> myFocus = myTasks.stream()
                 .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()))
-                .filter(t -> "HIGH".equalsIgnoreCase(String.valueOf(t.getPriority())) || "CRITICAL".equalsIgnoreCase(String.valueOf(t.getPriority())))
+                .filter(t -> "HIGH".equalsIgnoreCase(String.valueOf(t.getPriority()))
+                        || "CRITICAL".equalsIgnoreCase(String.valueOf(t.getPriority())))
                 .sorted((t1, t2) -> {
                     // Cả 2 đều không có ngày hạn -> Xem như bằng nhau
-                    if (t1.getDueDate() == null && t2.getDueDate() == null) return 0;
+                    if (t1.getDueDate() == null && t2.getDueDate() == null)
+                        return 0;
                     // T1 không có ngày hạn -> Đẩy T1 xuống dưới
-                    if (t1.getDueDate() == null) return 1;
+                    if (t1.getDueDate() == null)
+                        return 1;
                     // T2 không có ngày hạn -> Đẩy T2 xuống dưới
-                    if (t2.getDueDate() == null) return -1;
-                    // Cả 2 đều có ngày hạn -> So sánh ngày, ngày nào nhỏ hơn (gần quá khứ hơn) lên đầu
+                    if (t2.getDueDate() == null)
+                        return -1;
+                    // Cả 2 đều có ngày hạn -> So sánh ngày, ngày nào nhỏ hơn (gần quá khứ hơn) lên
+                    // đầu
                     return t1.getDueDate().compareTo(t2.getDueDate());
                 })
                 .map(t -> {
