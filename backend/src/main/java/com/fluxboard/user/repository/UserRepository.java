@@ -15,8 +15,6 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     Optional<User> findByEmailAndDeletedFalse(String email);
 
-    List<User> findByDeletedFalse();
-
     Page<User> findByDeletedFalse(Pageable pageable);
 
     List<User> findByIdInAndDeletedFalse(List<String> ids);
@@ -26,9 +24,8 @@ public interface UserRepository extends MongoRepository<User, String> {
     boolean existsByEmailAndIdNotAndDeletedFalse(String email, String id);
 
     boolean existsByIdAndDeletedFalse(String id);
-
-    long countByDeletedFalse();
-
+    
     Optional<User> findByResetTokenAndDeletedFalse(String resetToken);
 
+    long countByDeletedFalse();
 }

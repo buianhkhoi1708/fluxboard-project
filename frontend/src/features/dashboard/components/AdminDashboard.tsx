@@ -5,7 +5,7 @@ import { MoreVertical, UserCog, Trash2 } from 'lucide-react';
 // ==========================================
 // 🚀 SUB-COMPONENT: StatCard
 // ==========================================
-const StatCard = ({ title, value, children, className = "" }) => (
+const StatCard = ({ title, value, children, className = "" }: any) => (
   <div className={`bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-200/80 hover:border-slate-300 transition-all duration-300 flex flex-col justify-between ${className}`}>
     <div className="flex justify-between items-start mb-2">
       <h3 className="font-bold text-[15px] text-slate-700">{title}</h3>
@@ -21,7 +21,7 @@ const StatCard = ({ title, value, children, className = "" }) => (
 // ==========================================
 // 🚀 MAIN COMPONENT: AdminDashboard
 // ==========================================
-const AdminDashboard = ({ data }) => {
+const AdminDashboard = ({ data }: { data: any }) => {
   if (!data) return null;
 
   // 1. Nhận data trực tiếp từ dashboardApi (thông qua props)
@@ -32,7 +32,7 @@ const AdminDashboard = ({ data }) => {
 
   // 2. CHART DATA: Map trực tiếp, không thêm thắt gì hết
   const chartData = useMemo(() => {
-    return projectStatusDistribution.map((item) => ({
+    return projectStatusDistribution.map((item: any) => ({
       name: item.status,
       value: item.count,
       color: item.color
@@ -41,7 +41,7 @@ const AdminDashboard = ({ data }) => {
 
   // 3. PROJECT STATUS LIST: Map trực tiếp từ at_risk_projects
   const projectStatusList = useMemo(() => {
-    return atRiskProjects.map((project) => ({
+    return atRiskProjects.map((project: any) => ({
       name: project.name,
       value: project.status,
       isBadge: project.status === 'At Risk' || project.status === 'Delayed'
@@ -75,7 +75,7 @@ const AdminDashboard = ({ data }) => {
             {auditLogs.length === 0 ? (
               <p className="text-sm text-slate-400 italic">No activities recorded.</p>
             ) : (
-              auditLogs.slice(0, 2).map((log, idx) => (
+              auditLogs.slice(0, 2).map((log: any, idx: number) => (
                 <div key={log.id || idx} className="flex items-start gap-2.5 group cursor-pointer">
                   {log.actor === 'System' ? <UserCog size={16} className="text-slate-400 group-hover:text-indigo-500 shrink-0 mt-0.5" /> : <Trash2 size={16} className="text-slate-400 group-hover:text-rose-500 shrink-0 mt-0.5" />}
                   <p className="text-[13px] leading-snug font-medium text-slate-600 group-hover:text-slate-800 line-clamp-2">{log.action}</p>
@@ -114,7 +114,7 @@ const AdminDashboard = ({ data }) => {
             <button className="text-slate-400 hover:text-indigo-600 p-1"><MoreVertical size={18} /></button>
           </div>
           <div className="flex-1 flex flex-col gap-1 overflow-y-auto no-scrollbar">
-            {projectStatusList.map((item, idx) => (
+            {projectStatusList.map((item: any, idx: number) => (
               <div key={idx} className="group flex justify-between items-center py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 -mx-2 rounded-lg transition-colors">
                 <span className="text-[13px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate pr-2">{item.name}</span>
                 {item.isBadge ? (

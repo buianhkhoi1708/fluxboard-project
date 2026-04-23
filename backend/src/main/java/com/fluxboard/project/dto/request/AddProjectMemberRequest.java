@@ -1,4 +1,4 @@
-package com.fluxboard.project.projectmember.dto.request;
+package com.fluxboard.project.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
