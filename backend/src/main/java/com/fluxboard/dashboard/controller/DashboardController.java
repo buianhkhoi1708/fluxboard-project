@@ -33,6 +33,45 @@ public class DashboardController {
         this.roleRepository = roleRepository;
     }
 
+    // ==========================================
+    // ENDPOINT CHO TỪNG ROLE CỤ THỂ (DÙNG CHO FE MỚI)
+    // ==========================================
+
+    @GetMapping("/admin")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAdminMetrics() {
+        Map<String, Object> metrics = dashboardService.getSystemAdminMetrics();
+        return ResponseFactory.ok("Admin dashboard data retrieved successfully.", metrics);
+    }
+
+    @GetMapping("/manager")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getManagerMetrics() {
+        Map<String, Object> metrics = dashboardService.getManagerMetrics();
+        return ResponseFactory.ok("Manager dashboard data retrieved successfully.", metrics);
+    }
+
+    @GetMapping("/lead")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getLeadMetrics() {
+        Map<String, Object> metrics = dashboardService.getLeadMetrics();
+        return ResponseFactory.ok("Lead dashboard data retrieved successfully.", metrics);
+    }
+
+    @GetMapping("/member")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMemberMetrics() {
+        // Lấy userId từ context (giả sử bạn có cách lấy, hoặc truyền từ token)
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        AuthenticatedUser currentUser = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED, "User not authenticated");
+        }
+        String userId = currentUser.userId();
+        Map<String, Object> metrics = dashboardService.getMemberMetrics(userId);
+        return ResponseFactory.ok("Member dashboard data retrieved successfully.", metrics);
+    }
+
+    // ==========================================
+    // ENDPOINT GỘP (DỰA TRÊN ROLE) – GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC
+    // ==========================================
+
     @GetMapping("/metrics")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getDashboardMetrics() {
         
@@ -44,7 +83,6 @@ public class DashboardController {
         }
 
         String currentUserId = currentUser.userId(); 
-        
         String roleId = currentUser.roleId(); 
 
         RoleEntity role = roleRepository.findById(roleId)
