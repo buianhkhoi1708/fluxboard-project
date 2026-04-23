@@ -4,9 +4,9 @@ import com.fluxboard.activity.entity.ActivityEntity;
 import com.fluxboard.activity.repository.ActivityRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
-import com.fluxboard.department.service.DepartmentService;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
+import com.fluxboard.organization.department.service.DepartmentService;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -79,38 +79,36 @@ public class DashboardService {
 
     // 1. ADMIN
     public Map<String, Object> getSystemAdminMetrics() {
-        Map<String, Object> data = new HashMap<>();
-        Map<String, String> userNames = getUserNameMap();
+    Map<String, Object> data = new HashMap<>();
+    Map<String, String> userNames = getUserNameMap();
 
-        // ---------- CARDS ----------
-        Map<String, Object> cards = new HashMap<>();
-        long totalUsers = userRepository.countByDeletedFalse();
-        cards.put("total_users", totalUsers);
-        cards.put("total_members", totalUsers); // tạm thời bằng totalUsers
+    // ---------- CARDS ----------
+    Map<String, Object> cards = new HashMap<>();
+    long totalUsers = userRepository.countByDeletedFalse();
+    cards.put("total_users", totalUsers);
+    cards.put("total_members", totalUsers);
 
-        // Lấy tất cả project chưa bị xóa
-        // ⚠️ CẦN CÓ METHOD findByDeletedFalse() TRONG ProjectRepository
-        List<ProjectEntity> allProjects = projectRepository.findByDeletedFalse();
-        long activeProjects = allProjects.stream()
-                .filter(p -> p.getStatus() != null && !"ARCHIVED".equalsIgnoreCase(p.getStatus()))
-                .count();
-        long archivedProjects = allProjects.stream()
-                .filter(p -> p.getStatus() != null && "ARCHIVED".equalsIgnoreCase(p.getStatus()))
-                .count();
+    List<ProjectEntity> allProjects = projectRepository.findByDeletedFalse();
+    long activeProjects = allProjects.stream()
+            .filter(p -> p.getStatus() != null && !"ARCHIVED".equalsIgnoreCase(p.getStatus()))
+            .count();
+    long archivedProjects = allProjects.stream()
+            .filter(p -> p.getStatus() != null && "ARCHIVED".equalsIgnoreCase(p.getStatus()))
+            .count();
 
-        Map<String, Long> projectsMap = new HashMap<>();
-        projectsMap.put("active", activeProjects);
-        projectsMap.put("archived", archivedProjects);
-        projectsMap.put("total", activeProjects + archivedProjects);
-        cards.put("projects", projectsMap);
+    Map<String, Long> projectsMap = new HashMap<>();
+    projectsMap.put("active", activeProjects);
+    projectsMap.put("archived", archivedProjects);
+    projectsMap.put("total", activeProjects + archivedProjects);
+    cards.put("projects", projectsMap);
 
-        cards.put("total_departments", departmentService.getTotalDepartments());
-        data.put("cards", cards);
+    cards.put("total_departments", departmentService.getTotalDepartments());
+    data.put("cards", cards);
 
-        // ---------- PROJECT STATUS DISTRIBUTION ----------
-        Query projQuery = new Query(Criteria.where("is_deleted").is(false));
-        projQuery.fields().include("status");
-        List<ProjectEntity> projects = mongoTemplate.find(projQuery, ProjectEntity.class);
+    // ---------- PROJECT STATUS DISTRIBUTION ----------
+    Query projQuery = new Query(Criteria.where("is_deleted").is(false));
+    projQuery.fields().include("status");
+    List<ProjectEntity> projects = mongoTemplate.find(projQuery, ProjectEntity.class);
 
         Map<String, Long> statusCount = projects.stream()
                 .filter(p -> p.getStatus() != null)
@@ -167,6 +165,8 @@ public class DashboardService {
             return log;
         }).collect(Collectors.toList());
         data.put("audit_logs", auditLogs);
+         List<Map<String, Object>> membersByDept = departmentService.getMemberDistributionByDepartment();
+    data.put("members_by_department", membersByDept);
 
         return data;
     }

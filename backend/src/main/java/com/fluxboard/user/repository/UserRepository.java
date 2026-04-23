@@ -30,5 +30,6 @@ public interface UserRepository extends MongoRepository<User, String> {
     long countByDeletedFalse();
 
     Optional<User> findByResetTokenAndDeletedFalse(String resetToken);
+    long countByDepartmentIdAndDeletedFalse(String departmentId);
 
 }

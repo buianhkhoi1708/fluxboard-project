@@ -9,9 +9,15 @@ import com.fluxboard.organization.department.dto.request.CreateDepartmentRequest
 import com.fluxboard.organization.department.dto.request.UpdateDepartmentRequest;
 import com.fluxboard.organization.department.dto.response.OrganizationDepartmentResponse;
 import com.fluxboard.organization.department.repository.DepartmentRepository;
+import com.fluxboard.user.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class DepartmentService implements CrudService<
@@ -21,9 +27,12 @@ public class DepartmentService implements CrudService<
         UpdateDepartmentRequest> {
 
     private final DepartmentRepository departmentRepository;
+    private final UserRepository userRepository;   // 👈 inject thêm
 
-    public DepartmentService(DepartmentRepository departmentRepository) {
+    public DepartmentService(DepartmentRepository departmentRepository,
+                             UserRepository userRepository) {
         this.departmentRepository = departmentRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -73,9 +82,33 @@ public class DepartmentService implements CrudService<
         departmentRepository.save(entity);
     }
 
-    public long countActive() {
+    // ========== CÁC PHƯƠNG THỨC HỖ TRỢ CHO DASHBOARD ==========
+
+    /**
+     * Tổng số phòng ban đang hoạt động (chưa bị xóa mềm)
+     */
+    public long getTotalDepartments() {
         return departmentRepository.countByDeletedFalse();
     }
+
+    /**
+     * Phân bố số lượng thành viên theo từng phòng ban.
+     * Trả về List<Map> với key: "department" (tên phòng ban), "count" (số người)
+     */
+    public List<Map<String, Object>> getMemberDistributionByDepartment() {
+        List<DepartmentEntity> departments = departmentRepository.findByDeletedFalse(Pageable.unpaged()).getContent();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (DepartmentEntity dept : departments) {
+            long count = userRepository.countByDepartmentIdAndDeletedFalse(dept.getId());
+            Map<String, Object> item = new HashMap<>();
+            item.put("department", dept.getName());
+            item.put("count", count);
+            result.add(item);
+        }
+        return result;
+    }
+
+    // ========== CÁC PHƯƠNG THỨC HIỆN CÓ ==========
 
     public boolean existsById(String id) {
         return departmentRepository.findByIdAndDeletedFalse(TextUtils.trim(id)).isPresent();
@@ -96,4 +129,10 @@ public class DepartmentService implements CrudService<
                 entity.getUpdatedAt()
         );
     }
+
+        public long countActive() {
+        return departmentRepository.countByDeletedFalse();
+    }
+
+   
 }
