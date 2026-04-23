@@ -14,15 +14,15 @@ import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
-import com.fluxboard.project.dto.request.AddProjectMemberRequest; // 🚀 MỚI THÊM
+import com.fluxboard.project.projectmember.dto.request.AddProjectMemberRequest;
 import com.fluxboard.project.dto.request.CreateProjectRequest;
 import com.fluxboard.project.dto.request.UpdateProjectRequest;
 import com.fluxboard.project.dto.response.ProjectBoardOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectOverviewResponse;
 import com.fluxboard.project.dto.response.ProjectResponse;
 import com.fluxboard.project.entity.ProjectEntity;
-import com.fluxboard.project.entity.ProjectMember;
-import com.fluxboard.project.repository.ProjectMemberRepository;
+import com.fluxboard.project.projectmember.entity.ProjectMember;
+import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.repository.UserRepository;
 import org.springframework.data.domain.Page;

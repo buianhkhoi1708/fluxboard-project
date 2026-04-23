@@ -16,6 +16,8 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
 
     boolean existsByIdAndDeletedFalse(String id);
 
+    List<ProjectEntity> findByDeletedFalse();
+
     Page<ProjectEntity> findByDeletedFalse(Pageable pageable);
 
     Page<ProjectEntity> findByDepartmentIdAndDeletedFalse(String departmentId, Pageable pageable);
@@ -24,7 +26,5 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
     long countByDeletedFalse();
 
     // Lấy danh sách tất cả project chưa bị xóa (Dùng cho DashboardService)
-    List<ProjectEntity> findByDeletedFalse();
 
 }
-
