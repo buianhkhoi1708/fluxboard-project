@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.List; 
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -68,12 +69,17 @@ public class JwtTokenService {
 
             String userId = claims.getSubject();
             String roleId = claims.get("roleId", String.class);
+            
+            List<String> authorities = claims.get("authorities", List.class);
+            if (authorities == null) {
+                authorities = List.of();
+            }
 
             if (!StringUtils.hasText(userId)) {
                 throw new AppException(ErrorCode.UNAUTHORIZED, "Invalid access token.");
             }
 
-            return new AuthenticatedUser(userId, roleId);
+            return new AuthenticatedUser(userId, roleId, authorities); 
         } catch (JwtException | IllegalArgumentException ex) {
             throw new AppException(ErrorCode.UNAUTHORIZED, "Invalid or expired access token.");
         }
