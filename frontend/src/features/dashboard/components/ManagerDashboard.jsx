@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { MoreVertical } from 'lucide-react';
 
-const ManagerDashboard = ({ data }: { data: any }) => {
+const ManagerDashboard = ({ data }) => {
   if (!data) return null;
 
   // ✅ CLEAN: Destructuring từ data thật trong dashboardApi
@@ -21,7 +21,7 @@ const ManagerDashboard = ({ data }: { data: any }) => {
   const avgCompletion = useMemo(() => {
     if (!teamCompletion.length) return 0;
     const total = teamCompletion.reduce(
-      (sum: number, team: any) => sum + (team.percentage || 0),
+      (sum, team) => sum + (team.percentage || 0),
       0
     );
     return (total / teamCompletion.length).toFixed(1);
@@ -82,11 +82,11 @@ const ManagerDashboard = ({ data }: { data: any }) => {
                 nameKey="team"
                 stroke="none"
               >
-                {teamCompletion.map((_: any, index: number) => (
+                {teamCompletion.map((_, index) => (
                   <Cell key={index} fill={TEAM_COLORS[index % TEAM_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => [`${value}%`, 'Hoàn thành']} />
+              <Tooltip formatter={(value) => [`${value}%`, 'Hoàn thành']} />
             </PieChart>
           </ResponsiveContainer>
 
@@ -99,7 +99,7 @@ const ManagerDashboard = ({ data }: { data: any }) => {
         {/* Danh sách team hiển thị đầy đủ (không slice) */}
         <div className="shrink-0 pt-4 mt-2 border-t border-slate-100 h-[100px] overflow-y-auto pr-1 no-scrollbar">
           <div className="space-y-3">
-            {teamCompletion.map((team: any, idx: number) => (
+            {teamCompletion.map((team, idx) => (
               <div key={idx} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: TEAM_COLORS[idx % TEAM_COLORS.length] }}></div>

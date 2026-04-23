@@ -6,7 +6,7 @@ import { MoreVertical, AlertTriangle, Send } from 'lucide-react';
 
 const OVERLOAD_THRESHOLD = 80;
 
-const LeadDashboard = ({ data }: { data?: any }) => {
+const LeadDashboard = ({ data }) => {
   // 👉 Safe data
   const teamWorkload = Array.isArray(data?.team_workload) ? data.team_workload : [];
   const hotspotsData = Array.isArray(data?.at_risk_tasks) ? data.at_risk_tasks : [];
@@ -14,7 +14,7 @@ const LeadDashboard = ({ data }: { data?: any }) => {
 
   // 👉 Transform workload
   const workloadData = useMemo(() => {
-    return teamWorkload.map((d: any) => {
+    return teamWorkload.map((d) => {
       const shortName = d?.name?.split(' ')?.pop() || 'N/A';
 
       const total = Number(d?.total_points) || 0;
@@ -93,7 +93,7 @@ const LeadDashboard = ({ data }: { data?: any }) => {
             {hotspotsData.length === 0 ? (
               <p className="text-sm text-slate-500">Mọi thứ ổn định.</p>
             ) : (
-              hotspotsData.map((spot: any) => (
+              hotspotsData.map((spot) => (
                 <div key={spot.id} className="flex justify-between items-center p-3 border rounded-lg relative">
                   
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-600"></div>
@@ -125,7 +125,7 @@ const LeadDashboard = ({ data }: { data?: any }) => {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3">
-            {activitiesData.map((act: any, idx: number) => (
+            {activitiesData.map((act, idx) => (
               <div key={idx} className="text-[13px]">
                 <b>{act?.user || 'Unknown'}</b>: "{act?.content || ''}"
               </div>
