@@ -26,6 +26,5 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
     long countByDeletedFalse();
 
     // Lấy danh sách tất cả project chưa bị xóa (Dùng cho DashboardService)
-    List<ProjectEntity> findByDeletedFalse();
 
 }
