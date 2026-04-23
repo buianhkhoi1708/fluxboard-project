@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { settingApi } from '../api/settingApi';
-// Cập nhật lại đường dẫn tới userApi cho đúng
 import { userApi } from '../../user/api/userApi'; 
 
 interface SettingState {
@@ -62,7 +61,7 @@ export const useSettingStore = create<SettingState>((set, get) => ({
 
       let newAvatarUrl = currentAvatar;
 
-      // 2. Upload avatar nếu có (ĐÃ FIX LỖI TYPE STRING)
+      // 2. Upload avatar 
       if (selectedFile) {
         const uploadResponse: any = await userApi.uploadAvatar(userId, selectedFile);
         
@@ -96,9 +95,6 @@ export const useSettingStore = create<SettingState>((set, get) => ({
 
   fetchNotificationSettings: async () => {
     try {
-      // Mở comment khi API backend đã sẵn sàng
-      // const response = await settingApi.getNotificationSettings();
-      // set({ notificationToggles: response.data });
     } catch (error) {
       console.error("Lỗi tải thông báo:", error);
     }
