@@ -13,6 +13,8 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
+import ActivityLogPage from "./pages/ActivityLogPage";
+import { OrganizationPage } from "./pages/OrganizationPage";
 
 function App() {
   return (
@@ -36,6 +38,8 @@ function App() {
               <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
               <Route path="/dashboard"element={<DashboardPage/>}/>
               <Route path="/settings"element={<SettingsPage/>}/>
+              <Route path="/activity"element={<ActivityLogPage/>}/>
+              <Route path="/organization"element={<OrganizationPage/>}/>
 
             </Route>
           </Route>

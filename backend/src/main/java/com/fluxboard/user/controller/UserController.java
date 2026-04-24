@@ -163,10 +163,13 @@ public class UserController {
             return targetUserId;
         }
 
-        // Nếu là ADMIN (được phép xem/sửa data người khác) -> OK
-        String roleName = String.valueOf(currentUser.roleId());
-        if (roleName.contains("ADMIN")) {
-            return targetUserId;
+        boolean isAdmin = currentUser.authorities() != null && 
+                          currentUser.authorities().stream()
+                                     .anyMatch(auth -> auth != null && 
+                                                       auth.toUpperCase().contains("ADMIN"));
+
+        if (isAdmin) {
+            return targetUserId; 
         }
 
         throw new AppException(ErrorCode.FORBIDDEN, "Security: You do not have permission to access other users' data!");

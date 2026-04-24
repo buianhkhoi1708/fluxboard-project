@@ -56,6 +56,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return create(request, null);
     }
 
+    @Transactional 
     public TaskResponse create(CreateTaskRequest request, String authorUserId) {
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
@@ -96,7 +97,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             saved.getAssigneesUserId().forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
 
-        broadcastBoardChange(boardId);
+        broadcastBoardChange(boardId, "TASK_CREATED", saved.getId());
         activityService.logTaskCreated(saved.getId(), boardId, projectId, normalizedAuthorUserId, saved.getTitle());
 
         return toResponse(saved, resolveUserSummaries(List.of(saved)));
@@ -162,6 +163,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return update(id, request, null);
     }
 
+    @Transactional 
     public TaskResponse update(String id, UpdateTaskRequest request, String actorUserId) {
         TaskEntity entity = findTaskById(id);
         String previousTitle = entity.getTitle();
@@ -221,7 +223,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
                     .forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
 
-        broadcastBoardChange(boardId);
+        broadcastBoardChange(boardId, "TASK_UPDATED", saved.getId());
         String normalizedActorUserId = TextUtils.trimToNull(actorUserId);
 
         if (!sameText(previousColumnId, saved.getColumnId())) {
@@ -288,8 +290,20 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             entity.setColumnId(newColumnId);
             entity.setOrder(targetOrder);
 
+            if (newColumn.getName() != null) {
+                String colName = newColumn.getName().toUpperCase();
+                if (colName.contains("DONE") || colName.contains("HOÀN THÀNH")) {
+                    entity.setStatus("DONE");
+                } else if (colName.contains("PROGRESS") || colName.contains("ĐANG LÀM") || colName.contains("DOING")) {
+                    entity.setStatus("IN_PROGRESS");
+                } else {
+                    entity.setStatus("TODO");
+                }
+            }
+
             TaskEntity saved = taskRepository.save(entity);
-            broadcastBoardChange(boardId);
+            
+            broadcastBoardChange(boardId, "TASK_MOVED", saved.getId());
             activityService.logTaskMoved(saved.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), currentColumnId, newColumnId, saved.getTitle());
 
             return toResponse(saved, resolveUserSummaries(List.of(saved)));
@@ -304,6 +318,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         delete(id, null);
     }
 
+    @Transactional 
     public void delete(String id, String actorUserId) {
         TaskEntity entity = findTaskById(id);
         String columnId = entity.getColumnId();
@@ -335,10 +350,11 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             taskRepository.saveAll(toResequence);
         }
         
-        broadcastBoardChange(boardId);
+        broadcastBoardChange(boardId, "TASK_DELETED", entity.getId());
         activityService.logTaskDeleted(entity.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), entity.getTitle());
     }
 
+    @Transactional 
     public void softDeleteByBoardId(String boardId) {
         List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
                 .stream().map(BoardColumnEntity::getId).toList();
@@ -349,10 +365,11 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
-            broadcastBoardChange(boardId);
+            broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }
 
+    @Transactional 
     public void softDeleteByColumnId(String columnId) {
         BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
         String boardId = columnForBoardId.getBoardId();
@@ -361,7 +378,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
-            broadcastBoardChange(boardId);
+            broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }
 
@@ -369,9 +386,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     // 2. PRIVATE HELPER METHODS (VALIDATION & LOGIC)
     // ========================================================================
 
-    private void broadcastBoardChange(String boardId) {
+    private void broadcastBoardChange(String boardId, String action, String taskId) {
         if (boardId != null) {
-            messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
+            String payload = String.format("{\"action\":\"%s\", \"taskId\":\"%s\"}", action, taskId != null ? taskId : "");
+            messagingTemplate.convertAndSend("/topic/board/" + boardId, payload);
         }
     }
 

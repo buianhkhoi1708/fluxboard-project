@@ -50,7 +50,7 @@ const Sidebar = () => {
       icon: <ShieldCheck size={20} />,
       label: "Role Access (RBAC)",
     },
-    { path: "/audit-log", icon: <Activity size={20} />, label: "Audit Log" },
+    { path: "/activity", icon: <Activity size={20} />, label: "Activities" },
     { path: "/settings", icon: <Settings size={20} />, label: "Settings" },
   ];
 
