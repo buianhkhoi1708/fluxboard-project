@@ -10,6 +10,7 @@ import com.fluxboard.deadline.entity.TaskDeadlineEntity;
 import com.fluxboard.deadline.event.DeadlineExtendedEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
+import com.fluxboard.rbac.service.PermissionEvaluatorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -29,9 +30,8 @@ public class TaskDeadlineService {
     private final TaskRepository taskRepository;
     private final BoardColumnRepository columnRepository;
     private final ApplicationEventPublisher eventPublisher;
-    
-    // TIÊM MODULE THÔNG BÁO VÀO ĐÂY
     private final NotificationDispatcher notificationDispatcher;
+    private final PermissionEvaluatorService permissionEvaluatorService;
 
     private void validateTaskAccess(TaskEntity task, String userId) {
         boolean isAssignee = task.getAssigneesUserId() != null && task.getAssigneesUserId().contains(userId);
@@ -40,8 +40,23 @@ public class TaskDeadlineService {
         }
     }
 
+    private void validateManagerAccess(String projectId, String userId) {
+        String currentUserIdRoleId = "LẤY_TU_DB"; 
+
+        boolean hasAccess = permissionEvaluatorService.hasPermission(currentUserIdRoleId, "TASK_DEADLINE_CONFIG");
+        
+        if (!hasAccess) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your role does not have permission to configure deadlines.");
+        }
+    }
+
     @Transactional
-    public Map<String, Object> updateDeadlineConfig(String taskId, Instant startDate, Instant dueDate, Integer reminderOffset, Integer extensionLimit) {
+    public Map<String, Object> updateDeadlineConfig(String taskId, String userId, Instant startDate, Instant dueDate, Integer reminderOffset, Integer extensionLimit) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
+        validateManagerAccess(task.getProjectId(), userId);
+
         TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
@@ -49,25 +64,20 @@ public class TaskDeadlineService {
         if (dueDate != null) deadline.setDueDate(dueDate);
         if (reminderOffset != null) deadline.setReminderOffset(reminderOffset);
         if (extensionLimit != null) deadline.setExtensionLimit(extensionLimit);
-        
         deadlineRepository.save(deadline);
 
-        TaskEntity task = taskRepository.findById(taskId).orElse(null);
-        if (task != null) {
-            if (startDate != null) task.setStartDate(startDate);
-            if (dueDate != null) task.setDueDate(dueDate);
-            taskRepository.save(task);
+        if (startDate != null) task.setStartDate(startDate);
+        if (dueDate != null) task.setDueDate(dueDate);
+        taskRepository.save(task);
 
-            // GỌI HÀM CÀI ĐỒNG HỒ ĐẾM NGƯỢC 10 PHÚT
-            notificationDispatcher.scheduleDeadlineUpdateNotification(taskId);
-        }
+        notificationDispatcher.scheduleDeadlineUpdateNotification(taskId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("task_id", taskId);
         result.put("start_date", deadline.getStartDate());
         result.put("due_date", deadline.getDueDate());
         result.put("reminder_offset", deadline.getReminderOffset());
-        result.put("status", deadline.getStatus() != null ? deadline.getStatus().name() : null);
+        result.put("status", deadline.getStatus() != null ? deadline.getStatus().name() : "ON_TRACK");
         result.put("extension_limit", deadline.getExtensionLimit());
         result.put("extension_count", deadline.getExtensionCount());
         return result;

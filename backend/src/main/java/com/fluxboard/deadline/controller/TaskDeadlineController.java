@@ -19,6 +19,7 @@ import java.util.Map;
 @RequestMapping("/api/v1/tasks")
 @RequiredArgsConstructor
 public class TaskDeadlineController {
+    
     private final TaskDeadlineService deadlineService;
 
     private String getCurrentUserId() {
@@ -32,7 +33,7 @@ public class TaskDeadlineController {
             @PathVariable String taskId,
             @RequestBody DeadlineConfigRequest request) {
         Map<String, Object> result = deadlineService.updateDeadlineConfig(
-                taskId, request.startDate(), request.dueDate(), request.reminderOffset(), request.extensionLimit()
+                taskId, getCurrentUserId(), request.startDate(), request.dueDate(), request.reminderOffset(), request.extensionLimit()
         );
         return ResponseFactory.ok("Deadline configuration updated successfully.", result);
     }

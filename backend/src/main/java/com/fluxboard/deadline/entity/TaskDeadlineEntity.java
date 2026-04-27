@@ -19,7 +19,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Indexed(unique = true)
     @Field("task_id")
     private String taskId;
-    
+
     @Field("start_date")
     private Instant startDate;
 
