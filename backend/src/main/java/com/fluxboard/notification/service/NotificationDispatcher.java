@@ -1,8 +1,13 @@
 package com.fluxboard.notification.service;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import com.fluxboard.board.task.entity.TaskEntity;
@@ -26,6 +31,10 @@ public class NotificationDispatcher {
     private final UserNotificationPrefService prefService;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
+    
+    // Khai báo TaskScheduler và bộ nhớ đệm phục vụ cơ chế Debounce
+    private final TaskScheduler taskScheduler;
+    private final Map<String, ScheduledFuture<?>> pendingNotifications = new ConcurrentHashMap<>();
 
     // ================== EVENT 1: ASSIGN TASK ==================
     public void notifyTaskAssigned(String userId, TaskEntity task) {
@@ -50,7 +59,7 @@ public class NotificationDispatcher {
         }
     }
 
-    // ================== EVENT 2: DEADLINE APPROACHING (NHẮC NHỞ TRƯỚC HẠN) ==================
+    // ================== EVENT 2: DEADLINE APPROACHING ==================
     public void notifyTaskDeadline(String taskId) {
         dispatchUpcomingAlert(taskId); // Backward compatibility
     }
@@ -83,7 +92,7 @@ public class NotificationDispatcher {
         }
     }
 
-    // ================== EVENT 3: OVERDUE (TRỄ HẠN) ==================
+    // ================== EVENT 3: OVERDUE ==================
     public void dispatchOverdueAlert(String taskId) {
         TaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null || task.getAssigneesUserId() == null) return;
@@ -112,7 +121,55 @@ public class NotificationDispatcher {
         }
     }
 
-    // Template HTML Email (English)
+    // ================== EVENT 4: DEADLINE CONFIG UPDATED (DEBOUNCED 10 MINS) ==================
+    public void scheduleDeadlineUpdateNotification(String taskId) {
+        ScheduledFuture<?> existingTimer = pendingNotifications.get(taskId);
+        if (existingTimer != null && !existingTimer.isDone()) {
+            existingTimer.cancel(false);
+            log.info("Canceled previous notification timer for Task: {}", taskId);
+        }
+
+        // 10 phút = 600 giây
+        Instant scheduledTime = Instant.now().plusSeconds(10 * 60); 
+
+        ScheduledFuture<?> newTimer = taskScheduler.schedule(
+            () -> executeDeadlineUpdatedNotification(taskId), 
+            scheduledTime
+        );
+
+        pendingNotifications.put(taskId, newTimer);
+        log.info("Scheduled new notification timer for Task: {} at {}", taskId, scheduledTime);
+    }
+
+    private void executeDeadlineUpdatedNotification(String taskId) {
+        pendingNotifications.remove(taskId);
+
+        TaskEntity task = taskRepository.findById(taskId).orElse(null);
+        if (task == null || task.getAssigneesUserId() == null) return;
+
+        for (String userId : task.getAssigneesUserId()) {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) continue;
+
+            UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+
+            if (pref.inAppNotificationsEnabled()) {
+                String inAppMsg = "The deadline configuration for task '" + task.getTitle() + "' has been finalized and updated.";
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            }
+
+            if (pref.emailNotificationsEnabled()) {
+                String subject = "📅 [Fluxboard] Task Deadline Updated";
+                String htmlBody = buildHtmlEmail(
+                        "#3182ce", "📅 Task Deadline Updated",
+                        task.getTitle(), String.valueOf(task.getPriority()),
+                        "The deadline configuration for this task has been modified by the manager."
+                );
+                emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
+            }
+        }
+    }
+
     private String buildHtmlEmail(String themeColor, String header, String taskTitle, String priority, String footerMsg) {
         return "<div style=\"font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6;\">" +
                "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);\">" +
