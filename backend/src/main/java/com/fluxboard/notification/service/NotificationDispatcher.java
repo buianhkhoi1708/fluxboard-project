@@ -1,29 +1,31 @@
 package com.fluxboard.notification.service;
 
+import java.util.List;
+
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+
 import com.fluxboard.board.task.entity.TaskEntity;
+import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.email.service.EmailService;
 import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
 import com.fluxboard.user.service.UserNotificationPrefService;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class NotificationDispatcher {
 
     private final EmailService emailService;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserNotificationPrefService prefService;
     private final UserRepository userRepository;
-
-    public NotificationDispatcher(EmailService emailService, SimpMessagingTemplate messagingTemplate,
-                                  UserNotificationPrefService prefService, UserRepository userRepository) {
-        this.emailService = emailService;
-        this.messagingTemplate = messagingTemplate;
-        this.prefService = prefService;
-        this.userRepository = userRepository;
-    }
+    private final TaskRepository taskRepository;
 
     // ================== EVENT 1: ASSIGN TASK ==================
     public void notifyTaskAssigned(String userId, TaskEntity task) {
@@ -48,28 +50,65 @@ public class NotificationDispatcher {
         }
     }
 
-    // ================== EVENT 2: DEADLINE 24H ==================
-    public void notifyTaskDeadline(String userId, TaskEntity task) {
-        User user = userRepository.findById(userId).orElse(null);
-        if (user == null) return;
+    // ================== EVENT 2: DEADLINE APPROACHING (NHẮC NHỞ TRƯỚC HẠN) ==================
+    public void notifyTaskDeadline(String taskId) {
+        dispatchUpcomingAlert(taskId); // Backward compatibility
+    }
 
-        UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+    public void dispatchUpcomingAlert(String taskId) {
+        TaskEntity task = taskRepository.findById(taskId).orElse(null);
+        if (task == null || task.getAssigneesUserId() == null) return;
 
-        // 1. In-app Notification
-        if (pref.inAppNotificationsEnabled()) {
-            String inAppMsg = "🚨 WARNING: Task '" + task.getTitle() + "' is approaching its deadline!";
-            messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+        List<String> assignees = task.getAssigneesUserId();
+        for (String userId : assignees) {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) continue;
+
+            UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+
+            if (pref.inAppNotificationsEnabled()) {
+                String inAppMsg = "🚨 WARNING: Task '" + task.getTitle() + "' is approaching its deadline!";
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            }
+
+            if (pref.emailNotificationsEnabled()) {
+                String subject = "🚨 [Fluxboard] Deadline Warning!";
+                String htmlBody = buildHtmlEmail(
+                        "#dd6b20", "⚠️ Your task deadline is approaching!",
+                        task.getTitle(), String.valueOf(task.getPriority()),
+                        "This task is approaching its deadline. Please complete it as soon as possible!"
+                );
+                emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
+            }
         }
+    }
 
-        // 2. Email Notification
-        if (pref.emailNotificationsEnabled()) {
-            String subject = "🚨 [Fluxboard] 24-Hour Deadline Warning!";
-            String htmlBody = buildHtmlEmail(
-                    "#c53030", "⚠️ Your task deadline is approaching!",
-                    task.getTitle(), String.valueOf(task.getPriority()),
-                    "This task has less than 24 hours remaining. Please complete it as soon as possible!"
-            );
-            emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
+    // ================== EVENT 3: OVERDUE (TRỄ HẠN) ==================
+    public void dispatchOverdueAlert(String taskId) {
+        TaskEntity task = taskRepository.findById(taskId).orElse(null);
+        if (task == null || task.getAssigneesUserId() == null) return;
+
+        List<String> assignees = task.getAssigneesUserId();
+        for (String userId : assignees) {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) continue;
+
+            UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+
+            if (pref.inAppNotificationsEnabled()) {
+                String inAppMsg = "🛑 OVERDUE: Task '" + task.getTitle() + "' has missed its deadline!";
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            }
+
+            if (pref.emailNotificationsEnabled()) {
+                String subject = "🛑 [Fluxboard] Task Overdue!";
+                String htmlBody = buildHtmlEmail(
+                        "#e53e3e", "🛑 Task Missed Deadline!",
+                        task.getTitle(), String.valueOf(task.getPriority()),
+                        "This task has passed its due date and is now marked as OVERDUE."
+                );
+                emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
+            }
         }
     }
 

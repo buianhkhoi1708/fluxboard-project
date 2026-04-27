@@ -94,6 +94,15 @@ public class ActivityService {
         log(ActivitySource.TASK, taskId, projectId, boardId, taskId, actorUserId, ActivityAction.DELETE, null, null, null, buildMessage("Task deleted", taskTitle));
     }
 
+    public void logTaskDeadlineExtended(String taskId, String boardId, String projectId, String actorUserId, String oldValue, String newValue, String reason) {
+        String validReason = TextUtils.trimToNull(reason);
+        String message = validReason != null 
+                ? "Deadline extension requested: " + validReason 
+                : "Deadline extension requested";
+
+        log(ActivitySource.TASK, taskId, projectId, boardId, taskId, actorUserId, ActivityAction.UPDATE, "due_date", TextUtils.trimToNull(oldValue), TextUtils.trimToNull(newValue), message);
+    }
+
     public void logUserCreated(String userId, String actorUserId, String email, String fullName) {
         log(ActivitySource.USER, userId, null, null, null, actorUserId, ActivityAction.CREATE, null, null, null, "User created: %s (%s)".formatted(display(fullName), display(email)));
     }
