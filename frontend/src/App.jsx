@@ -13,6 +13,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
+import OrganizationPage from "./pages/OrganizationPage";
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
               <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
               <Route path="/dashboard"element={<DashboardPage/>}/>
               <Route path="/settings"element={<SettingsPage/>}/>
+              <Route path="/Organization"element={<OrganizationPage/>}/>
 
             </Route>
           </Route>
