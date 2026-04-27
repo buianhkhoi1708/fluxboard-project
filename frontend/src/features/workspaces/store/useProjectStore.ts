@@ -11,7 +11,7 @@ export interface Project {
   _id?: string;
   name?: string;
   is_deleted?: boolean;
-  [key: string]: any; // Mở rộng nếu Backend trả thêm field
+  [key: string]: any; 
 }
 
 export interface Board {
@@ -24,13 +24,17 @@ export interface Board {
 export interface NormalizedProject {
   project: Project;
   boards: Board[];
-  members: IncomingUser[]; // Dùng Type của User để xài chung
+  members: IncomingUser[]; 
 }
 
 interface ProjectStore {
   projects: NormalizedProject[];
   isLoading: boolean;
-  fetchProjects: () => Promise<void>;
+  currentPage: number;   // Thêm state lưu trang hiện tại
+  hasMore: boolean;      // Thêm state kiểm tra còn data để tải không
+
+  fetchProjects: (page?: number) => Promise<void>;
+  loadMoreProjects: () => Promise<void>; // Action tải thêm
   addProject: (newProject: Project) => void;
   addBoardToProject: (projectId: string, newBoard: Board) => void;
   fetchProjectMembers: (projectId: string) => Promise<void>;
@@ -43,14 +47,23 @@ interface ProjectStore {
 const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [], 
   isLoading: false,
+  currentPage: 0,
+  hasMore: true,
 
-  fetchProjects: async () => {
+  // Sửa lại fetchProjects có nhận tham số page (mặc định là 0)
+  fetchProjects: async (page = 0) => {
+    const { hasMore, isLoading } = get();
+    
+    // Nếu đang tải hoặc gọi trang tiếp theo nhưng đã hết data thì chặn luôn
+    if (isLoading || (page > 0 && !hasMore)) return;
+
     set({ isLoading: true });
     try {
-      const response = await projectApi.getProjectOverviews({ page: 0, size: 50 });
+      // 🚀 CHỐT HẠ: Truyền size: 2 để mỗi lần chỉ lấy 2 projects
+      const response = await projectApi.getProjectOverviews({ page, size: 2 });
+      
       if (response.success) {
-        // Ép kiểu (as any) tạm thời để bắt linh hoạt các dạng response
-        const rawData: any[] = (response.data as any)?.content || response.data;
+        const rawData: any[] = (response.data as any)?.content || response.data || [];
         
         const normalizedProjects: NormalizedProject[] = rawData.map(item => {
           if (item.project) return item; 
@@ -66,7 +79,14 @@ const useProjectStore = create<ProjectStore>((set, get) => ({
           return p && (p.is_deleted === false || p.is_deleted === undefined);
         });
         
-        set({ projects: activeProjects });
+        set((state) => ({ 
+          // Nếu tải trang 0 (load lần đầu) thì ghi đè, nếu tải trang > 0 thì nối mảng (append)
+          projects: page === 0 ? activeProjects : [...state.projects, ...activeProjects],
+          currentPage: page,
+          // Nếu BE trả về mảng có length = 2 (bằng với size) nghĩa là có thể còn trang sau. 
+          // Nếu length < 2 nghĩa là đã lấy sạch data.
+          hasMore: rawData.length === 2 
+        }));
 
         // TỰ ĐỘNG GỌI MEMBER CHO TỪNG PROJECT
         activeProjects.forEach(item => {
@@ -80,6 +100,14 @@ const useProjectStore = create<ProjectStore>((set, get) => ({
       console.error("Store Fetch Error:", error);
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  // Action mới: Gọi hàm này khi cuộn chuột chạm đáy
+  loadMoreProjects: async () => {
+    const { currentPage, hasMore, isLoading, fetchProjects } = get();
+    if (!isLoading && hasMore) {
+      await fetchProjects(currentPage + 1);
     }
   },
 
@@ -104,11 +132,8 @@ const useProjectStore = create<ProjectStore>((set, get) => ({
       const response = await projectApi.getProjectMembers(projectId);
       const membersData: IncomingUser[] = (response.data as any)?.content || (response.data as any)?.data || response.data || [];
 
-      // 🚀 BƯỚC QUAN TRỌNG NHẤT: Bơm data vào Kho Toàn Cục!
-      // Việc này giúp thẻ Task ở bên trong Board nhận diện được Avatar lập tức
       useUserStore.getState().saveUsersToCache(membersData, projectId);
 
-      // Cập nhật vào mảng projects của Workspaces
       set((state) => ({
         projects: state.projects.map((item) => {
           if (item.project && (item.project.id === projectId || item.project._id === projectId)) {
@@ -118,7 +143,7 @@ const useProjectStore = create<ProjectStore>((set, get) => ({
         })
       }));
     } catch (error) {
-      console.error(`Lỗi khi lấy member cho project ${projectId}:`, error);
+      console.error(`Lỗi lấy member cho project ${projectId}:`, error);
     }
   }
 

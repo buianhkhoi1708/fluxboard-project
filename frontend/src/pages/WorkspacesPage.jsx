@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 
 const WorkspacesPage = () => {
-  // 🚀 Đã xóa fetchProjectMembers cho sạch code vì Store tự lo rồi
-  const { projects, isLoading, fetchProjects } = useProjectStore();
+  // 🚀 Đã lấy thêm loadMoreProjects và hasMore từ Store
+  const { projects, isLoading, fetchProjects, loadMoreProjects, hasMore } = useProjectStore();
   
   const getUser = useUserStore((state) => state.getUser);
 
@@ -20,17 +20,32 @@ const WorkspacesPage = () => {
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
-  // Vừa vào trang là chỉ cần gọi 1 cú này, Store sẽ tự kéo Project -> tự kéo Member
+  // Vừa vào trang là lấy data trang 0
   useEffect(() => {
-    fetchProjects(); 
-  }, []);
+    fetchProjects(0); 
+  }, [fetchProjects]);
+
+  // 🚀 Hàm xử lý bắt sự kiện cuộn chuột
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    // Nếu cuộn cách đáy khoảng 50px và chưa đang load, và còn data
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+      if (!isLoading && hasMore) {
+        loadMoreProjects();
+      }
+    }
+  };
 
   const filteredProjects = projects.filter(item => 
     item.project?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+    <div 
+      // 🚀 Gắn sự kiện onScroll vào div chứa thanh cuộn
+      onScroll={handleScroll}
+      className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8"
+    >
       <div className="max-w-7xl mx-auto">
         
         {/* HEADER */}
@@ -69,8 +84,8 @@ const WorkspacesPage = () => {
           </div>
         </div>
 
-        {/* LOADING & EMPTY STATE */}
-        {isLoading ? (
+        {/* LOADING LẦN ĐẦU & EMPTY STATE */}
+        {isLoading && projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-80 text-slate-400">
             <div className="relative">
               <div className="absolute inset-0 bg-indigo-200/30 blur-2xl rounded-full"></div>
@@ -225,10 +240,24 @@ const WorkspacesPage = () => {
                 </section>
               );
             })}
+
+            {/* 🚀 HIỂN THỊ LOADING KHI ĐANG CUỘN (LOAD MORE) */}
+            {isLoading && projects.length > 0 && (
+              <div className="flex justify-center py-6">
+                <Loader2 size={28} className="animate-spin text-indigo-500" />
+              </div>
+            )}
+
+            {/* 🚀 THÔNG BÁO KHI ĐÃ HẾT DATA */}
+            {!hasMore && projects.length > 0 && (
+              <div className="text-center py-6 text-slate-400 text-sm font-medium">
+                You have reached the end of your workspaces.
+              </div>
+            )}
           </div>
         )}
 
-        <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => { setIsModalOpen(false); fetchProjects(); }} />
+        <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => { setIsModalOpen(false); fetchProjects(0); }} />
         <CreateBoardModal isOpen={isBoardModalOpen} onClose={() => setIsBoardModalOpen(false)} projectId={selectedProjectId} onSuccess={() => setIsBoardModalOpen(false)} />
 
       </div>
