@@ -1,35 +1,55 @@
 import axiosClient from '../../../lib/axiosClient';
+import { mockOrgTreeResponse, mockUnassignedUsersResponse } from './mockData';
 
-// Định nghĩa kiểu dữ liệu (Types)
+// Tạo ID ảo để test
+const generateFakeId = (prefix: string) => `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
+
 export interface DepartmentPayload {
   name: string;
-  managerId: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  code: string;
+  manager_id: string;
+  manager_name?: string; 
+  description?: string;
 }
 
 export interface TeamPayload {
   name: string;
-  departmentId: string;
-  leadId: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  code: string;
+  department_id: string;
+  lead_id: string;
+  lead_name?: string; 
+  description?: string;
 }
 
 export const orgApi = {
-  // Lấy toàn bộ cây tổ chức (Dept -> Team -> Members)
   getOrgTree: async () => {
-    const response = await axiosClient.get('/organizations/tree');
-    return response.data; 
+    return new Promise((resolve) => setTimeout(() => resolve(mockOrgTreeResponse), 800));
   },
 
-  // Tạo Phòng ban mới
   saveDepartment: async (payload: DepartmentPayload) => {
-    const response = await axiosClient.post('/departments', payload);
-    return response.data;
+    return new Promise((resolve) => setTimeout(() => resolve({
+      success: true,
+      data: { id: generateFakeId('dept'), ...payload, teams: [] }
+    }), 500));
   },
 
-  // Tạo Nhóm mới
   saveTeam: async (payload: TeamPayload) => {
-    const response = await axiosClient.post('/teams', payload);
-    return response.data;
+    return new Promise((resolve) => setTimeout(() => resolve({
+      success: true,
+      data: { id: generateFakeId('team'), ...payload, members: [] }
+    }), 500));
+  },
+
+  assignUserToTeam: async (userId: string, teamId: string, departmentId: string) => {
+    return new Promise((resolve) => setTimeout(() => resolve({ success: true }), 400));
+  },
+
+  getUnassignedUsers: async () => {
+    return new Promise((resolve) => setTimeout(() => resolve(mockUnassignedUsersResponse), 500));
+  },
+
+  searchOrgUsers: async (keyword: string) => {
+    // Tạm thời trả về danh sách mock để test Search Leader
+    return new Promise((resolve) => setTimeout(() => resolve(mockUnassignedUsersResponse), 500));
   }
 };

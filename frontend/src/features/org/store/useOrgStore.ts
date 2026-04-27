@@ -1,14 +1,41 @@
 import { create } from 'zustand';
 import { orgApi } from '../api/orgApi';
 
+export interface OrgMember {
+  id: string;
+  full_name?: string;
+  fullName?: string;
+  email: string;
+  status: string;
+}
+
+export interface OrgTeam {
+  id: string;
+  name: string;
+  code?: string;
+  lead_id?: string;
+  lead_name?: string;
+  description?: string;
+  members: OrgMember[];
+}
+
+export interface OrgDepartment {
+  id: string;
+  name: string;
+  code?: string;
+  manager_id?: string;
+  manager_name?: string;
+  description?: string;
+  teams: OrgTeam[];
+}
+
 interface OrgState {
-  orgTree: any[];
+  orgTree: OrgDepartment[];
   isLoading: boolean;
-  
   fetchTree: () => Promise<void>;
-  addDepartmentToTree: (newDept: any) => void;
-  addTeamToDepartment: (deptId: string, newTeam: any) => void;
-  addMemberToTeam: (deptId: string, teamId: string, newMember: any) => void;
+  addDepartmentToTree: (newDept: Partial<OrgDepartment>) => void;
+  addTeamToDepartment: (deptId: string, newTeam: Partial<OrgTeam>) => void;
+  addMemberToTeam: (deptId: string, teamId: string, newMember: OrgMember) => void;
 }
 
 export const useOrgStore = create<OrgState>((set) => ({
@@ -18,45 +45,30 @@ export const useOrgStore = create<OrgState>((set) => ({
   fetchTree: async () => {
     set({ isLoading: true });
     try {
-      const res = await orgApi.getOrgTree();
-      // Giả sử API trả về dạng { success: true, data: [...] }
+      const res: any = await orgApi.getOrgTree();
       set({ orgTree: res.data || [], isLoading: false });
     } catch (error) {
-      console.error('Lỗi tải cây tổ chức', error);
       set({ isLoading: false });
     }
   },
 
   addDepartmentToTree: (newDept) => {
-    set((state) => ({
-      orgTree: [...state.orgTree, { ...newDept, teams: [] }]
-    }));
+    set((state) => ({ orgTree: [...state.orgTree, { ...newDept, teams: [] } as OrgDepartment] }));
   },
 
-  // Update lồng 1 tầng (Thêm Team vào Dept)
   addTeamToDepartment: (deptId, newTeam) => {
     set((state) => ({
       orgTree: state.orgTree.map((dept) => 
-        dept.id === deptId 
-          ? { ...dept, teams: [...(dept.teams || []), { ...newTeam, members: [] }] } 
-          : dept
+        dept.id === deptId ? { ...dept, teams: [...(dept.teams || []), { ...newTeam, members: [] } as OrgTeam] } : dept
       )
     }));
   },
 
-  // Update lồng 2 tầng (Thêm Member vào Team thuộc Dept)
   addMemberToTeam: (deptId, teamId, newMember) => {
     set((state) => ({
       orgTree: state.orgTree.map((dept) => 
         dept.id === deptId 
-          ? { 
-              ...dept, 
-              teams: dept.teams.map((team: any) => 
-                team.id === teamId 
-                  ? { ...team, members: [...(team.members || []), newMember] }
-                  : team
-              ) 
-            } 
+          ? { ...dept, teams: dept.teams.map(team => team.id === teamId ? { ...team, members: [...(team.members || []), newMember] } : team) } 
           : dept
       )
     }));
