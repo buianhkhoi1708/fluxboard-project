@@ -32,6 +32,9 @@ public class User extends BaseDocument {
     @Field("team_id")
     private String teamId;
 
+    @Field("status")
+    private String status = "ACTIVE";
+
     @JsonIgnore
     @Field("reset_token")
     private String resetToken;
@@ -87,6 +90,15 @@ public class User extends BaseDocument {
     public void setTeamId(String teamId) {
         this.teamId = teamId;
     }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
 
     public String getResetToken() {
         return resetToken;
