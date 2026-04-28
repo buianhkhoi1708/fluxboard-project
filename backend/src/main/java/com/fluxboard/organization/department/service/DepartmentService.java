@@ -27,12 +27,15 @@ public class DepartmentService implements CrudService<
         UpdateDepartmentRequest> {
 
     private final DepartmentRepository departmentRepository;
-    private final UserRepository userRepository;   // 👈 inject thêm
+    private final UserRepository userRepository;
+    private final com.fluxboard.organization.team.repository.TeamRepository teamRepository;
 
     public DepartmentService(DepartmentRepository departmentRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             com.fluxboard.organization.team.repository.TeamRepository teamRepository) {
         this.departmentRepository = departmentRepository;
         this.userRepository = userRepository;
+        this.teamRepository = teamRepository;
     }
 
     @Override
@@ -46,6 +49,8 @@ public class DepartmentService implements CrudService<
         entity.setName(TextUtils.trim(request.name()));
         entity.setCode(code);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(departmentRepository.save(entity));
     }
@@ -71,6 +76,8 @@ public class DepartmentService implements CrudService<
         entity.setName(TextUtils.trim(request.name()));
         entity.setCode(code);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(departmentRepository.save(entity));
     }
@@ -99,7 +106,17 @@ public class DepartmentService implements CrudService<
         List<DepartmentEntity> departments = departmentRepository.findByDeletedFalse(Pageable.unpaged()).getContent();
         List<Map<String, Object>> result = new ArrayList<>();
         for (DepartmentEntity dept : departments) {
-            long count = userRepository.countByDepartmentIdAndDeletedFalse(dept.getId());
+            List<String> teamIds = teamRepository.findByDepartmentIdAndDeletedFalse(dept.getId(), Pageable.unpaged())
+                    .getContent()
+                    .stream()
+                    .map(com.fluxboard.common.entity.BaseDocument::getId)
+                    .toList();
+            
+            long count = 0;
+            if (!teamIds.isEmpty()) {
+                count = userRepository.countByTeamIdInAndDeletedFalse(teamIds);
+            }
+            
             Map<String, Object> item = new HashMap<>();
             item.put("department", dept.getName());
             item.put("count", count);
@@ -125,6 +142,8 @@ public class DepartmentService implements CrudService<
                 entity.getName(),
                 entity.getCode(),
                 entity.getDescription(),
+                entity.getManagerId(),
+                entity.getStatus(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

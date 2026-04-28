@@ -46,6 +46,8 @@ public class TeamService implements CrudService<
         entity.setCode(code);
         entity.setDepartmentId(departmentId);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setLeadId(TextUtils.trimToNull(request.leadId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(teamRepository.save(entity));
     }
@@ -85,6 +87,8 @@ public class TeamService implements CrudService<
         entity.setCode(code);
         entity.setDepartmentId(departmentId);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setLeadId(TextUtils.trimToNull(request.leadId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(teamRepository.save(entity));
     }
@@ -112,6 +116,8 @@ public class TeamService implements CrudService<
                 entity.getCode(),
                 entity.getDepartmentId(),
                 entity.getDescription(),
+                entity.getLeadId(),
+                entity.getStatus(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

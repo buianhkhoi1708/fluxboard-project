@@ -29,9 +29,6 @@ public class User extends BaseDocument {
     @Field("role_id")
     private String roleId;
 
-    @Field("department_id")
-    private String departmentId;
-
     @Field("team_id")
     private String teamId;
 
@@ -81,14 +78,6 @@ public class User extends BaseDocument {
 
     public void setRoleId(String roleId) {
         this.roleId = roleId;
-    }
-
-    public String getDepartmentId() {
-        return departmentId;
-    }
-
-    public void setDepartmentId(String departmentId) {
-        this.departmentId = departmentId;
     }
 
     public String getTeamId() {

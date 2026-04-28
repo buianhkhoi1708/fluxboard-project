@@ -55,7 +55,6 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         user.setFullName(TextUtils.trim(request.fullName()));
         user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
         user.setRoleId(TextUtils.trimToNull(request.roleId()));
-        user.setDepartmentId(TextUtils.trimToNull(request.departmentId()));
         user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
         User saved = userRepository.save(user);
@@ -111,10 +110,6 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
         if (request.roleId() != null) {
             user.setRoleId(TextUtils.trimToNull(request.roleId()));
-        }
-
-        if (request.departmentId() != null) {
-            user.setDepartmentId(TextUtils.trimToNull(request.departmentId()));
         }
 
         if (request.teamId() != null) {
@@ -225,7 +220,6 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                 user.getFullName(),
                 user.getAvatarUrl(),
                 user.getRoleId(),
-                user.getDepartmentId(),
                 user.getTeamId(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
