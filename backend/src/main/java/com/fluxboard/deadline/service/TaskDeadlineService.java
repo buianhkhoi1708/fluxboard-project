@@ -12,6 +12,10 @@ import com.fluxboard.deadline.event.DeadlineConfigChangedEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.rbac.service.PermissionEvaluatorService;
+
+// TODO: Mở comment dòng dưới khi đồng đội hoàn thành file ProjectMemberRepository
+// import com.fluxboard.project.repository.ProjectMemberRepository; 
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -33,6 +37,9 @@ public class TaskDeadlineService {
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationDispatcher notificationDispatcher;
     private final PermissionEvaluatorService permissionEvaluatorService;
+    
+    // TODO: Mở comment dòng dưới khi đồng đội làm xong phần Project
+    // private final ProjectMemberRepository projectMemberRepository; 
 
     private void validateTaskAccess(TaskEntity task, String userId) {
         boolean isAssignee = task.getAssigneesUserId() != null && task.getAssigneesUserId().contains(userId);
@@ -42,12 +49,48 @@ public class TaskDeadlineService {
     }
 
     private void validateManagerAccess(String projectId, String userId) {
-        String roleId = "USER_ROLE_ID_IN_PROJECT"; 
+        
+        // =====================================================================
+        // ⚠️ BẮT ĐẦU ĐOẠN CODE TẠM THỜI (XÓA SAU KHI CHẠY MẪU THÀNH CÔNG)
+        // Giả lập dữ liệu: Tài khoản có role PM (ID: 69cfd3e234353f3ca08d52d3) và đang active
+        // =====================================================================
+        java.util.List<String> userRoleIdsInProject = java.util.List.of("69cfd39a34353f3ca08d52ce"); 
+        boolean isActive = true;
+        // =====================================================================
+        // ⚠️ KẾT THÚC ĐOẠN CODE TẠM THỜI
+        // =====================================================================
 
-        boolean hasAccess = permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG");
+
+        /* // =====================================================================
+        // 🟢 BẮT ĐẦU ĐOẠN CODE CHÍNH THỨC (MỞ COMMENT KHI ĐỒNG ĐỘI LÀM XONG)
+        // =====================================================================
+        com.fluxboard.project.entity.ProjectMemberEntity member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
+        
+        java.util.List<String> userRoleIdsInProject = member.getRoleIds();
+        boolean isActive = member.getIsActive() != null ? member.getIsActive() : false;
+        // =====================================================================
+        // 🟢 KẾT THÚC ĐOẠN CODE CHÍNH THỨC
+        // =====================================================================
+        */
+
+        if (!isActive) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your account is suspended in this project.");
+        }
+
+        // Logic check Đa quyền (Duyệt mảng role_ids)
+        boolean hasAccess = false;
+        if (userRoleIdsInProject != null) {
+            for (String roleId : userRoleIdsInProject) {
+                if (permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG")) {
+                    hasAccess = true;
+                    break;
+                }
+            }
+        }
         
         if (!hasAccess) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your role does not have permission to configure deadlines.");
+            throw new AppException(ErrorCode.FORBIDDEN, "Access denied. None of your roles have permission to configure deadlines.");
         }
     }
 
