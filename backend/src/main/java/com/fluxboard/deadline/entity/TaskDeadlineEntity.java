@@ -41,5 +41,10 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("extension_limit")
     private Integer extensionLimit;
 
-    public enum DeadlineStatus { ON_TRACK, OVERDUE, LATE, COMPLETED }
+    public enum DeadlineStatus { 
+        ON_TRACK, 
+        AT_RISK, 
+        OVERDUE, 
+        LATE 
+    }
 }

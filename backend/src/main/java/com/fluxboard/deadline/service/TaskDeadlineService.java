@@ -9,6 +9,7 @@ import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.deadline.entity.TaskDeadlineEntity;
 import com.fluxboard.deadline.event.DeadlineExtendedEvent;
 import com.fluxboard.deadline.event.DeadlineConfigChangedEvent;
+import com.fluxboard.deadline.event.TaskCompletedLateEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.rbac.service.PermissionEvaluatorService;
@@ -49,17 +50,12 @@ public class TaskDeadlineService {
     }
 
     private void validateManagerAccess(String projectId, String userId) {
-        
         // =====================================================================
         // ⚠️ BẮT ĐẦU ĐOẠN CODE TẠM THỜI (XÓA SAU KHI CHẠY MẪU THÀNH CÔNG)
-        // Giả lập dữ liệu: Tài khoản có role PM (ID: 69cfd3e234353f3ca08d52d3) và đang active
         // =====================================================================
         java.util.List<String> userRoleIdsInProject = java.util.List.of("69cfd39a34353f3ca08d52ce"); 
         boolean isActive = true;
         // =====================================================================
-        // ⚠️ KẾT THÚC ĐOẠN CODE TẠM THỜI
-        // =====================================================================
-
 
         /* // =====================================================================
         // 🟢 BẮT ĐẦU ĐOẠN CODE CHÍNH THỨC (MỞ COMMENT KHI ĐỒNG ĐỘI LÀM XONG)
@@ -70,15 +66,12 @@ public class TaskDeadlineService {
         java.util.List<String> userRoleIdsInProject = member.getRoleIds();
         boolean isActive = member.getIsActive() != null ? member.getIsActive() : false;
         // =====================================================================
-        // 🟢 KẾT THÚC ĐOẠN CODE CHÍNH THỨC
-        // =====================================================================
         */
 
         if (!isActive) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your account is suspended in this project.");
         }
 
-        // Logic check Đa quyền (Duyệt mảng role_ids)
         boolean hasAccess = false;
         if (userRoleIdsInProject != null) {
             for (String roleId : userRoleIdsInProject) {
@@ -92,6 +85,63 @@ public class TaskDeadlineService {
         if (!hasAccess) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. None of your roles have permission to configure deadlines.");
         }
+    }
+
+    private void validateStatusUpdateAccess(String projectId, String userId) {
+        // =====================================================================
+        // ⚠️ BẮT ĐẦU ĐOẠN CODE TẠM THỜI
+        // =====================================================================
+        java.util.List<String> userRoleIdsInProject = java.util.List.of("69cfd39a34353f3ca08d52ce"); 
+        boolean isActive = true;
+        // =====================================================================
+
+        /* // =====================================================================
+        // 🟢 BẮT ĐẦU ĐOẠN CODE CHÍNH THỨC
+        // =====================================================================
+        com.fluxboard.project.entity.ProjectMemberEntity member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied."));
+        java.util.List<String> userRoleIdsInProject = member.getRoleIds();
+        boolean isActive = member.getIsActive() != null ? member.getIsActive() : false;
+        // =====================================================================
+        */
+
+        if (!isActive) throw new AppException(ErrorCode.FORBIDDEN, "The account has been suspended from this project.");
+
+        boolean hasPermission = false;
+        if (userRoleIdsInProject != null) {
+            for (String roleId : userRoleIdsInProject) {
+                if (permissionEvaluatorService.hasPermission(roleId, "TASK_MOVE")) {
+                    hasPermission = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasPermission) {
+            throw new AppException(ErrorCode.FORBIDDEN, "You do not have permission to update the task status in this project.");
+        }
+    }
+
+    private TaskDeadlineEntity.DeadlineStatus calculateDynamicStatus(TaskDeadlineEntity deadline) {
+        if (deadline.getActualCompletedAt() != null) {
+            if (deadline.getDueDate() != null && deadline.getActualCompletedAt().isAfter(deadline.getDueDate())) {
+                return TaskDeadlineEntity.DeadlineStatus.LATE;
+            }
+            return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+        }
+        
+        Instant now = Instant.now();
+        Instant dueDate = deadline.getDueDate();
+        
+        if (dueDate == null) return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+        
+        if (now.isAfter(dueDate)) return TaskDeadlineEntity.DeadlineStatus.OVERDUE;
+        
+        if (now.isAfter(dueDate.minus(Duration.ofHours(24)))) {
+            return TaskDeadlineEntity.DeadlineStatus.AT_RISK;
+        }
+        
+        return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
     }
 
     private void validateDeadlineConfigData(Instant currentStartDate, Instant currentDueDate, Instant newStartDate, Instant newDueDate, Integer reminderOffset, Integer extensionLimit) {
@@ -130,6 +180,8 @@ public class TaskDeadlineService {
         if (dueDate != null) deadline.setDueDate(dueDate);
         if (reminderOffset != null) deadline.setReminderOffset(reminderOffset);
         if (extensionLimit != null) deadline.setExtensionLimit(extensionLimit);
+        
+        deadline.setStatus(calculateDynamicStatus(deadline));
         deadlineRepository.save(deadline);
 
         if (startDate != null) task.setStartDate(startDate);
@@ -149,7 +201,7 @@ public class TaskDeadlineService {
         result.put("start_date", deadline.getStartDate());
         result.put("due_date", deadline.getDueDate());
         result.put("reminder_offset", deadline.getReminderOffset());
-        result.put("status", deadline.getStatus() != null ? deadline.getStatus().name() : "ON_TRACK");
+        result.put("status", deadline.getStatus().name());
         result.put("extension_limit", deadline.getExtensionLimit());
         result.put("extension_count", deadline.getExtensionCount());
         return result;
@@ -161,6 +213,7 @@ public class TaskDeadlineService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
         
         validateTaskAccess(task, userId);
+        validateStatusUpdateAccess(task.getProjectId(), userId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
@@ -168,16 +221,35 @@ public class TaskDeadlineService {
         Instant now = Instant.now();
         deadline.setActualCompletedAt(now);
         
-        boolean isLate = deadline.getDueDate() != null && now.isAfter(deadline.getDueDate());
-        deadline.setStatus(isLate ? TaskDeadlineEntity.DeadlineStatus.LATE : TaskDeadlineEntity.DeadlineStatus.COMPLETED);
+        TaskDeadlineEntity.DeadlineStatus finalStatus = calculateDynamicStatus(deadline);
+        deadline.setStatus(finalStatus);
         deadlineRepository.save(deadline);
+
+        boolean isLate = (finalStatus == TaskDeadlineEntity.DeadlineStatus.LATE);
 
         Map<String, Object> result = new HashMap<>();
         result.put("task_id", taskId);
         result.put("due_date", deadline.getDueDate());
         result.put("actual_completed_at", now);
         result.put("is_late", isLate);
-        result.put("late_duration", isLate ? Duration.between(deadline.getDueDate(), now).toHours() + " hours" : "0 hours");
+        
+        if (isLate && deadline.getDueDate() != null) {
+            Duration lateDuration = Duration.between(deadline.getDueDate(), now);
+            long totalMinutes = lateDuration.toMinutes();
+            long hours = lateDuration.toHours();
+            long minutesPart = lateDuration.toMinutesPart();
+            
+            result.put("late_duration_formatted", hours + "h " + minutesPart + "m");
+            result.put("late_duration_minutes", totalMinutes);
+
+            eventPublisher.publishEvent(new TaskCompletedLateEvent(
+                    this, taskId, userId, task.getProjectId(), totalMinutes
+            ));
+        } else {
+            result.put("late_duration_formatted", "0h 0m");
+            result.put("late_duration_minutes", 0);
+        }
+        
         return result;
     }
 
@@ -198,7 +270,7 @@ public class TaskDeadlineService {
         Instant oldDueDate = deadline.getDueDate();
         deadline.setDueDate(requestedDueDate);
         deadline.setExtensionCount(deadline.getExtensionCount() + 1);
-        deadline.setStatus(TaskDeadlineEntity.DeadlineStatus.ON_TRACK);
+        deadline.setStatus(calculateDynamicStatus(deadline));
         deadlineRepository.save(deadline);
 
         task.setDueDate(requestedDueDate);
