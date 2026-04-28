@@ -34,4 +34,8 @@ public interface UserRepository extends MongoRepository<User, String> {
     long countByTeamIdInAndDeletedFalse(List<String> teamIds);
 
     List<User> findByTeamIdInAndDeletedFalse(List<String> teamIds);
+
+    List<User> findByTeamIdIsNullAndDeletedFalse();
+
+    List<User> findByFullNameContainingIgnoreCaseAndDeletedFalse(String keyword);
 }

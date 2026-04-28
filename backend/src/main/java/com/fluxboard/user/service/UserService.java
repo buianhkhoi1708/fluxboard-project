@@ -9,6 +9,7 @@ import com.fluxboard.project.projectmember.entity.ProjectMember;
 import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.user.dto.request.CreateUserRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UnassignedUserResponse;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
@@ -180,6 +181,18 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                         u.getId(), 
                         u.getFullName(), 
                         u.getTeamId() != null ? u.getTeamId() : "N/A"))
+                .toList();
+    }
+
+    public List<UnassignedUserResponse> getUnassignedUsers() {
+        return userRepository.findByTeamIdIsNullAndDeletedFalse()
+                .stream()
+                .map(u -> new UnassignedUserResponse(
+                        u.getId(),
+                        u.getFullName(),
+                        u.getEmail(),
+                        u.getRoleId()
+                ))
                 .toList();
     }
 
