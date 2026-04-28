@@ -15,6 +15,8 @@ import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.activity.event.ActivityCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -30,18 +32,18 @@ public class ProjectMemberService {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
-    private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProjectMemberService(
             ProjectMemberRepository projectMemberRepository,
             ProjectRepository projectRepository,
             UserRepository userRepository,
-            ActivityService activityService
+            ApplicationEventPublisher eventPublisher
     ) {
         this.projectMemberRepository = projectMemberRepository;
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
-        this.activityService = activityService;
+        this.eventPublisher = eventPublisher;
     }
 
     public List<ProjectMemberResponse> getMembers(String projectId) {
@@ -105,19 +107,11 @@ public class ProjectMemberService {
         member.markDeleted();
         projectMemberRepository.save(member);
 
-        activityService.log(
-                ActivitySource.PROJECT,
-                member.getProjectId(),
-                member.getProjectId(),
-                null,
-                null,
-                TextUtils.trimToNull(actorUserId),
-                ActivityAction.DELETE,
-                "memberId",
-                TextUtils.trimToNull(member.getUserId()),
-                null,
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, member.getProjectId(), member.getProjectId(), null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.DELETE, "memberId", TextUtils.trimToNull(member.getUserId()), null,
                 "Project member removed: %s".formatted(display(member.getUserId()))
-        );
+        ));
     }
 
     private ProjectMember findMember(String projectId, String memberId) {
@@ -198,19 +192,11 @@ public class ProjectMemberService {
             newValue = currentRoles;
         }
 
-        activityService.log(
-                ActivitySource.PROJECT,
-                member.getProjectId(),
-                member.getProjectId(),
-                null,
-                null,
-                actorUserId,
-                ActivityAction.UPDATE,
-                "memberId",
-                oldValue,
-                newValue,
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, member.getProjectId(), member.getProjectId(), null, null,
+                actorUserId, ActivityAction.UPDATE, "memberId", oldValue, newValue,
                 "Project member updated: %s".formatted(display(member.getUserId()))
-        );
+        ));
     }
 
     private List<String> resolveRoleIds(List<String> roleIds) {
