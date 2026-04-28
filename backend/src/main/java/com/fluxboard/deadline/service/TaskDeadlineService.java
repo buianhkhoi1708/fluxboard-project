@@ -8,6 +8,7 @@ import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.deadline.entity.TaskDeadlineEntity;
 import com.fluxboard.deadline.event.DeadlineExtendedEvent;
+import com.fluxboard.deadline.event.DeadlineConfigChangedEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.rbac.service.PermissionEvaluatorService;
@@ -41,12 +42,29 @@ public class TaskDeadlineService {
     }
 
     private void validateManagerAccess(String projectId, String userId) {
-        String currentUserIdRoleId = "LẤY_TU_DB"; 
+        String roleId = "USER_ROLE_ID_IN_PROJECT"; 
 
-        boolean hasAccess = permissionEvaluatorService.hasPermission(currentUserIdRoleId, "TASK_DEADLINE_CONFIG");
+        boolean hasAccess = permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG");
         
         if (!hasAccess) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your role does not have permission to configure deadlines.");
+        }
+    }
+
+    private void validateDeadlineConfigData(Instant currentStartDate, Instant currentDueDate, Instant newStartDate, Instant newDueDate, Integer reminderOffset, Integer extensionLimit) {
+        if (reminderOffset != null && reminderOffset < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Reminder offset must be a non-negative integer.");
+        }
+
+        if (extensionLimit != null && extensionLimit < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Extension limit must be a non-negative integer.");
+        }
+
+        Instant effectiveStartDate = newStartDate != null ? newStartDate : currentStartDate;
+        Instant effectiveDueDate = newDueDate != null ? newDueDate : currentDueDate;
+
+        if (effectiveStartDate != null && effectiveDueDate != null && !effectiveStartDate.isBefore(effectiveDueDate)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Start date must be strictly before due date.");
         }
     }
 
@@ -60,6 +78,11 @@ public class TaskDeadlineService {
         TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
+        validateDeadlineConfigData(deadline.getStartDate(), deadline.getDueDate(), startDate, dueDate, reminderOffset, extensionLimit);
+
+        Instant oldDueDate = deadline.getDueDate();
+        boolean isDueDateChanged = dueDate != null && !dueDate.equals(oldDueDate);
+
         if (startDate != null) deadline.setStartDate(startDate);
         if (dueDate != null) deadline.setDueDate(dueDate);
         if (reminderOffset != null) deadline.setReminderOffset(reminderOffset);
@@ -71,6 +94,12 @@ public class TaskDeadlineService {
         taskRepository.save(task);
 
         notificationDispatcher.scheduleDeadlineUpdateNotification(taskId);
+
+        if (isDueDateChanged) {
+            eventPublisher.publishEvent(new DeadlineConfigChangedEvent(
+                    this, taskId, userId, oldDueDate, dueDate
+            ));
+        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("task_id", taskId);
