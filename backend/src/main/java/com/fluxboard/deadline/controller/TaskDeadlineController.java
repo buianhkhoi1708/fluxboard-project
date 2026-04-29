@@ -44,12 +44,29 @@ public class TaskDeadlineController {
         return ResponseFactory.ok("Task completed.", result);
     }
 
+    // 1. API: Nhân viên xin dời hạn
     @PostMapping("/{taskId}/deadline/extensions")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> extendDeadline(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> requestExtension(
             @PathVariable String taskId,
             @RequestBody ExtensionRequest request) {
-        Map<String, Object> result = deadlineService.extendDeadline(taskId, getCurrentUserId(), request.requestedDueDate(), request.reason());
-        return ResponseFactory.ok("Deadline extended successfully.", result);
+        Map<String, Object> result = deadlineService.requestExtension(taskId, getCurrentUserId(), request.requestedDueDate(), request.reason());
+        return ResponseFactory.ok("Extension requested successfully. Pending manager approval.", result);
+    }
+
+    // 2. API: Quản lý phê duyệt yêu cầu dời hạn
+    @PostMapping("/{taskId}/deadline/extensions/approve")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> approveExtension(@PathVariable String taskId) {
+        Map<String, Object> result = deadlineService.approveExtension(taskId, getCurrentUserId());
+        return ResponseFactory.ok("Deadline extension approved successfully.", result);
+    }
+
+    // 3. API: Quản lý từ chối yêu cầu dời hạn
+    @PostMapping("/{taskId}/deadline/extensions/reject")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> rejectExtension(
+            @PathVariable String taskId,
+            @RequestBody RejectExtensionRequest request) {
+        Map<String, Object> result = deadlineService.rejectExtension(taskId, getCurrentUserId(), request.reason());
+        return ResponseFactory.ok("Deadline extension request rejected.", result);
     }
 
     public record DeadlineConfigRequest(
@@ -61,6 +78,10 @@ public class TaskDeadlineController {
 
     public record ExtensionRequest(
             @JsonProperty("requested_due_date") Instant requestedDueDate,
+            String reason
+    ) {}
+
+    public record RejectExtensionRequest(
             String reason
     ) {}
 }

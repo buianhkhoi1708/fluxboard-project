@@ -44,6 +44,12 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("is_reminder_sent")
     private Boolean isReminderSent = false;
 
+    @Field("is_extension_pending")
+    private Boolean isExtensionPending = false;
+
+    @Field("pending_requested_date")
+    private Instant pendingRequestedDate;
+
     public enum DeadlineStatus { 
         ON_TRACK, 
         AT_RISK, 

@@ -7,9 +7,10 @@ import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.deadline.entity.TaskDeadlineEntity;
-import com.fluxboard.deadline.event.DeadlineExtendedEvent;
 import com.fluxboard.deadline.event.DeadlineConfigChangedEvent;
+import com.fluxboard.deadline.event.ExtensionApprovedEvent;
 import com.fluxboard.deadline.event.ExtensionRejectedEvent;
+import com.fluxboard.deadline.event.ExtensionRequestedEvent;
 import com.fluxboard.deadline.event.TaskCompletedLateEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
@@ -256,7 +257,7 @@ public class TaskDeadlineService {
     }
 
     @Transactional
-    public Map<String, Object> extendDeadline(String taskId, String userId, Instant requestedDueDate, String reason) {
+    public Map<String, Object> requestExtension(String taskId, String userId, Instant requestedDueDate, String reason) {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
         
@@ -265,47 +266,70 @@ public class TaskDeadlineService {
         TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
+        if (Boolean.TRUE.equals(deadline.getIsExtensionPending())) {
+            throw new AppException(ErrorCode.CONFLICT, "An extension request is already pending for this task.");
+        }
+
         if (deadline.getExtensionLimit() != null && deadline.getExtensionCount() >= deadline.getExtensionLimit()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Deadline extension limit reached.");
         }
 
-        Instant oldDueDate = deadline.getDueDate();
-        deadline.setDueDate(requestedDueDate);
-        deadline.setExtensionCount(deadline.getExtensionCount() + 1);
-        deadline.setStatus(calculateDynamicStatus(deadline));
+        deadline.setIsExtensionPending(true);
+        deadline.setPendingRequestedDate(requestedDueDate);
         deadlineRepository.save(deadline);
-
-        task.setDueDate(requestedDueDate);
-        taskRepository.save(task);
-
-        String boardId = null;
-        if (task.getColumnId() != null) {
-            Optional<BoardColumnEntity> columnOpt = columnRepository.findById(task.getColumnId());
-            if (columnOpt.isPresent()) {
-                boardId = columnOpt.get().getBoardId();
-            }
-        }
 
         String targetManagerId = task.getAuthorUserId();
 
-        eventPublisher.publishEvent(new DeadlineExtendedEvent(
-                this, 
-                taskId, 
-                task.getProjectId(), 
-                boardId, 
-                userId, 
-                targetManagerId, 
-                oldDueDate, 
-                requestedDueDate, 
-                reason
+        eventPublisher.publishEvent(new ExtensionRequestedEvent(
+                this, taskId, task.getProjectId(), userId, targetManagerId, 
+                deadline.getDueDate(), requestedDueDate, reason
+        ));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("task_id", taskId);
+        result.put("status", "PENDING_APPROVAL");
+        result.put("requested_due_date", requestedDueDate);
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> approveExtension(String taskId, String managerId) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+        
+        validateManagerAccess(task.getProjectId(), managerId);
+
+        TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
+
+        if (!Boolean.TRUE.equals(deadline.getIsExtensionPending()) || deadline.getPendingRequestedDate() == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "No pending extension request found.");
+        }
+
+        Instant oldDueDate = deadline.getDueDate();
+        Instant newDueDate = deadline.getPendingRequestedDate();
+
+        deadline.setDueDate(newDueDate);
+        deadline.setExtensionCount(deadline.getExtensionCount() + 1);
+        deadline.setIsExtensionPending(false);
+        deadline.setPendingRequestedDate(null);
+        deadline.setStatus(calculateDynamicStatus(deadline));
+        deadlineRepository.save(deadline);
+
+        task.setDueDate(newDueDate);
+        taskRepository.save(task);
+
+        eventPublisher.publishEvent(new ExtensionApprovedEvent(
+                this, taskId, task.getProjectId(), managerId, 
+                task.getAssigneesUserId(), oldDueDate, newDueDate
         ));
 
         Map<String, Object> result = new HashMap<>();
         result.put("task_id", taskId);
         result.put("old_due_date", oldDueDate);
-        result.put("new_due_date", requestedDueDate);
+        result.put("new_due_date", newDueDate);
         result.put("extension_count", deadline.getExtensionCount());
-        result.put("extension_limit", deadline.getExtensionLimit());
+        result.put("status", "APPROVED");
         return result;
     }
 
@@ -319,14 +343,16 @@ public class TaskDeadlineService {
         TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
-        List<String> targetUserIds = task.getAssigneesUserId();
+        if (!Boolean.TRUE.equals(deadline.getIsExtensionPending())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "No pending extension request found.");
+        }
+
+        deadline.setIsExtensionPending(false);
+        deadline.setPendingRequestedDate(null);
+        deadlineRepository.save(deadline);
 
         eventPublisher.publishEvent(new ExtensionRejectedEvent(
-                this, 
-                taskId, 
-                targetUserIds, 
-                deadline.getDueDate(), 
-                reason
+                this, taskId, task.getAssigneesUserId(), deadline.getDueDate(), reason
         ));
 
         Map<String, Object> result = new HashMap<>();
