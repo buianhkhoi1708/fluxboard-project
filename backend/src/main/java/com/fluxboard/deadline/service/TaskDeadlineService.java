@@ -9,6 +9,7 @@ import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.deadline.entity.TaskDeadlineEntity;
 import com.fluxboard.deadline.event.DeadlineExtendedEvent;
 import com.fluxboard.deadline.event.DeadlineConfigChangedEvent;
+import com.fluxboard.deadline.event.ExtensionRejectedEvent;
 import com.fluxboard.deadline.event.TaskCompletedLateEvent;
 import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -284,12 +286,15 @@ public class TaskDeadlineService {
             }
         }
 
+        String targetManagerId = task.getAuthorUserId();
+
         eventPublisher.publishEvent(new DeadlineExtendedEvent(
                 this, 
                 taskId, 
                 task.getProjectId(), 
                 boardId, 
                 userId, 
+                targetManagerId, 
                 oldDueDate, 
                 requestedDueDate, 
                 reason
@@ -301,6 +306,33 @@ public class TaskDeadlineService {
         result.put("new_due_date", requestedDueDate);
         result.put("extension_count", deadline.getExtensionCount());
         result.put("extension_limit", deadline.getExtensionLimit());
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> rejectExtension(String taskId, String managerId, String reason) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+        
+        validateManagerAccess(task.getProjectId(), managerId);
+
+        TaskDeadlineEntity deadline = deadlineRepository.findByTaskId(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
+
+        List<String> targetUserIds = task.getAssigneesUserId();
+
+        eventPublisher.publishEvent(new ExtensionRejectedEvent(
+                this, 
+                taskId, 
+                targetUserIds, 
+                deadline.getDueDate(), 
+                reason
+        ));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("task_id", taskId);
+        result.put("current_due_date", deadline.getDueDate());
+        result.put("status", "REJECTED");
         return result;
     }
 }
