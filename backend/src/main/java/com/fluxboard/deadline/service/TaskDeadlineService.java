@@ -16,8 +16,9 @@ import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.rbac.service.PermissionEvaluatorService;
 
-// TODO: Mở comment dòng dưới khi đồng đội hoàn thành file ProjectMemberRepository
-// import com.fluxboard.project.repository.ProjectMemberRepository; 
+// Kết nối trực tiếp với code của đồng đội[cite: 8]
+import com.fluxboard.project.projectmember.entity.ProjectMember; 
+import com.fluxboard.project.projectmember.repository.ProjectMemberRepository; 
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -41,9 +42,7 @@ public class TaskDeadlineService {
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationDispatcher notificationDispatcher;
     private final PermissionEvaluatorService permissionEvaluatorService;
-    
-    // TODO: Mở comment dòng dưới khi đồng đội làm xong phần Project
-    // private final ProjectMemberRepository projectMemberRepository; 
+    private final ProjectMemberRepository projectMemberRepository; 
 
     private void validateTaskAccess(TaskEntity task, String userId) {
         boolean isAssignee = task.getAssigneesUserId() != null && task.getAssigneesUserId().contains(userId);
@@ -53,29 +52,16 @@ public class TaskDeadlineService {
     }
 
     private void validateManagerAccess(String projectId, String userId) {
-        // =====================================================================
-        // ⚠️ BẮT ĐẦU ĐOẠN CODE TẠM THỜI (XÓA SAU KHI CHẠY MẪU THÀNH CÔNG)
-        // =====================================================================
-        java.util.List<String> userRoleIdsInProject = java.util.List.of("69cfd39a34353f3ca08d52ce"); 
-        boolean isActive = true;
-        // =====================================================================
-
-        /* // =====================================================================
-        // 🟢 BẮT ĐẦU ĐOẠN CODE CHÍNH THỨC (MỞ COMMENT KHI ĐỒNG ĐỘI LÀM XONG)
-        // =====================================================================
-        com.fluxboard.project.entity.ProjectMemberEntity member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+        // Lấy thông tin thực tế từ database thay vì hard-code[cite: 4, 8]
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
         
-        java.util.List<String> userRoleIdsInProject = member.getRoleIds();
-        boolean isActive = member.getIsActive() != null ? member.getIsActive() : false;
-        // =====================================================================
-        */
-
-        if (!isActive) {
+        if (Boolean.FALSE.equals(member.getIsActive())) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your account is suspended in this project.");
         }
 
         boolean hasAccess = false;
+        List<String> userRoleIdsInProject = member.getRoleIds();
         if (userRoleIdsInProject != null) {
             for (String roleId : userRoleIdsInProject) {
                 if (permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG")) {
@@ -91,26 +77,16 @@ public class TaskDeadlineService {
     }
 
     private void validateStatusUpdateAccess(String projectId, String userId) {
-        // =====================================================================
-        // ⚠️ BẮT ĐẦU ĐOẠN CODE TẠM THỜI
-        // =====================================================================
-        java.util.List<String> userRoleIdsInProject = java.util.List.of("69cfd39a34353f3ca08d52ce"); 
-        boolean isActive = true;
-        // =====================================================================
+        // Kiểm tra quyền TASK_MOVE thực tế của User trong Project[cite: 4, 8]
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
 
-        /* // =====================================================================
-        // 🟢 BẮT ĐẦU ĐOẠN CODE CHÍNH THỨC
-        // =====================================================================
-        com.fluxboard.project.entity.ProjectMemberEntity member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
-                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied."));
-        java.util.List<String> userRoleIdsInProject = member.getRoleIds();
-        boolean isActive = member.getIsActive() != null ? member.getIsActive() : false;
-        // =====================================================================
-        */
-
-        if (!isActive) throw new AppException(ErrorCode.FORBIDDEN, "The account has been suspended from this project.");
+        if (Boolean.FALSE.equals(member.getIsActive())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "The account has been suspended from this project.");
+        }
 
         boolean hasPermission = false;
+        List<String> userRoleIdsInProject = member.getRoleIds();
         if (userRoleIdsInProject != null) {
             for (String roleId : userRoleIdsInProject) {
                 if (permissionEvaluatorService.hasPermission(roleId, "TASK_MOVE")) {
