@@ -25,6 +25,12 @@ public class TeamEntity extends BaseDocument {
     @Field("description")
     private String description;
 
+    @Field("lead_id")
+    private String leadId;
+
+    @Field("status")
+    private String status = "ACTIVE";
+
     public String getName() {
         return name;
     }
@@ -55,5 +61,21 @@ public class TeamEntity extends BaseDocument {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getLeadId() {
+        return leadId;
+    }
+
+    public void setLeadId(String leadId) {
+        this.leadId = leadId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

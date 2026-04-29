@@ -8,7 +8,7 @@ public record UserResponse(
         String fullName,
         String avatarUrl,
         String roleId,
-        String departmentId,
+
         String teamId,
         Instant createdAt,
         Instant updatedAt

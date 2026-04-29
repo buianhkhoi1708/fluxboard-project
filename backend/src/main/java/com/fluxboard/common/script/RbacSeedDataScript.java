@@ -411,7 +411,6 @@ private User createAiUser(String name, String email, String team, Map<RoleKey, R
         u.setEmail(email);
         u.setPassword(passwordEncoder.encode("123456"));
         u.setTeamId(team); // AI Service sẽ dựa vào đây để gán việc
-        u.setDepartmentId("IT-DEPT");
         
         // Gán Role mặc định là EMPLOYEE (Scope SYSTEM)
         RoleEntity employeeRole = rolesByKey.get(new RoleKey(Role.EMPLOYEE, Scope.SYSTEM));

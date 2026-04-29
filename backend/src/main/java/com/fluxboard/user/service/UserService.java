@@ -9,9 +9,14 @@ import com.fluxboard.project.projectmember.entity.ProjectMember;
 import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.user.dto.request.CreateUserRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UnassignedUserResponse;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.activity.enums.ActivityAction;
+import com.fluxboard.activity.enums.ActivitySource;
+import com.fluxboard.activity.event.ActivityCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,17 +29,17 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
-    private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public UserService(
             UserRepository userRepository,
             ProjectMemberRepository projectMemberRepository,
-            ActivityService activityService
+            ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
-        this.activityService = activityService;
+        this.eventPublisher = eventPublisher;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -55,16 +60,14 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         user.setFullName(TextUtils.trim(request.fullName()));
         user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
         user.setRoleId(TextUtils.trimToNull(request.roleId()));
-        user.setDepartmentId(TextUtils.trimToNull(request.departmentId()));
         user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
         User saved = userRepository.save(user);
-        activityService.logUserCreated(
-                saved.getId(),
-                TextUtils.trimToNull(actorUserId),
-                saved.getEmail(),
-                saved.getFullName()
-        );
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.USER, saved.getId(), null, null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.CREATE, null, null, null,
+                "User created: " + saved.getFullName() + " (" + saved.getEmail() + ")"
+        ));
         return toResponse(saved);
     }
 
@@ -113,10 +116,6 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
             user.setRoleId(TextUtils.trimToNull(request.roleId()));
         }
 
-        if (request.departmentId() != null) {
-            user.setDepartmentId(TextUtils.trimToNull(request.departmentId()));
-        }
-
         if (request.teamId() != null) {
             user.setTeamId(TextUtils.trimToNull(request.teamId()));
         }
@@ -140,13 +139,13 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
             newValue = saved.getRoleId();
         }
 
-        activityService.logUserUpdated(
-                saved.getId(),
-                TextUtils.trimToNull(actorUserId),
-                changedField,
-                oldValue,
-                newValue
-        );
+        if (changedField != null) {
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.USER, saved.getId(), null, null, null,
+                    TextUtils.trimToNull(actorUserId), ActivityAction.UPDATE, changedField, oldValue, newValue,
+                    "User updated"
+            ));
+        }
         return toResponse(saved);
     }
 
@@ -160,7 +159,11 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         String deletedEmail = user.getEmail();
         user.markDeleted();
         userRepository.save(user);
-        activityService.logUserDeleted(user.getId(), TextUtils.trimToNull(actorUserId), deletedEmail);
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.USER, user.getId(), null, null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.DELETE, null, null, null,
+                "User deleted: " + deletedEmail
+        ));
     }
 
     public void updateAvatarUrl(String id, String avatarUrl) {
@@ -185,6 +188,18 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                         u.getId(), 
                         u.getFullName(), 
                         u.getTeamId() != null ? u.getTeamId() : "N/A"))
+                .toList();
+    }
+
+    public List<UnassignedUserResponse> getUnassignedUsers() {
+        return userRepository.findByTeamIdIsNullAndDeletedFalse()
+                .stream()
+                .map(u -> new UnassignedUserResponse(
+                        u.getId(),
+                        u.getFullName(),
+                        u.getEmail(),
+                        u.getRoleId()
+                ))
                 .toList();
     }
 
@@ -225,7 +240,6 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                 user.getFullName(),
                 user.getAvatarUrl(),
                 user.getRoleId(),
-                user.getDepartmentId(),
                 user.getTeamId(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()

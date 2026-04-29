@@ -46,6 +46,8 @@ public class TeamService implements CrudService<
         entity.setCode(code);
         entity.setDepartmentId(departmentId);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setLeadId(TextUtils.trimToNull(request.leadId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(teamRepository.save(entity));
     }
@@ -71,20 +73,38 @@ public class TeamService implements CrudService<
     @Override
     public OrganizationTeamResponse update(String id, UpdateTeamRequest request) {
         TeamEntity entity = findById(id);
-        String code = TextUtils.trim(request.code());
-        if (teamRepository.existsByCodeAndIdNotAndDeletedFalse(code, id)) {
-            throw new AppException(ErrorCode.CONFLICT, "Team code already exists.");
+
+        if (request.name() != null) {
+            entity.setName(TextUtils.trim(request.name()));
         }
 
-        String departmentId = TextUtils.trim(request.departmentId());
-        if (!departmentService.existsById(departmentId)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Department does not exist.");
+        if (request.code() != null) {
+            String code = TextUtils.trim(request.code());
+            if (!entity.getCode().equals(code) && teamRepository.existsByCodeAndDeletedFalse(code)) {
+                throw new AppException(ErrorCode.CONFLICT, "Team code already exists.");
+            }
+            entity.setCode(code);
         }
 
-        entity.setName(TextUtils.trim(request.name()));
-        entity.setCode(code);
-        entity.setDepartmentId(departmentId);
-        entity.setDescription(TextUtils.trimToNull(request.description()));
+        if (request.departmentId() != null) {
+            String departmentId = TextUtils.trim(request.departmentId());
+            if (!entity.getDepartmentId().equals(departmentId) && !departmentService.existsById(departmentId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Department does not exist.");
+            }
+            entity.setDepartmentId(departmentId);
+        }
+
+        if (request.description() != null) {
+            entity.setDescription(TextUtils.trimToNull(request.description()));
+        }
+        
+        if (request.leadId() != null) {
+            entity.setLeadId(TextUtils.trimToNull(request.leadId()));
+        }
+
+        if (request.status() != null) {
+            entity.setStatus(TextUtils.trim(request.status()));
+        }
 
         return toResponse(teamRepository.save(entity));
     }
@@ -112,6 +132,8 @@ public class TeamService implements CrudService<
                 entity.getCode(),
                 entity.getDepartmentId(),
                 entity.getDescription(),
+                entity.getLeadId(),
+                entity.getStatus(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

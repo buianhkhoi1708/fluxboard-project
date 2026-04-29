@@ -7,6 +7,8 @@ public record OrganizationDepartmentResponse(
         String name,
         String code,
         String description,
+        String managerId,
+        String status,
         Instant createdAt,
         Instant updatedAt
 ) {

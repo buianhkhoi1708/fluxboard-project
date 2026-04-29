@@ -1,7 +1,7 @@
 package com.fluxboard.activity.dto.response;
 
 public record ActivityActorResponse(
-        String id,
+        String userId,
         String fullName,
         String avatarUrl
 ) {

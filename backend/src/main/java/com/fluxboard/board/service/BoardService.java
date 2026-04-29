@@ -21,6 +21,10 @@ import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
+import com.fluxboard.activity.enums.ActivityAction;
+import com.fluxboard.activity.enums.ActivitySource;
+import com.fluxboard.activity.event.ActivityCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -45,7 +49,7 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
     private final BoardColumnService boardColumnService;
     private final BoardColumnRepository boardColumnRepository;
     private final TaskRepository taskRepository;
-    private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public BoardService(
             BoardRepository boardRepository,
@@ -53,13 +57,13 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
             BoardColumnService boardColumnService,
             BoardColumnRepository boardColumnRepository,
             TaskRepository taskRepository,
-            ActivityService activityService) {
+            ApplicationEventPublisher eventPublisher) {
         this.boardRepository = boardRepository;
         this.projectRepository = projectRepository;
         this.boardColumnService = boardColumnService;
         this.boardColumnRepository = boardColumnRepository;
         this.taskRepository = taskRepository;
-        this.activityService = activityService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -82,7 +86,11 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
         BoardEntity saved = boardRepository.save(entity);
         boardColumnService.initializeDefaultColumns(saved.getId());
-        activityService.logBoardCreated(saved.getId(), saved.getProjectId(), actorUserId, saved.getName());
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.BOARD, saved.getId(), saved.getProjectId(), saved.getId(), null,
+                actorUserId, ActivityAction.CREATE, null, null, null,
+                "Board created: " + saved.getName()
+        ));
         return toResponse(saved);
     }
 
@@ -176,17 +184,17 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
 
         String oldName = entity.getName();
         entity.setName(normalizedName);
-        BoardEntity updated = boardRepository.save(entity);
-        activityService.logBoardUpdated(
-                updated.getId(),
-                updated.getProjectId(),
-                actorUserId,
-                "name",
-                oldName,
-                normalizedName,
-                updated.getName());
+        BoardEntity saved = boardRepository.save(entity);
+        String changedField = !oldName.equals(saved.getName()) ? "name" : null;
+        if (changedField != null) {
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.BOARD, saved.getId(), saved.getProjectId(), saved.getId(), null,
+                    actorUserId, ActivityAction.UPDATE, changedField, oldName, saved.getName(),
+                    "Board updated: " + saved.getName()
+            ));
+        }
 
-        return toResponse(updated);
+        return toResponse(saved);
     }
 
     @Override
@@ -200,7 +208,12 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
         entity.markDeleted();
         boardRepository.save(entity);
         boardColumnService.softDeleteByBoardId(entity.getId());
-        activityService.logBoardDeleted(entity.getId(), entity.getProjectId(), actorUserId, boardName);
+
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.BOARD, entity.getId(), entity.getProjectId(), entity.getId(), null,
+                actorUserId, ActivityAction.DELETE, null, null, null,
+                "Board deleted: " + boardName
+        ));
     }
 
     private BoardEntity findBoardById(String boardId) {

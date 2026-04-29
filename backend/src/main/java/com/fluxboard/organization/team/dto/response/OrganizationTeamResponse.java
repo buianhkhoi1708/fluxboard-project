@@ -8,6 +8,8 @@ public record OrganizationTeamResponse(
         String code,
         String departmentId,
         String description,
+        String leadId,
+        String status,
         Instant createdAt,
         Instant updatedAt
 ) {
