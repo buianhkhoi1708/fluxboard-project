@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class DepartmentService implements CrudService<
@@ -27,12 +30,15 @@ public class DepartmentService implements CrudService<
         UpdateDepartmentRequest> {
 
     private final DepartmentRepository departmentRepository;
-    private final UserRepository userRepository;   // 👈 inject thêm
+    private final UserRepository userRepository;
+    private final com.fluxboard.organization.team.repository.TeamRepository teamRepository;
 
     public DepartmentService(DepartmentRepository departmentRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             com.fluxboard.organization.team.repository.TeamRepository teamRepository) {
         this.departmentRepository = departmentRepository;
         this.userRepository = userRepository;
+        this.teamRepository = teamRepository;
     }
 
     @Override
@@ -46,6 +52,8 @@ public class DepartmentService implements CrudService<
         entity.setName(TextUtils.trim(request.name()));
         entity.setCode(code);
         entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
 
         return toResponse(departmentRepository.save(entity));
     }
@@ -63,14 +71,30 @@ public class DepartmentService implements CrudService<
     @Override
     public OrganizationDepartmentResponse update(String id, UpdateDepartmentRequest request) {
         DepartmentEntity entity = findById(id);
-        String code = TextUtils.trim(request.code());
-        if (departmentRepository.existsByCodeAndIdNotAndDeletedFalse(code, id)) {
-            throw new AppException(ErrorCode.CONFLICT, "Department code already exists.");
+
+        if (request.name() != null) {
+            entity.setName(TextUtils.trim(request.name()));
+        }
+        
+        if (request.code() != null) {
+            String code = TextUtils.trim(request.code());
+            if (!entity.getCode().equals(code) && departmentRepository.existsByCodeAndDeletedFalse(code)) {
+                throw new AppException(ErrorCode.CONFLICT, "Department code already exists.");
+            }
+            entity.setCode(code);
         }
 
-        entity.setName(TextUtils.trim(request.name()));
-        entity.setCode(code);
-        entity.setDescription(TextUtils.trimToNull(request.description()));
+        if (request.description() != null) {
+            entity.setDescription(TextUtils.trimToNull(request.description()));
+        }
+        
+        if (request.managerId() != null) {
+            entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        }
+
+        if (request.status() != null) {
+            entity.setStatus(TextUtils.trim(request.status()));
+        }
 
         return toResponse(departmentRepository.save(entity));
     }
@@ -99,13 +123,64 @@ public class DepartmentService implements CrudService<
         List<DepartmentEntity> departments = departmentRepository.findByDeletedFalse(Pageable.unpaged()).getContent();
         List<Map<String, Object>> result = new ArrayList<>();
         for (DepartmentEntity dept : departments) {
-            long count = userRepository.countByDepartmentIdAndDeletedFalse(dept.getId());
+            List<String> teamIds = teamRepository.findByDepartmentIdAndDeletedFalse(dept.getId(), Pageable.unpaged())
+                    .getContent()
+                    .stream()
+                    .map(com.fluxboard.common.entity.BaseDocument::getId)
+                    .toList();
+            
+            long count = 0;
+            if (!teamIds.isEmpty()) {
+                count = userRepository.countByTeamIdInAndDeletedFalse(teamIds);
+            }
+            
             Map<String, Object> item = new HashMap<>();
             item.put("department", dept.getName());
             item.put("count", count);
             result.add(item);
         }
         return result;
+    }
+
+    // ========== API HIERARCHY ==========
+    public com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse getDepartmentHierarchy(String departmentId) {
+        DepartmentEntity dept = departmentRepository.findByIdAndDeletedFalse(departmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Department not found."));
+
+        List<com.fluxboard.organization.team.entity.TeamEntity> teams = teamRepository.findByDepartmentIdAndDeletedFalse(departmentId);
+        List<String> teamIds = teams.stream().map(com.fluxboard.organization.team.entity.TeamEntity::getId).toList();
+        List<com.fluxboard.user.entity.User> users = teamIds.isEmpty() ? List.of() : userRepository.findByTeamIdInAndDeletedFalse(teamIds);
+
+        Map<String, List<com.fluxboard.organization.department.dto.response.UserHierarchyResponse>> usersByTeam = users.stream()
+                .filter(u -> u.getTeamId() != null)
+                .collect(Collectors.groupingBy(
+                        com.fluxboard.user.entity.User::getTeamId,
+                        Collectors.mapping(
+                                u -> new com.fluxboard.organization.department.dto.response.UserHierarchyResponse(
+                                        u.getId(),
+                                        u.getFullName(),
+                                        u.getEmail(),
+                                        u.getStatus()
+                                ),
+                                Collectors.toList()
+                        )
+                ));
+
+        List<com.fluxboard.organization.department.dto.response.TeamHierarchyResponse> teamResponses = teams.stream()
+                .map(t -> new com.fluxboard.organization.department.dto.response.TeamHierarchyResponse(
+                        t.getId(),
+                        t.getName(),
+                        t.getLeadId(),
+                        usersByTeam.getOrDefault(t.getId(), List.of())
+                ))
+                .toList();
+
+        return new com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse(
+                dept.getId(),
+                dept.getName(),
+                dept.getManagerId(),
+                teamResponses
+        );
     }
 
     // ========== CÁC PHƯƠNG THỨC HIỆN CÓ ==========
@@ -125,6 +200,8 @@ public class DepartmentService implements CrudService<
                 entity.getName(),
                 entity.getCode(),
                 entity.getDescription(),
+                entity.getManagerId(),
+                entity.getStatus(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

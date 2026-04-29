@@ -14,6 +14,8 @@ public interface TeamRepository extends MongoRepository<TeamEntity, String> {
 
     Page<TeamEntity> findByDepartmentIdAndDeletedFalse(String departmentId, Pageable pageable);
 
+    java.util.List<TeamEntity> findByDepartmentIdAndDeletedFalse(String departmentId);
+
     long countByDeletedFalse();
 
     boolean existsByCodeAndDeletedFalse(String code);

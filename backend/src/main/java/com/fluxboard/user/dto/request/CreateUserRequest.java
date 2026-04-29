@@ -24,9 +24,6 @@ public record CreateUserRequest(
         @Size(max = 50, message = "Role ID must be at most 50 characters.")
         String roleId,
 
-        @Size(max = 50, message = "Department ID must be at most 50 characters.")
-        String departmentId,
-
         @Size(max = 50, message = "Team ID must be at most 50 characters.")
         String teamId
 ) {

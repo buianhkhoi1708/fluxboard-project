@@ -4,18 +4,24 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record UpdateTeamRequest(
-        @NotBlank(message = "Team name must not be blank.")
+        // @NotBlank(message = "Team name must not be blank.")
         @Size(max = 150, message = "Team name must be at most 150 characters.")
         String name,
 
-        @NotBlank(message = "Team code must not be blank.")
+        // @NotBlank(message = "Team code must not be blank.")
         @Size(max = 50, message = "Team code must be at most 50 characters.")
         String code,
 
-        @NotBlank(message = "Department ID must not be blank.")
+        // @NotBlank(message = "Department ID must not be blank.")
         String departmentId,
 
         @Size(max = 500, message = "Team description must be at most 500 characters.")
-        String description
+        String description,
+
+        @Size(max = 50, message = "Lead ID must be at most 50 characters.")
+        String leadId,
+
+        @Size(max = 50, message = "Status must be at most 50 characters.")
+        String status
 ) {
 }

@@ -5,6 +5,7 @@ import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.organization.department.dto.request.CreateDepartmentRequest;
 import com.fluxboard.organization.department.dto.request.UpdateDepartmentRequest;
 import com.fluxboard.organization.department.dto.response.OrganizationDepartmentResponse;
+import com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse;
 import com.fluxboard.organization.department.service.DepartmentService;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import jakarta.validation.Valid;
@@ -50,6 +51,12 @@ public class DepartmentController {
     ) {
         Page<OrganizationDepartmentResponse> page = departmentService.getPage(pageable);
         return ResponseFactory.paged("Departments retrieved successfully.", page);
+    }
+
+    @RequirePermission("DEPARTMENT_VIEW")
+    @GetMapping("/{departmentId}/detail")
+    public ResponseEntity<ApiResponse<DepartmentHierarchyResponse>> getHierarchy(@PathVariable String departmentId) {
+        return ResponseFactory.ok("Department hierarchy retrieved successfully.", departmentService.getDepartmentHierarchy(departmentId));
     }
 
     @RequirePermission("DEPARTMENT_VIEW")

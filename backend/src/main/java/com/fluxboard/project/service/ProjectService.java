@@ -25,6 +25,10 @@ import com.fluxboard.project.projectmember.entity.ProjectMember;
 import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.activity.enums.ActivityAction;
+import com.fluxboard.activity.enums.ActivitySource;
+import com.fluxboard.activity.event.ActivityCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -43,26 +47,28 @@ public class ProjectService
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final TaskRepository taskRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
-    private final ActivityService activityService;
 
     public ProjectService(
             ProjectRepository projectRepository,
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
             TaskRepository taskRepository,
+
+            ApplicationEventPublisher eventPublisher,
             UserRepository userRepository,
-            ProjectMemberRepository projectMemberRepository,
-            ActivityService activityService
+            ProjectMemberRepository projectMemberRepository
     ) {
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
         this.taskRepository = taskRepository;
+
+        this.eventPublisher = eventPublisher;
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
-        this.activityService = activityService;
     }
 
     @Override
@@ -90,7 +96,11 @@ public class ProjectService
         membership.setUserId(normalizedOwnerId);
         membership.setActive(true);
         projectMemberRepository.save(membership);
-        activityService.logProjectCreated(savedProject.getId(), normalizedOwnerId, savedProject.getName());
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, savedProject.getId(), savedProject.getId(), null, null,
+                normalizedOwnerId, ActivityAction.CREATE, null, null, null,
+                "Project created: " + savedProject.getName()
+        ));
 
         return toResponse(savedProject);
     }
@@ -156,12 +166,15 @@ public class ProjectService
         newMember.setActive(true);
 
         projectMemberRepository.save(newMember);
-        activityService.logProjectMemberAdded(
-                TextUtils.trim(projectId),
-                normalizedUserId,
-                TextUtils.trimToNull(actorUserId),
-                roles
-        );
+        String normalizedRoles = (roles == null || roles.isEmpty()) ? null :
+                roles.stream().map(TextUtils::trimToNull).filter(java.util.Objects::nonNull).distinct().collect(java.util.stream.Collectors.joining(", "));
+        String msg = normalizedRoles == null ? "Project member added: " + (normalizedUserId == null ? "N/A" : normalizedUserId)
+                : "Project member added: " + (normalizedUserId == null ? "N/A" : normalizedUserId) + " (roles: " + normalizedRoles + ")";
+        
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, projectId, projectId, null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.ADD_MEMBER, "memberId", null, normalizedUserId, msg
+        ));
     }
     // =========================================================================
 
@@ -250,15 +263,13 @@ public class ProjectService
             oldValue = previousStatus;
             newValue = saved.getStatus();
         }
-
-        activityService.logProjectUpdated(
-                saved.getId(),
-                TextUtils.trimToNull(actorUserId),
-                changedField,
-                oldValue,
-                newValue,
-                saved.getName()
-        );
+        if (changedField != null) {
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.PROJECT, saved.getId(), saved.getId(), null, null,
+                    TextUtils.trimToNull(actorUserId), ActivityAction.UPDATE, changedField, oldValue, newValue,
+                    "Project updated: " + saved.getName()
+            ));
+        }
         return toResponse(saved);
     }
 
@@ -295,7 +306,11 @@ public class ProjectService
 
         entity.markDeleted();
         projectRepository.save(entity);
-        activityService.logProjectDeleted(entity.getId(), TextUtils.trimToNull(actorUserId), projectName);
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, entity.getId(), entity.getId(), null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.DELETE, null, null, null,
+                "Project deleted: " + projectName
+        ));
     }
 
     public ProjectEntity findProjectById(String projectId) {

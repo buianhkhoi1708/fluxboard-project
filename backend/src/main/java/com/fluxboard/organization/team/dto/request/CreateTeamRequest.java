@@ -16,6 +16,12 @@ public record CreateTeamRequest(
         String departmentId,
 
         @Size(max = 500, message = "Team description must be at most 500 characters.")
-        String description
+        String description,
+
+        @Size(max = 50, message = "Lead ID must be at most 50 characters.")
+        String leadId,
+
+        @Size(max = 50, message = "Status must be at most 50 characters.")
+        String status
 ) {
 }

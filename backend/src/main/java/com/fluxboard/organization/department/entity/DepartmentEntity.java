@@ -18,6 +18,12 @@ public class DepartmentEntity extends BaseDocument {
     @Field("description")
     private String description;
 
+    @Field("manager_id")
+    private String managerId;
+
+    @Field("status")
+    private String status = "ACTIVE";
+
     public String getName() {
         return name;
     }
@@ -40,5 +46,21 @@ public class DepartmentEntity extends BaseDocument {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getManagerId() {
+        return managerId;
+    }
+
+    public void setManagerId(String managerId) {
+        this.managerId = managerId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }
