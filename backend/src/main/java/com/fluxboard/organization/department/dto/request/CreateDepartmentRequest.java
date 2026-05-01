@@ -13,6 +13,12 @@ public record CreateDepartmentRequest(
         String code,
 
         @Size(max = 500, message = "Department description must be at most 500 characters.")
-        String description
+        String description,
+
+        @Size(max = 50, message = "Manager ID must be at most 50 characters.")
+        String managerId,
+
+        @Size(max = 50, message = "Status must be at most 50 characters.")
+        String status
 ) {
 }

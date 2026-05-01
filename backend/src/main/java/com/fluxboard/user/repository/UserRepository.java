@@ -30,6 +30,12 @@ public interface UserRepository extends MongoRepository<User, String> {
     long countByDeletedFalse();
 
     Optional<User> findByResetTokenAndDeletedFalse(String resetToken);
-    long countByDepartmentIdAndDeletedFalse(String departmentId);
+    
+    long countByTeamIdInAndDeletedFalse(List<String> teamIds);
 
+    List<User> findByTeamIdInAndDeletedFalse(List<String> teamIds);
+
+    List<User> findByTeamIdIsNullAndDeletedFalse();
+
+    List<User> findByFullNameContainingIgnoreCaseAndDeletedFalse(String keyword);
 }

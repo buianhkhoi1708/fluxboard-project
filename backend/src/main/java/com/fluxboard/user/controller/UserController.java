@@ -11,6 +11,7 @@ import com.fluxboard.rbac.annotation.RequirePermission;
 import com.fluxboard.user.dto.request.CreateUserRequest;
 import com.fluxboard.user.dto.request.UpdateNotificationPrefRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UnassignedUserResponse;
 import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.service.UserNotificationPrefService;
@@ -54,6 +55,12 @@ public class UserController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<UserResponse> page = userService.getPage(pageable);
         return ResponseFactory.paged("Users retrieved successfully.", page);
+    }
+
+    @RequirePermission("USER_VIEW")
+    @GetMapping("/unassigned")
+    public ResponseEntity<ApiResponse<List<UnassignedUserResponse>>> getUnassignedUsers() {
+        return ResponseFactory.ok("Unassigned users retrieved successfully.", userService.getUnassignedUsers());
     }
 
     @GetMapping("/{userId}")
