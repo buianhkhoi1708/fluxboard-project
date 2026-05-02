@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { NuqsAdapter } from 'nuqs/adapters/react-router'; // 👈 Import đúng rồi
 import MainLayout from "./layouts/MainLayout";
 import BoardPage from "./pages/BoardPage";
 import { SocketProvider } from "./context/SocketContext";
@@ -20,30 +21,31 @@ function App() {
   return (
     <SocketProvider>
       <BrowserRouter>
-        <Routes>
-          {/* Route công khai: Ai cũng vào được */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* 🚀 Bọc NuqsAdapter ngay dưới BrowserRouter */}
+        <NuqsAdapter>
+          <Routes>
+            {/* Route công khai: Ai cũng vào được */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-
-          <Route element={<ProtectedRoute />}>
-            <Route element={<MainLayout />}>
-              <Route path="/" element={<Navigate to="/login" replace />} />
-              <Route path="/board" element={<BoardPage />} />
-              <Route path="/adminrbac" element={<AdminRBACPage />} />
-              {/* Mốt Long làm trang Settings thì thêm vào đây: */}
-              <Route path="/workspaces" element={<WorkspacesPage />} />
-              <Route path="/board/:id" element={<BoardView />} />
-              <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
-              <Route path="/dashboard"element={<DashboardPage/>}/>
-              <Route path="/settings"element={<SettingsPage/>}/>
-              <Route path="/activity"element={<ActivityLogPage/>}/>
-              <Route path="/organization"element={<OrganizationPage/>}/>
-
+            {/* Route cần đăng nhập */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<MainLayout />}>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/board" element={<BoardPage />} />
+                <Route path="/adminrbac" element={<AdminRBACPage />} />
+                <Route path="/workspaces" element={<WorkspacesPage />} />
+                <Route path="/board/:id" element={<BoardView />} />
+                <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />}/>
+                <Route path="/dashboard" element={<DashboardPage/>}/>
+                <Route path="/settings" element={<SettingsPage/>}/>
+                <Route path="/activity" element={<ActivityLogPage/>}/>
+                <Route path="/organization" element={<OrganizationPage/>}/>
+              </Route>
             </Route>
-          </Route>
-        </Routes>
+          </Routes>
+        </NuqsAdapter>
       </BrowserRouter>
     </SocketProvider>
   );

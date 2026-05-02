@@ -13,5 +13,5 @@ export const organizationApi = {
   getRecentActivities: () => axiosClient.get('/activities/recent'),
 
   // 4.1: Lấy Cây tổ chức (Dữ liệu lồng nhau)
-  getOrgTree: () => axiosClient.get('/organizations/tree')
+  getOrgTree: () => axiosClient.get('/organizations')
 };
