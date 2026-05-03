@@ -43,8 +43,14 @@ export interface ActivityListResponse {
 
 export const activityApi = {
   getAdminLogs: (page = 0, size = 20, filters: ActivityFilters = {}): Promise<ActivityListResponse> => {
-    // Lọc bỏ các giá trị rỗng hoặc undefined để URL gọi API được sạch sẽ
-    const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ''));
-    return axiosClient.get(`/activities`, { params: { page, size, ...cleanFilters } });
+    const paramsToSend: any = { page, size };
+
+    // Chuyển đổi tên biến sang đúng chuẩn @RequestParam của Spring Boot
+    if (filters.sourceTypes) paramsToSend.source_type = filters.sourceTypes;
+    if (filters.actions) paramsToSend.action = filters.actions;
+    if (filters.from) paramsToSend.from = filters.from;
+    if (filters.to) paramsToSend.to = filters.to;
+
+    return axiosClient.get(`/activities`, { params: paramsToSend });
   }
 };

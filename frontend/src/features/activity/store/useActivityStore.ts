@@ -1,4 +1,3 @@
-// useActivityStore.js
 import { create } from 'zustand';
 import { activityApi, Activity, PaginationMeta, ActivityFilters } from '../api/activityApi';
 
