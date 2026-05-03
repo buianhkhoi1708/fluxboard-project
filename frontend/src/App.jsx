@@ -14,6 +14,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
+import ProjectMembersPage from "./pages/ProjectMembersPage";
 import { OrganizationPage } from "./pages/OrganizationPage";
 
 function App() {
@@ -32,7 +33,6 @@ function App() {
               <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/board" element={<BoardPage />} />
               <Route path="/adminrbac" element={<AdminRBACPage />} />
-              {/* Mốt Long làm trang Settings thì thêm vào đây: */}
               <Route path="/workspaces" element={<WorkspacesPage />} />
               <Route path="/board/:id" element={<BoardView />} />
               <Route path="/aigenerateboard"element={<AiBoardGeneratorPage />}/>
@@ -40,6 +40,7 @@ function App() {
               <Route path="/settings"element={<SettingsPage/>}/>
               <Route path="/activity"element={<ActivityLogPage/>}/>
               <Route path="/organization"element={<OrganizationPage/>}/>
+              <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
 
             </Route>
           </Route>

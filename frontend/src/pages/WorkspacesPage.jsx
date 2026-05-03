@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback  } from 'react';
 import { Link } from 'react-router-dom';
 import useProjectStore from '../features/workspaces/store/useProjectStore';
 import CreateProjectModal from '../features/workspaces/components/CreateProjectModal';
@@ -20,14 +20,41 @@ const WorkspacesPage = () => {
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
+  const [visibleCount, setVisibleCount] = useState(4);
+
+
   // Vừa vào trang là chỉ cần gọi 1 cú này, Store sẽ tự kéo Project -> tự kéo Member
   useEffect(() => {
     fetchProjects(); 
   }, []);
 
+  useEffect(() => {
+      setVisibleCount(4);
+  }, [searchTerm]);
+
   const filteredProjects = projects.filter(item => 
     item.project?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Cài đặt Infinite Scroll với Intersection Observer
+  const observer = useRef();
+  const triggerRef = useCallback(node => {
+      if (isLoading) return;
+      
+      // Ngắt kết nối cảm biến cũ nếu có
+      if (observer.current) observer.current.disconnect();
+      
+      // Tạo cảm biến mới
+      observer.current = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting && visibleCount < filteredProjects.length) {
+              // Tải thêm 2 dự án nữa
+              setVisibleCount(prev => prev + 2); 
+          }
+      });
+      
+      // Gắn cảm biến vào thẻ (node) hiện tại
+      if (node) observer.current.observe(node);
+  }, [isLoading, visibleCount, filteredProjects.length]);
 
   return (
     <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
@@ -98,15 +125,21 @@ const WorkspacesPage = () => {
           </div>
         ) : (
           <div className="space-y-8">
-            {filteredProjects.map((item) => {
+            {filteredProjects.slice(0, visibleCount).map((item, index) => {
               const workspace = item.project; 
               const boardsData = item.boards || []; 
               const membersData = item.members || []; 
               
               if (!workspace) return null; 
 
+              const isTriggerElement = index === visibleCount - 2;
+
               return (
-                <section key={workspace.id || workspace._id} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all hover:shadow-xl hover:border-indigo-200/50">
+                <section 
+                  ref={isTriggerElement ? triggerRef : null}
+                  key={workspace.id || workspace._id} 
+                  className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all hover:shadow-xl hover:border-indigo-200/50"
+                >
                   <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-200/50 shrink-0">
@@ -124,9 +157,14 @@ const WorkspacesPage = () => {
                           </span>
 
                           {/* AVATAR STACK */}
-                          {membersData.length > 0 ? (
-                            <div className="flex items-center gap-2 bg-slate-100/80 px-2.5 py-1 rounded-full">
-                              <Users size={12} className="text-slate-400" />
+                          <Link 
+                            to={`/projects/${workspace.id || workspace._id}/members`}
+                            title="Quản lý nhân sự dự án"
+                            className="flex items-center gap-2 bg-slate-100/80 hover:bg-indigo-50 px-2.5 py-1 rounded-full cursor-pointer transition-all group"
+                          >
+                            <Users size={12} className="text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                            
+                            {membersData.length > 0 ? (
                               <div className="flex items-center -space-x-1.5">
                                 {membersData.slice(0, 4).map((rawMember, idx) => {
                                   const memberId = rawMember.id || rawMember._id || rawMember.user_id;
@@ -164,13 +202,13 @@ const WorkspacesPage = () => {
                                     </span>
                                   </div>
                                 )}
-                              </div>
                             </div>
-                          ) : (
-                            <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full text-slate-400">
-                              <Users size={12} /> 0 members
-                            </span>
-                          )}
+                            ) : (
+                              <span className="text-slate-400 group-hover:text-indigo-600 font-medium transition-colors">
+                                0 members
+                              </span>
+                            )}
+                          </Link>
 
                         </div>
                       </div>
