@@ -23,6 +23,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("start_date")
     private Instant startDate;
 
+    @Indexed 
     @Field("due_date")
     private Instant dueDate;
 
@@ -32,6 +33,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("reminder_offset")
     private Integer reminderOffset;
 
+    @Indexed // 🟢 ĐÁNH INDEX ĐỂ HỖ TRỢ $GROUP VÀ $MATCH COMPANY HEALTH
     @Field("status")
     private DeadlineStatus status;
 

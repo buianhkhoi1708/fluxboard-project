@@ -5,6 +5,7 @@ import com.fluxboard.common.entity.BaseDocument;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed; // Bổ sung import
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -32,6 +33,7 @@ public class TaskEntity extends BaseDocument {
     @Field("parent_task_id")
     private String parentTaskId;
 
+    @Indexed // 🟢 ĐÁNH INDEX ĐỂ TỐI ƯU HÓA TEAM WORKLOAD LOOKUP
     @Field("assignees_user_id")
     private List<String> assigneesUserId;
 
@@ -44,6 +46,7 @@ public class TaskEntity extends BaseDocument {
     @Field("due_date")
     private Instant dueDate;
 
+    @Indexed // 🟢 ĐÁNH INDEX ĐỂ TỐI ƯU HÓA LỌC TRẠNG THÁI
     @Field("status")
     private String status;
 
