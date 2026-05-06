@@ -31,14 +31,18 @@ public class DashboardService {
         RoleEntity roleEntity = roleRepository.findById(currentUser.roleId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User permissions not found."));
         
+        // Lấy tên Role và chuyển thành chữ in hoa để so sánh
         String roleName = roleEntity.getName().name().toUpperCase();
 
-        return switch (roleName) {
-            case "ADMIN", "SUPER_ADMIN" -> getAdminMetrics(timeRange, departmentId);
-            case "MANAGER", "LEAD" -> getManagerMetrics(timeRange, teamId);
-            case "MEMBER", "USER" -> getMemberMetrics(currentUser.userId());
-            default -> throw new AppException(ErrorCode.FORBIDDEN, "Invalid role for dashboard access.");
-        };
+        // Sử dụng .contains() để bao quát các trường hợp như SYSTEM_ADMIN, PROJECT_MANAGER, TEAM_LEAD...
+        if (roleName.contains("ADMIN")) {
+            return getAdminMetrics(timeRange, departmentId);
+        } else if (roleName.contains("MANAGER") || roleName.contains("LEAD")) {
+            return getManagerMetrics(timeRange, teamId);
+        } else {
+            // Mặc định trả về giao diện Member cho các Role còn lại (USER, MEMBER...)
+            return getMemberMetrics(currentUser.userId());
+        }
     }
 
     @SuppressWarnings("rawtypes")
