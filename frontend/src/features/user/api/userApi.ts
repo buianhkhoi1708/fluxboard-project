@@ -4,8 +4,9 @@ export const userApi = {
   // Lấy danh sách user
   getUsers: () => axiosClient.get('/users?size=100'),
 
-  getAllUsers: (params = { page: 0, size: 50 }) => {
-    return axiosClient.get('/users', { params });
+  getAllUsers: (params?: { page?: number; size?: number; search?: string }) => {
+    const finalParams = { page: 0, size: 50, ...params };
+    return axiosClient.get('/users', { params: finalParams });
   },
 
   // Update user
