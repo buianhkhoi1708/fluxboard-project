@@ -31,16 +31,13 @@ public class DashboardService {
         RoleEntity roleEntity = roleRepository.findById(currentUser.roleId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User permissions not found."));
         
-        // Lấy tên Role và chuyển thành chữ in hoa để so sánh
         String roleName = roleEntity.getName().name().toUpperCase();
 
-        // Sử dụng .contains() để bao quát các trường hợp như SYSTEM_ADMIN, PROJECT_MANAGER, TEAM_LEAD...
         if (roleName.contains("ADMIN")) {
             return getAdminMetrics(timeRange, departmentId);
         } else if (roleName.contains("MANAGER") || roleName.contains("LEAD")) {
             return getManagerMetrics(timeRange, teamId);
         } else {
-            // Mặc định trả về giao diện Member cho các Role còn lại (USER, MEMBER...)
             return getMemberMetrics(currentUser.userId());
         }
     }
@@ -80,6 +77,7 @@ public class DashboardService {
                 Aggregation.unwind("user_info"),
                 Aggregation.lookup("departments", "user_info.department_id", "_id", "dept_info"),
                 Aggregation.unwind("dept_info", true),
+                Aggregation.project("story_point", "status", "dept_info._id"),
                 Aggregation.group("dept_info._id")
                         .sum("story_point").as("total_points")
                         .sum(ConditionalOperators.when(Criteria.where("status").is("DONE")).thenValueOf("story_point").otherwise(0)).as("completed_points")
@@ -107,6 +105,7 @@ public class DashboardService {
                 Aggregation.unwind("assignees_user_id"),
                 Aggregation.lookup("users", "assignees_user_id", "_id", "user_details"),
                 Aggregation.unwind("user_details"),
+                Aggregation.project("assignees_user_id", "story_point", "user_details.team_id", "user_details.full_name"),
                 Aggregation.match(teamId != null && !teamId.isEmpty() ? Criteria.where("user_details.team_id").is(teamId) : new Criteria()),
                 Aggregation.group("assignees_user_id")
                         .first("user_details.full_name").as("full_name")
@@ -128,6 +127,7 @@ public class DashboardService {
                 Aggregation.match(Criteria.where("is_deleted").is(false).and("status").in("AT_RISK", "OVERDUE", "LATE")),
                 Aggregation.lookup("tasks", "task_id", "_id", "task_info"),
                 Aggregation.unwind("task_info"),
+                Aggregation.project("task_id", "due_date", "status", "extension_count", "task_info.title", "task_info.story_point", "task_info.priority"),
                 Aggregation.limit(10)
         );
         AggregationResults<Map> atRiskResults = mongoTemplate.aggregate(atRiskAgg, "task_deadlines", Map.class);
@@ -147,6 +147,7 @@ public class DashboardService {
 
         Aggregation aiAgg = Aggregation.newAggregation(
                 Aggregation.match(Criteria.where("is_deleted").is(false).and("ai_suggested_point").ne(null).and("story_point").ne(null)),
+                Aggregation.project("title", "ai_suggested_point", "story_point", "created_at"),
                 Aggregation.sort(Sort.Direction.DESC, "created_at"),
                 Aggregation.limit(10)
         );
@@ -187,6 +188,7 @@ public class DashboardService {
                         .and("priority").in("HIGH", "CRITICAL")),
                 Aggregation.lookup("task_deadlines", "_id", "task_id", "deadline_info"),
                 Aggregation.unwind("deadline_info", true),
+                Aggregation.project("title", "priority", "story_point", "deadline_info.due_date", "deadline_info.status", "deadline_info.extension_count"),
                 Aggregation.sort(Sort.Direction.ASC, "deadline_info.due_date"),
                 Aggregation.limit(5)
         );
