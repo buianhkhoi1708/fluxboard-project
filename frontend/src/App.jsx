@@ -14,7 +14,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
-import ProjectMembersPage from "./pages/ProjectMembersPage";
+import ProjectDetailPage from "./pages/ProjectDetailPage";
 import { OrganizationPage } from "./pages/OrganizationPage";
 
 function App() {
@@ -39,8 +39,8 @@ function App() {
               <Route path="/dashboard"element={<DashboardPage/>}/>
               <Route path="/settings"element={<SettingsPage/>}/>
               <Route path="/activity"element={<ActivityLogPage/>}/>
+              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
               <Route path="/organization"element={<OrganizationPage/>}/>
-              <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
 
             </Route>
           </Route>

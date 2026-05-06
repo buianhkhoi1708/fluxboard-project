@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { projectApi, ProjectMemberDetail } from '../api/projectApi';
+import { projectApi, ProjectMemberDetail } from '../api/projectDetailApi';
 import { userApi } from '../../user/api/userApi'; 
 
 interface ProjectState {
@@ -9,6 +9,7 @@ interface ProjectState {
     systemUsers: any[];
     isLoading: boolean;
     isActionLoading: boolean;
+    boards: any[];
 
     // Actions
     fetchProjectMembers: (projectId: string) => Promise<void>;
@@ -17,6 +18,9 @@ interface ProjectState {
     addMember: (projectId: string, userId: string, roleIds: string[]) => Promise<boolean>;
     updateMember: (projectId: string, memberId: string, roleIds: string[], isActive: boolean) => Promise<boolean>;
     removeMember: (projectId: string, memberId: string) => Promise<boolean>;
+    fetchProjectOverview: (projectId: string) => Promise<void>;
+    updateProjectDetails: (projectId: string, payload: any) => Promise<boolean>;
+    deleteProject: (projectId: string) => Promise<boolean>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -26,6 +30,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     systemUsers: [],
     isLoading: false,
     isActionLoading: false,
+    boards: [],
 
     fetchProjectMembers: async (projectId) => {
         set({ isLoading: true, currentProjectId: projectId });
@@ -106,6 +111,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             console.error("Lỗi removeMember:", error);
             // Rollback
             set({ members: previousMembers });
+            return false;
+        }
+    },
+
+    fetchProjectOverview: async (projectId) => {
+        set({ isLoading: true });
+        try {
+            const res: any = await projectApi.getProjectOverview(projectId);
+            const actualData = res.data || res;
+
+            set({ 
+                currentProject: actualData.project, 
+                boards: actualData.boards || [],
+                isLoading: false 
+            });
+        } catch (error) {
+            console.error("Lỗi fetchProjectOverview:", error);
+            set({ isLoading: false });
+        }
+    },
+
+    updateProjectDetails: async (projectId, payload) => {
+        set({ isActionLoading: true });
+        try {
+            await projectApi.updateProjectInfo(projectId, payload);
+            await get().fetchProjectOverview(projectId); // Fetch lại data mới
+            set({ isActionLoading: false });
+            return true;
+        } catch (error) {
+            console.error("Lỗi updateProjectDetails:", error);
+            set({ isActionLoading: false });
+            return false;
+        }
+    },
+
+    deleteProject: async (projectId) => {
+        set({ isActionLoading: true });
+        try {
+            await projectApi.deleteProject(projectId);
+            set({ isActionLoading: false });
+            return true;
+        } catch (error) {
+            console.error("Lỗi deleteProject:", error);
+            set({ isActionLoading: false });
             return false;
         }
     }

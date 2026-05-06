@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Shield, User, Check, AlertCircle } from 'lucide-react';
-import { useProjectStore } from '../store/useProjectStore';
+import { useProjectStore } from '../store/useProjectDetailStore';
 
 const AVAILABLE_ROLES = [
     { id: 'PROJECT_ADMIN', label: 'Quản trị viên', desc: 'Toàn quyền cấu hình dự án và nhân sự', color: 'text-rose-600 bg-rose-50' },
@@ -23,7 +23,7 @@ const ProjectMemberModal = ({ isOpen, onClose, projectId, editMember = null }) =
             if (editMember) {
                 // Chế độ Sửa
                 setSelectedUserId(editMember.user?.id);
-                setSelectedRole(editMember.roleIds?.[0] || 'MEMBER');
+                setSelectedRole(editMember.role_ids?.[0] || 'MEMBER');
                 setIsActive(editMember.active);
             } else {
                 // Chế độ Thêm mới
@@ -44,11 +44,11 @@ const ProjectMemberModal = ({ isOpen, onClose, projectId, editMember = null }) =
         u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    const toggleRole = (roleId) => {
+    const toggleRole = (role_ids) => {
         setSelectedRoles(prev => 
-            prev.includes(roleId) 
-                ? prev.filter(id => id !== roleId) 
-                : [...prev, roleId]
+            prev.includes(role_ids) 
+                ? prev.filter(id => id !== role_ids) 
+                : [...prev, role_ids]
         );
     };
 

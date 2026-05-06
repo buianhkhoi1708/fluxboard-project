@@ -19,29 +19,28 @@ import axiosClient from '../../../lib/axiosClient';
 export const projectApi = {
     // Lấy danh sách chi tiết
     getProjectMembersDetail: async (projectId: string): Promise<ProjectMemberDetail[]> => {
-        // Gọi theo chuẩn thực tế của Controller: /projects/{id}/project-members
         const response: any = await axiosClient.get(`/projects/${projectId}/project-members`);
         return response.data || response;
     },
 
   //Thêm member vào project
     addProjectMember: async (projectId: string, userId: string, roleIds: string[]) => {
-        // ⚠️ Chú ý: DTO yêu cầu có @JsonProperty nên phải gửi snake_case
         const payload = {
             user_id: userId,
             role_ids: roleIds
         };
+
         const response: any = await axiosClient.post(`/projects/${projectId}/members`, payload);
         return response.data || response;
     },
 
     // Sửa quyền hoặc trạng thái
     updateProjectMember: async (projectId: string, memberId: string, roleIds: string[], isActive: boolean) => {
-        // ⚠️ Chú ý: DTO Update KHÔNG CÓ @JsonProperty, bắt buộc gửi camelCase
         const payload = {
-            roleIds: roleIds,
+            role_ids: roleIds,
             active: isActive
         };
+
         const response: any = await axiosClient.put(`/projects/${projectId}/project-members/${memberId}`, payload);
         return response.data || response;
     },
@@ -54,6 +53,24 @@ export const projectApi = {
 
     getProjectById: async (projectId: string) => {
         const response: any = await axiosClient.get(`/projects/${projectId}`);
+        return response.data || response;
+    },
+
+    // Lấy thông tin tổng quan (Gồm Project Info và danh sách Boards)
+    getProjectOverview: async (projectId: string) => {
+        const response: any = await axiosClient.get(`/projects/${projectId}/overview`);
+        return response.data || response;
+    },
+
+    // Cập nhật thông tin dự án
+    updateProjectInfo: async (projectId: string, payload: any) => {
+        const response: any = await axiosClient.put(`/projects/${projectId}`, payload);
+        return response.data || response;
+    },
+
+    // Xóa dự án
+    deleteProject: async (projectId: string) => {
+        const response: any = await axiosClient.delete(`/projects/${projectId}`);
         return response.data || response;
     }
 };

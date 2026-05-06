@@ -148,9 +148,15 @@ const WorkspacesPage = () => {
                         </span>
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-slate-800 tracking-tight">
-                          {workspace.name}
-                        </h2>
+                        {/* 👉 BỌC LINK CHO TÊN DỰ ÁN */}
+                        <Link 
+                            to={`/projects/${workspace.id || workspace._id}?tab=boards`}
+                            className="group-hover/title:text-indigo-600 transition-colors"
+                        >
+                            <h2 className="text-lg font-bold text-slate-800 tracking-tight hover:text-indigo-600">
+                                {workspace.name}
+                            </h2>
+                        </Link>
                         <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 mt-1">
                           <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full">
                             <LayoutGrid size={12} /> {boardsData.length} boards
@@ -158,7 +164,7 @@ const WorkspacesPage = () => {
 
                           {/* AVATAR STACK */}
                           <Link 
-                            to={`/projects/${workspace.id || workspace._id}/members`}
+                            to={`/projects/${workspace.id || workspace._id}?tab=members`}
                             title="Quản lý nhân sự dự án"
                             className="flex items-center gap-2 bg-slate-100/80 hover:bg-indigo-50 px-2.5 py-1 rounded-full cursor-pointer transition-all group"
                           >

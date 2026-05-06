@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MoreVertical, Shield, ShieldOff, Edit2, Trash2 } from 'lucide-react';
-import { useProjectStore } from '../store/useProjectStore';
+import { useProjectStore } from '../store/useProjectDetailStore';
 
 const ProjectMemberList = ({ members, projectId, onEditRequest }) => {
     const { removeMember } = useProjectStore();
@@ -13,12 +13,12 @@ const ProjectMemberList = ({ members, projectId, onEditRequest }) => {
         setOpenMenuId(null);
     };
 
-    const getRoleBadge = (roleId) => {
-        switch(roleId) {
-            case 'PROJECT_ADMIN': return <span key={roleId} className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-700 rounded border border-rose-200">ADMIN</span>;
-            case 'MEMBER': return <span key={roleId} className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded border border-indigo-200">MEMBER</span>;
-            case 'VIEWER': return <span key={roleId} className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-700 rounded border border-slate-300">VIEWER</span>;
-            default: return <span key={roleId} className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded border border-slate-200">{roleId}</span>;
+    const getRoleBadge = (role_ids) => {
+        switch(role_ids) {
+            case 'PROJECT_ADMIN': return <span key={role_ids} className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-700 rounded border border-rose-200">ADMIN</span>;
+            case 'MEMBER': return <span key={role_ids} className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded border border-indigo-200">MEMBER</span>;
+            case 'VIEWER': return <span key={role_ids} className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-700 rounded border border-slate-300">VIEWER</span>;
+            default: return <span key={role_ids} className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded border border-slate-200">{role_ids}</span>;
         }
     };
 
@@ -51,7 +51,7 @@ const ProjectMemberList = ({ members, projectId, onEditRequest }) => {
                         
                         {/* Mảng Roles */}
                         <div className="flex flex-wrap gap-1">
-                            {(member.roleIds || []).map(r => getRoleBadge(r))}
+                            {(member.role_ids || []).map(r => getRoleBadge(r))}
                         </div>
                     </div>
 
