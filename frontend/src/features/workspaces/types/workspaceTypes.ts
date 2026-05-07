@@ -1,5 +1,11 @@
 import { IncomingUser } from '../../user/store/useUserStore';
 
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
 export interface Project {
   id: string;
   _id?: string;
@@ -16,7 +22,6 @@ export interface Board {
   project_id?: string;
 }
 
-// Cấu trúc Data trả về từ API getProjectOverviews
 export interface WorkspaceOverview {
   project: Project;
   boards: Board[];
@@ -26,8 +31,12 @@ export interface WorkspaceOverview {
 export interface CreateProjectPayload {
   name: string;
   description?: string;
-  departmentId?: string;
+  departmentId?: string; 
 }
+
+export type UpdateProjectPayload = Partial<CreateProjectPayload> & {
+  is_deleted?: boolean;
+};
 
 export interface CreateBoardPayload {
   project_id: string;
