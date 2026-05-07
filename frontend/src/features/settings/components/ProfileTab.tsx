@@ -9,8 +9,6 @@ export const ProfileTab: React.FC = () => {
   const { message, setMessage, clearMessage } = useSettingUiStore();
   
   const { mutate: updateProfile, isPending } = useUpdateProfile();
-  
-  // 🚀 Tự động lấy danh sách Roles từ Cache của React Query
   const { data: roles = [], isLoading: isLoadingRoles } = useRolesDictionary();
 
   const [name, setName] = useState(user?.full_name || '');

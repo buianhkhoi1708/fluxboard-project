@@ -1,13 +1,11 @@
 import React from 'react';
 import { useQueryState, parseAsString } from 'nuqs';
-
-// Import các Tab components
-import ChangePasswordForm from '../features/settings/components/ChangePassWordForm'; // Đảm bảo đúng tên file sếp đã lưu
+// Component
+import ChangePasswordForm from '../features/settings/components/ChangePassWordForm';
 import { ProfileTab } from '../features/settings/components/ProfileTab';
 import { NotificationTab } from '../features/settings/components/NotificationTab';
 
 const SettingsPage: React.FC = () => {
-  // Quản lý tab bằng URL: fluxboard.com/settings?tab=profile
   const [activeTab, setActiveTab] = useQueryState(
     'tab', 
     parseAsString.withDefault('profile')
