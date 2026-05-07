@@ -1,21 +1,79 @@
 import { create } from 'zustand';
-import { organizationApi } from '../api/organizationApi';
+import { orgApi } from '../api/organizationApi';
 
-export const useOrganizationStore = create((set) => ({
+export interface OrgMember {
+  id: string;
+  full_name?: string;
+  fullName?: string;
+  email: string;
+  status: string;
+}
+
+export interface OrgTeam {
+  id: string;
+  name: string;
+  code?: string;
+  lead_id?: string;
+  lead_name?: string;
+  description?: string;
+  members: OrgMember[];
+}
+
+export interface OrgDepartment {
+  id: string;
+  name: string;
+  code?: string;
+  manager_id?: string;
+  manager_name?: string;
+  description?: string;
+  teams: OrgTeam[];
+}
+
+interface OrgState {
+  orgTree: OrgDepartment[];
+  isLoading: boolean;
+  fetchTree: () => Promise<void>;
+  addDepartmentToTree: (newDept: Partial<OrgDepartment>) => void;
+  addTeamToDepartment: (deptId: string, newTeam: Partial<OrgTeam>) => void;
+  addMemberToTeam: (deptId: string, teamId: string, newMember: OrgMember) => void;
+}
+
+export const useOrgStore = create<OrgState>((set) => ({
   orgTree: [],
-  recentLogs: [],
-  loading: false,
+  isLoading: false,
 
-  // Gọi API 4.1 cho trang Organization
-  fetchOrgTree: async () => {
-    set({ loading: true });
-    const res = await organizationApi.getOrgTree();
-    set({ orgTree: res.data || [], loading: false });
+  fetchTree: async () => {
+    set({ isLoading: true });
+    try {
+      const res: any = await orgApi.getOrgTree();
+      set({ orgTree: res.data || [], isLoading: false });
+    } catch (error) {
+      set({ isLoading: false });
+    }
   },
 
-  // Gọi API 3.1 cho Dashboard
-  fetchRecentLogs: async () => {
-    const res = await organizationApi.getRecentActivities();
-    set({ recentLogs: res.data || [] });
+  addDepartmentToTree: (newDept) => {
+    set((state) => ({ orgTree: [...state.orgTree, { ...newDept, teams: [] } as OrgDepartment] }));
+  },
+
+  addTeamToDepartment: (deptId, newTeam) => {
+    set((state) => ({
+      orgTree: state.orgTree.map((dept) => 
+        dept.id === deptId ? { ...dept, teams: [...(dept.teams || []), { ...newTeam, members: [] } as OrgTeam] } : dept
+      )
+    }));
+  },
+
+  addMemberToTeam: (deptId, teamId, newMember) => {
+    set((state) => ({
+      orgTree: state.orgTree.map((dept) => 
+        dept.id === deptId ? {
+          ...dept, 
+          teams: dept.teams.map(team => 
+            team.id === teamId ? { ...team, members: [...(team.members || []), newMember] } : team
+          )
+        } : dept
+      )
+    }));
   }
 }));
