@@ -1,148 +1,187 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Plus, MoreVertical, KanbanSquare, Users, Search, LayoutGrid, Loader2 } from 'lucide-react';
+import { Briefcase, Plus, KanbanSquare, Users, Search, LayoutGrid, Loader2 } from 'lucide-react';
 
+// Import hooks và stores
 import { useWorkspaces } from '../features/workspaces/hooks/useWorkspaceQueries';
 import { useWorkspaceUIStore } from '../features/workspaces/store/useWorkspaceUIStore';
+
+// Import Components
 import CreateProjectModal from '../features/workspaces/components/CreateProjectModal';
 import CreateBoardModal from '../features/workspaces/components/CreateBoardModal';
 
 const WorkspacesPage: React.FC = () => {
-  // 1. Lấy ra các hàm cuộn vô hạn từ React Query
-  const { 
-    data, 
-    isLoading, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage 
-  } = useWorkspaces();
-  
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useWorkspaces();
   const { openProjectModal, openBoardModal } = useWorkspaceUIStore();
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 2. Ép mảng 2 chiều (pages) thành mảng 1 chiều để dễ render
-  const projects = useMemo(() => {
-    return data?.pages.flatMap(page => page.data) || [];
-  }, [data]);
+  // 1. Phẳng hóa dữ liệu từ các trang (pages) thành 1 mảng duy nhất
+  const allProjects = useMemo(() => data?.pages.flatMap(p => p.data) || [], [data]);
 
-  const filteredProjects = projects.filter(item => 
-    item.project?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  // 2. Lọc dữ liệu theo ô tìm kiếm
+  const filtered = allProjects.filter(p => 
+    p.project?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 3. Xử lý bắt sự kiện cuộn chuột tới đáy
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
-    
-    // Nếu khoảng cách cuộn đến đáy <= 50px và vẫn còn trang để tải
-    if (scrollHeight - scrollTop <= clientHeight + 50) {
-      if (hasNextPage && !isFetchingNextPage) {
+  // =======================================================
+  // 3. THUẬT TOÁN CUỘN VÔ HẠN (INTERSECTION OBSERVER)
+  // =======================================================
+  const observer = useRef<IntersectionObserver | null>(null);
+  
+  const bottomBoundaryRef = useCallback((node: HTMLDivElement | null) => {
+    if (isLoading) return; 
+    if (observer.current) observer.current.disconnect();
+
+    observer.current = new IntersectionObserver(entries => {
+      // Khi thẻ div ở đáy xuất hiện, tải thêm dữ liệu tiếp theo
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
         fetchNextPage();
       }
-    }
-  };
+    }, { rootMargin: '150px' }); // Load sớm trước khi chạm đáy 150px
+
+    if (node) observer.current.observe(node);
+  }, [isLoading, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <div 
-      onScroll={handleScroll} 
-      className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8"
-    >
+    <div className="flex-1 bg-slate-50 h-full overflow-y-auto p-6 md:p-10 custom-scrollbar">
       <div className="max-w-7xl mx-auto">
         
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div className="space-y-1">
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r text-slate-800 to-indigo-900 bg-clip-text text-transparent tracking-tight flex items-center gap-3">
-              <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
-                <Briefcase className="text-indigo-600" size={24} />
-              </div>
-              Your Workspaces
-            </h1>
-            <p className="text-sm font-medium text-slate-500 pl-12">Manage your workspaces, teams, and Kanban boards.</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="relative group hidden sm:block">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-all duration-200" />
-              <input 
-                type="text" placeholder="Search workspaces..." 
-                className="pl-9 pr-4 py-2.5 bg-white/70 backdrop-blur-sm border border-slate-200/80 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all w-64 font-medium shadow-sm"
-                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              />
+        {/* HEADER */}
+        <div className="flex justify-between items-center mb-10">
+          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
+            <div className="p-2 bg-white rounded-xl shadow-sm border border-indigo-100">
+              <Briefcase className="text-indigo-600" size={24} />
             </div>
-            
-            <button onClick={openProjectModal} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200/50 transition-all active:scale-[0.98]">
-              <Plus size={18} strokeWidth={2.5} /> <span>New Workspace</span>
-            </button>
-          </div>
+            Your Workspaces
+          </h1>
+          <button 
+            onClick={openProjectModal} 
+            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all active:scale-95"
+          >
+            <Plus size={18} /> New Workspace
+          </button>
         </div>
 
+        {/* SEARCH BAR */}
+        <div className="relative mb-8 max-w-md">
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Tìm kiếm dự án..." 
+            className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
+            value={searchTerm} 
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* PROJECT LIST */}
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-80 text-slate-400">
-            <Loader2 size={48} className="animate-spin text-indigo-600 relative z-10" />
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-sm border border-dashed border-indigo-200 rounded-2xl p-16 flex flex-col items-center justify-center text-center shadow-sm">
-             <div className="p-5 bg-indigo-50 rounded-full mb-5"><Briefcase size={56} className="text-indigo-400" /></div>
-             <h3 className="text-xl font-bold text-slate-800 mb-2">No Workspaces Found</h3>
+          <div className="flex justify-center py-20">
+            <Loader2 className="animate-spin text-indigo-600" size={40} />
           </div>
         ) : (
-          <div className="space-y-8 pb-10">
-            {filteredProjects.map((item) => {
-              const workspace = item.project; 
-              const boardsData = item.boards || []; 
-              const membersData = item.members || []; 
-              if (!workspace) return null; 
+          <div className="space-y-8 pb-4">
+            {filtered.map((item) => {
+              // 🛡️ Bọc lót an toàn tránh lỗi undefined
+              const project = item.project;
+              const boards = item.boards || [];
+              const members = item.members || [];
+              const tasks = item.tasks || []; // 🚀 Lấy danh sách tasks
+
+              if (!project) return null;
 
               return (
-                <section key={workspace.id || workspace._id} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all hover:shadow-xl hover:border-indigo-200/50">
-                  <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
+                <section key={project.id || project._id} className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                  
+                  {/* PROJECT INFO (Avatar, Name, Stats) */}
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-200/50 shrink-0">
-                        <span className="text-lg font-black text-white uppercase">{workspace.name?.charAt(0) || 'W'}</span>
+                      <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl">
+                        {project.name?.charAt(0).toUpperCase() || 'W'}
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-slate-800 tracking-tight">{workspace.name}</h2>
-                        <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 mt-1">
-                          <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full"><LayoutGrid size={12} /> {boardsData.length} boards</span>
-                          <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full text-slate-500"><Users size={12} /> {membersData.length} members</span>
+                        <h2 className="text-lg font-bold text-slate-800">{project.name}</h2>
+                        <div className="flex gap-4 mt-1">
+                          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                            <LayoutGrid size={12} /> {boards.length} Boards
+                          </span>
+                          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                            <Users size={12} /> {members.length} Members
+                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {boardsData.map((b) => (
-                      <Link to={`/board/${b.id || b._id}`} key={b.id || b._id} className="group relative bg-gradient-to-br from-white to-slate-50/80 border border-slate-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-all duration-200 block overflow-hidden">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="bg-white border border-indigo-100 text-indigo-600 w-9 h-9 rounded-lg flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all duration-200"><KanbanSquare size={18} /></div>
-                          <h3 className="font-bold text-sm text-slate-800 group-hover:text-indigo-700 transition-colors line-clamp-1">{b.name}</h3>
+                  {/* BOARDS GRID */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    {boards.map(b => (
+                      <Link to={`/board/${b.id || b._id}`} key={b.id || b._id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-300 transition-all group">
+                        <div className="flex items-center gap-3 mb-1">
+                          <KanbanSquare size={16} className="text-indigo-500" />
+                          <span className="font-bold text-sm text-slate-700 group-hover:text-indigo-600 truncate">{b.name}</span>
                         </div>
                       </Link>
                     ))}
                     <button 
-                      onClick={() => openBoardModal(workspace.id || workspace._id as string)}
-                      className="group border-2 border-dashed border-slate-300 rounded-xl p-5 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all duration-200 min-h-[104px]"
+                      onClick={() => openBoardModal(project.id || project._id as string)} 
+                      className="border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
                     >
-                      <div className="p-1.5 rounded-full bg-slate-100 group-hover:bg-indigo-100 transition-colors"><Plus size={20} strokeWidth={2} /></div>
-                      <span className="text-xs font-bold uppercase tracking-wider">Create board</span>
+                      <Plus size={20} />
+                      <span className="text-[10px] font-black uppercase mt-1">Create board</span>
                     </button>
                   </div>
+
+                  {/* 🚀 TASKS LIST DISPLAY */}
+                  {tasks.length > 0 && (
+                    <div className="mt-5 pt-4 border-t border-slate-100/80">
+                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+                        Công việc nổi bật ({tasks.length})
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Render tối đa 4 task đầu tiên để tránh vỡ UI */}
+                        {tasks.slice(0, 4).map(task => (
+                          <div 
+                            key={task.id || task._id} 
+                            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg truncate max-w-[200px]"
+                          >
+                            <span className="text-indigo-500 mr-1.5">•</span>
+                            {task.name}
+                          </div>
+                        ))}
+                        
+                        {/* Nếu có nhiều hơn 4 task, hiển thị thẻ đếm số lượng còn lại */}
+                        {tasks.length > 4 && (
+                          <div className="bg-slate-50 border border-dashed border-slate-300 text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg">
+                            +{tasks.length - 4} tasks khác
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                 </section>
               );
             })}
-            
-            {/* Hiển thị vòng xoay mờ mờ ở dưới cùng khi đang cuộn chuột gọi thêm data */}
+
+            {/* ĐIỂM CẮM VÔ HÌNH Ở ĐÁY: KÍCH HOẠT TẢI DỮ LIỆU */}
+            <div ref={bottomBoundaryRef} className="h-4 w-full"></div>
+
+            {/* LOADER: Báo hiệu đang lấy thêm data ngầm */}
             {isFetchingNextPage && (
               <div className="flex justify-center py-6">
-                <Loader2 className="animate-spin text-indigo-500" size={32} />
+                <Loader2 className="animate-spin text-indigo-400" size={32} />
               </div>
             )}
           </div>
         )}
-
-        <CreateProjectModal />
-        <CreateBoardModal />
       </div>
+
+      {/* MODALS */}
+      <CreateProjectModal />
+      <CreateBoardModal />
     </div>
   );
 };
+
 export default WorkspacesPage;

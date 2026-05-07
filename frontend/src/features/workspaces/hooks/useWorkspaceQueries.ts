@@ -7,23 +7,22 @@ export const WORKSPACE_KEYS = {
   all: ['workspaces'] as const,
 };
 
-// 🚀 Nâng cấp lên Cấu trúc Cuộn vô hạn (Infinite Query)
 export const useWorkspaces = () => {
   return useInfiniteQuery({
     queryKey: WORKSPACE_KEYS.all,
-    initialPageParam: 0, // Bắt đầu từ trang 0 (chuẩn Spring Boot)
+    initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      // Gọi API: Lấy trang hiện tại (pageParam), số lượng 2 project (size = 2)
-      const response = await workspaceApi.getProjectOverviews(pageParam as number, 2);
+      // 🚀 Luôn lấy đúng 2 project mỗi lần tải
+      const response: any = await workspaceApi.getProjectOverviews(pageParam as number, 2);
       
-      const rawData = (response as any).content || (response as any).data?.content || (response as any).data || [];
+      const rawData = response.content || response.data?.content || response.data || [];
       
       const activeProjects = rawData.filter((item: WorkspaceOverview) => {
         const p = item.project;
         return p && (p.is_deleted === false || p.is_deleted === undefined);
       }) as WorkspaceOverview[];
 
-      // Bơm data users vào cache
+      // Lưu User vào Cache toàn cục
       activeProjects.forEach(item => {
         const pid = item.project?.id || item.project?._id;
         if (pid && item.members?.length > 0) {
@@ -31,7 +30,7 @@ export const useWorkspaces = () => {
         }
       });
 
-      // Nếu backend trả về đủ 2 phần tử, nghĩa là có thể còn trang tiếp theo
+      // Nếu API trả về đủ 2 phần tử, chứng tỏ vẫn còn trang tiếp theo
       const hasNext = rawData.length === 2;
 
       return {
