@@ -15,7 +15,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
-import { OrganizationPage } from "./pages/OrganizationPage";
+import OrganizationPage from "./pages/OrganizationPage";
 
 function App() {
   return (
