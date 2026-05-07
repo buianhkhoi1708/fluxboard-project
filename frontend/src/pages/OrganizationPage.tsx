@@ -11,14 +11,12 @@ import { OrgModalState, OrgTargetIds, OrganizationPageProps } from '../features/
 const OrganizationPage: React.FC<OrganizationPageProps> = () => {
   const { orgTree, isLoading, fetchTree } = useOrgStore();
 
-  // Quản lý trạng thái đóng/mở Modal tạo Phòng ban hoặc Team
   const [modalState, setModalState] = useState<OrgModalState>({ 
     isOpen: false, 
     mode: 'DEPARTMENT', 
     targetDeptId: null 
   });
   
-  // Quản lý Modal chọn nhân sự
   const [isUserPickerOpen, setIsUserPickerOpen] = useState<boolean>(false);
   const [targetIds, setTargetIds] = useState<OrgTargetIds>({ 
     deptId: null, 
@@ -28,18 +26,13 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
   useEffect(() => {
     fetchTree();
   }, [fetchTree]);
-
-  // Hàm mở Modal tạo Phòng ban
   const openCreateDeptModal = () => {
     setModalState({ isOpen: true, mode: 'DEPARTMENT', targetDeptId: null });
   };
 
-  // Hàm mở Modal tạo Team cho một phòng ban cụ thể
   const openCreateTeamModal = (deptId: string) => {
     setModalState({ isOpen: true, mode: 'TEAM', targetDeptId: deptId });
   };
-
-  // Hàm mở Modal gán thành viên vào Team
   const openAddMemberModal = (deptId: string, teamId: string) => {
     setTargetIds({ deptId, teamId });
     setIsUserPickerOpen(true);
