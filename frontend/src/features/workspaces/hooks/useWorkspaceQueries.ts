@@ -1,49 +1,60 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { workspaceApi } from '../api/wokspaceApi';
 import { WorkspaceOverview } from '../types/workspaceTypes';
+import { useUserStore } from '../../user/store/useUserStore';
 
 export const WORKSPACE_KEYS = {
   all: ['workspaces'] as const,
 };
 
-// 🚀 Hook Lấy dữ liệu (Tự động cache, tự động loading)
+// 🚀 Nâng cấp lên Cấu trúc Cuộn vô hạn (Infinite Query)
 export const useWorkspaces = () => {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: WORKSPACE_KEYS.all,
-    queryFn: async () => {
-      const res: any = await workspaceApi.getProjectOverviews();
-      // Lấy mảng content hoặc data từ response
-      const rawData = res.content || res.data?.content || res.data || [];
+    initialPageParam: 0, // Bắt đầu từ trang 0 (chuẩn Spring Boot)
+    queryFn: async ({ pageParam }) => {
+      // Gọi API: Lấy trang hiện tại (pageParam), số lượng 2 project (size = 2)
+      const response = await workspaceApi.getProjectOverviews(pageParam as number, 2);
       
-      // Lọc bỏ các project đã xóa
-      return rawData.filter((item: WorkspaceOverview) => {
+      const rawData = (response as any).content || (response as any).data?.content || (response as any).data || [];
+      
+      const activeProjects = rawData.filter((item: WorkspaceOverview) => {
         const p = item.project;
         return p && (p.is_deleted === false || p.is_deleted === undefined);
       }) as WorkspaceOverview[];
+
+      // Bơm data users vào cache
+      activeProjects.forEach(item => {
+        const pid = item.project?.id || item.project?._id;
+        if (pid && item.members?.length > 0) {
+          useUserStore.getState().saveUsersToCache(item.members, pid);
+        }
+      });
+
+      // Nếu backend trả về đủ 2 phần tử, nghĩa là có thể còn trang tiếp theo
+      const hasNext = rawData.length === 2;
+
+      return {
+        data: activeProjects,
+        nextPage: hasNext ? (pageParam as number) + 1 : undefined,
+      };
     },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
   });
 };
 
-// 🚀 Hook Tạo Workspace
 export const useCreateWorkspace = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: workspaceApi.createProject,
-    onSuccess: () => {
-      // Thành công thì tự động bắt React Query fetch lại danh sách mới nhất
-      queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
-    }
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all })
   });
 };
 
-// 🚀 Hook Tạo Board
 export const useCreateBoard = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: workspaceApi.createBoard,
-    onSuccess: () => {
-      // Tạo board xong cũng tự động fetch lại để cập nhật UI
-      queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
-    }
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all })
   });
 };

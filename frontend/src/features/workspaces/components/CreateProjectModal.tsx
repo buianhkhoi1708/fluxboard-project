@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Briefcase, Loader2 } from 'lucide-react';
-import { useWorkspaceUIStore } from '../store/useProjectStore';
+import { useWorkspaceUIStore } from '../store/useWorkspaceUIStore';
 import { useCreateWorkspace } from '../hooks/useWorkspaceQueries';
 
 const CreateProjectModal: React.FC = () => {
