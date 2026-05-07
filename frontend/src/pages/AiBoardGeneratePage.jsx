@@ -9,6 +9,7 @@ import {
   ChevronRight, MessageSquareCode, AlertCircle
 } from 'lucide-react';
 
+
 const AiBoardGeneratorPage = () => {
   const navigate = useNavigate();
   const { projects, fetchProjects } = useProjectStore();
