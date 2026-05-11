@@ -51,23 +51,63 @@ public class ProjectMemberService {
         validateProjectExists(normalizedProjectId);
 
         List<ProjectMember> members = projectMemberRepository.findByProjectIdAndDeletedFalse(normalizedProjectId);
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(members);
+        Map<String, User> users = resolveUserSummaries(members);
 
         return members.stream()
                 .map(member -> toResponse(member, users))
                 .toList();
     }
 
-    public ProjectMemberResponse getMemberById(String projectId, String memberId) {
-        ProjectMember member = findMember(projectId, memberId);
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(member));
+    public ProjectMemberResponse getMemberById(String projectId, String userId) {
+        ProjectMember member = findMember(projectId, userId);
+        Map<String, User> users = resolveUserSummaries(List.of(member));
         return toResponse(member, users);
+    }
+
+    @Transactional
+    public ProjectMemberResponse addMember(String projectId, com.fluxboard.project.projectmember.dto.request.AddProjectMemberRequest request, String actorUserId) {
+        String normalizedProjectId = TextUtils.trim(projectId);
+        String normalizedUserId = TextUtils.trim(request.userId());
+
+        validateProjectExists(normalizedProjectId);
+
+        if (!userRepository.existsByIdAndDeletedFalse(normalizedUserId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "User ID to add does not exist.");
+        }
+
+        if (projectMemberRepository.existsByProjectIdAndUserIdAndDeletedFalse(normalizedProjectId, normalizedUserId)) {
+             ProjectMember existing = findMember(normalizedProjectId, normalizedUserId);
+             return toResponse(existing, resolveUserSummaries(List.of(existing)));
+        }
+
+        ProjectMember newMember = new ProjectMember();
+        newMember.setProjectId(normalizedProjectId);
+        newMember.setUserId(normalizedUserId);
+        
+        List<String> roles = (request.roleIds() != null && !request.roleIds().isEmpty()) 
+                             ? request.roleIds() 
+                             : List.of("MEMBER");
+        newMember.setRoleIds(roles);
+        newMember.setActive(true);
+
+        ProjectMember saved = projectMemberRepository.save(newMember);
+
+        String normalizedRoles = normalizeRoleIds(roles);
+        String msg = "Project member added: " + normalizedUserId + (normalizedRoles != null ? " (roles: " + normalizedRoles + ")" : "");
+        
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.PROJECT, normalizedProjectId, normalizedProjectId, null, null,
+                TextUtils.trimToNull(actorUserId), ActivityAction.ADD_MEMBER, "memberId", null, normalizedUserId, msg
+        ));
+
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(List.of(saved));
+        return toResponse(saved, users);
     }
 
     @Transactional
     public ProjectMemberResponse updateMember(
             String projectId,
-            String memberId,
+            String userId,
             UpdateProjectMemberRequest request,
             String actorUserId
     ) {
@@ -75,14 +115,27 @@ public class ProjectMemberService {
             throw new AppException(ErrorCode.BAD_REQUEST, "At least one field is required to update member.");
         }
 
-        ProjectMember member = findMember(projectId, memberId);
+        ProjectMember member = findMember(projectId, userId);
         String previousRoles = normalizeRoleIds(member.getRoleIds());
         boolean previousActive = member.isActive();
 
         if (request.roleIds() != null) {
-            member.setRoleIds(resolveRoleIds(request.roleIds()));
+            List<String> newRoles = resolveRoleIds(request.roleIds());
+            if (member.getRoleIds() != null && member.getRoleIds().contains("role_project_admin") && !newRoles.contains("role_project_admin")) {
+                int adminCount = projectMemberRepository.countActiveAdmins(member.getProjectId(), "role_project_admin");
+                if (adminCount <= 1) {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Cannot remove the last admin of the project.");
+                }
+            }
+            member.setRoleIds(newRoles);
         }
         if (request.active() != null) {
+            if (member.getRoleIds() != null && member.getRoleIds().contains("role_project_admin") && Boolean.FALSE.equals(request.active())) {
+                int adminCount = projectMemberRepository.countActiveAdmins(member.getProjectId(), "role_project_admin");
+                if (adminCount <= 1) {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Cannot suspend the last admin of the project.");
+                }
+            }
             member.setActive(request.active());
         }
 
@@ -94,13 +147,20 @@ public class ProjectMemberService {
     }
 
     @Transactional
-    public void removeMember(String projectId, String memberId, String actorUserId) {
-        ProjectMember member = findMember(projectId, memberId);
+    public void removeMember(String projectId, String userId, String actorUserId) {
+        ProjectMember member = findMember(projectId, userId);
 
         ProjectEntity project = projectRepository.findByIdAndDeletedFalse(member.getProjectId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Project not found."));
         if (member.getUserId() != null && member.getUserId().equals(project.getOwnerId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Project owner cannot be removed from members.");
+        }
+
+        if (member.getRoleIds() != null && member.getRoleIds().contains("role_project_admin")) {
+            int adminCount = projectMemberRepository.countActiveAdmins(member.getProjectId(), "role_project_admin");
+            if (adminCount <= 1) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Cannot remove the last admin of the project.");
+            }
         }
 
         member.setActive(false);
@@ -114,19 +174,13 @@ public class ProjectMemberService {
         ));
     }
 
-    private ProjectMember findMember(String projectId, String memberId) {
+    private ProjectMember findMember(String projectId, String userId) {
         String normalizedProjectId = TextUtils.trim(projectId);
-        String normalizedMemberId = TextUtils.trim(memberId);
+        String normalizedUserId = TextUtils.trim(userId);
         validateProjectExists(normalizedProjectId);
 
-        ProjectMember member = projectMemberRepository.findByIdAndDeletedFalse(normalizedMemberId)
+        return projectMemberRepository.findByProjectIdAndUserIdAndDeletedFalse(normalizedProjectId, normalizedUserId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Project member not found."));
-
-        if (!normalizedProjectId.equals(member.getProjectId())) {
-            throw new AppException(ErrorCode.NOT_FOUND, "Project member not found.");
-        }
-
-        return member;
     }
 
     private void validateProjectExists(String projectId) {
@@ -135,7 +189,7 @@ public class ProjectMemberService {
         }
     }
 
-    private Map<String, TaskUserSummaryResponse> resolveUserSummaries(List<ProjectMember> members) {
+    private Map<String, User> resolveUserSummaries(List<ProjectMember> members) {
         if (members == null || members.isEmpty()) {
             return Map.of();
         }
@@ -153,28 +207,26 @@ public class ProjectMemberService {
         }
 
         List<User> users = userRepository.findByIdInAndDeletedFalse(new ArrayList<>(userIds));
-        Map<String, TaskUserSummaryResponse> result = new HashMap<>();
+        Map<String, User> result = new HashMap<>();
         for (User user : users) {
-            result.put(user.getId(), new TaskUserSummaryResponse(user.getId(), user.getFullName(), user.getAvatarUrl()));
+            result.put(user.getId(), user);
         }
         return result;
     }
 
-    private ProjectMemberResponse toResponse(ProjectMember member, Map<String, TaskUserSummaryResponse> users) {
+    private ProjectMemberResponse toResponse(ProjectMember member, Map<String, User> users) {
         String userId = TextUtils.trimToNull(member.getUserId());
-        TaskUserSummaryResponse user = userId == null
-                ? null
-                : users.getOrDefault(userId, new TaskUserSummaryResponse(userId, "User(" + shortId(userId) + ")", null));
+        User user = userId == null ? null : users.get(userId);
 
         return new ProjectMemberResponse(
                 member.getId(),
-                member.getProjectId(),
                 userId,
-                user,
-                member.getRoleIds() == null ? List.of() : member.getRoleIds(),
+                user != null ? user.getFullName() : "Unknown User",
+                user != null ? user.getEmail() : null,
+                user != null ? user.getAvatarUrl() : null,
                 member.isActive(),
-                member.getCreatedAt(),
-                member.getUpdatedAt()
+                member.getRoleIds() == null ? List.of() : member.getRoleIds(),
+                member.getCreatedAt()
         );
     }
 
