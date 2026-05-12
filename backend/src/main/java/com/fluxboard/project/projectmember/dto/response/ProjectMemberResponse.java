@@ -1,17 +1,32 @@
 package com.fluxboard.project.projectmember.dto.response;
 
-import com.fluxboard.board.task.dto.response.TaskUserSummaryResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 
 public record ProjectMemberResponse(
+        @JsonProperty("member_record_id")
         String id,
-        String projectId,
+
+        @JsonProperty("user_id")
         String userId,
-        TaskUserSummaryResponse user,
-        List<String> roleIds,
+
+        @JsonProperty("full_name")
+        String fullName,
+
+        @JsonProperty("email")
+        String email,
+
+        @JsonProperty("avatar_url")
+        String avatarUrl,
+
+        @JsonProperty("is_active")
         boolean active,
-        Instant createdAt,
-        Instant updatedAt
+
+        @JsonProperty("role_ids")
+        List<String> roleIds,
+
+        @JsonProperty("joined_at")
+        Instant joinedAt
 ) {
 }

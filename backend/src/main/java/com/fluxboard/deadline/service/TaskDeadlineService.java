@@ -50,12 +50,11 @@ public class TaskDeadlineService {
     }
 
     private void validateManagerAccess(String projectId, String userId) {
-        // Đã sửa tên hàm repository thành findByProjectIdAndUserIdAndDeletedFalse
+        // Lấy thông tin thực tế từ database thay vì hard-code[cite: 4, 8]
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserIdAndDeletedFalse(projectId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
         
-        // Đã sửa getter thành isActive()
-        if (!member.isActive()) {
+        if (Boolean.FALSE.equals(member.isActive())) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your account is suspended in this project.");
         }
 
@@ -76,12 +75,11 @@ public class TaskDeadlineService {
     }
 
     private void validateStatusUpdateAccess(String projectId, String userId) {
-        // Đã sửa tên hàm repository thành findByProjectIdAndUserIdAndDeletedFalse
+        // Kiểm tra quyền TASK_MOVE thực tế của User trong Project[cite: 4, 8]
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserIdAndDeletedFalse(projectId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
 
-        // Đã sửa getter thành isActive()
-        if (!member.isActive()) {
+        if (Boolean.FALSE.equals(member.isActive())) {
             throw new AppException(ErrorCode.FORBIDDEN, "The account has been suspended from this project.");
         }
 
