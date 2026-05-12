@@ -4,6 +4,7 @@ import com.fluxboard.common.entity.BaseDocument;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -13,7 +14,10 @@ import java.time.Instant;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Document(collection = "task_deadlines")
-@CompoundIndex(name = "status_due_date_idx", def = "{'status': 1, 'due_date': 1}")
+@CompoundIndexes({
+        @CompoundIndex(name = "status_due_date_idx", def = "{'status': 1, 'due_date': 1}"),
+        @CompoundIndex(name = "dashboard_health_idx", def = "{'is_deleted': 1, 'status': 1}")
+})
 public class TaskDeadlineEntity extends BaseDocument {
 
     @Indexed(unique = true)
@@ -23,6 +27,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("start_date")
     private Instant startDate;
 
+    @Indexed 
     @Field("due_date")
     private Instant dueDate;
 
@@ -32,6 +37,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("reminder_offset")
     private Integer reminderOffset;
 
+    @Indexed 
     @Field("status")
     private DeadlineStatus status;
 
