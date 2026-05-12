@@ -29,8 +29,13 @@ public class User extends BaseDocument {
     @Field("role_id")
     private String roleId;
 
+    @Indexed
     @Field("team_id")
     private String teamId;
+
+    @Indexed
+    @Field("department_id")
+    private String departmentId;
 
     @Field("status")
     private String status = "ACTIVE";
@@ -91,6 +96,14 @@ public class User extends BaseDocument {
         this.teamId = teamId;
     }
 
+    public String getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(String departmentId) {
+        this.departmentId = departmentId;
+    }
+
     public String getStatus() {
         return status;
     }
@@ -98,7 +111,6 @@ public class User extends BaseDocument {
     public void setStatus(String status) {
         this.status = status;
     }
-
 
     public String getResetToken() {
         return resetToken;

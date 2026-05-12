@@ -33,6 +33,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fluxboard.board.task.event.TaskCreatedEvent;
+import com.fluxboard.board.task.event.TaskUpdatedEvent;
+import com.fluxboard.board.task.event.TaskDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.*;
@@ -42,13 +46,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
 
-    private final TaskRepository taskRepository;
+    
+private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationDispatcher notificationDispatcher;
+    private final ActivityService activityService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ========================================================================
@@ -85,6 +91,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setParentTaskId(parentTaskId);
         entity.setAssigneesUserId(assigneesUserId);
         entity.setPriority(request.priority());
+
         entity.setStartDate(request.startDate());
         entity.setDueDate(request.dueDate());
         entity.setStatus(TextUtils.trim(request.status()));
@@ -96,6 +103,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAuthorUserId(normalizedAuthorUserId);
 
         TaskEntity saved = taskRepository.save(entity);
+
+        eventPublisher.publishEvent(new TaskCreatedEvent(this, saved.getId(), saved.getStartDate(), saved.getDueDate()));
 
         if (saved.getAssigneesUserId() != null && !saved.getAssigneesUserId().isEmpty()) {
             saved.getAssigneesUserId().forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
@@ -225,6 +234,8 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setAiEstimatedReason(TextUtils.trimToNull(request.aiEstimatedReason()));
 
         TaskEntity saved = taskRepository.save(entity);
+
+        eventPublisher.publishEvent(new TaskUpdatedEvent(this, saved.getId(), saved.getStartDate(), saved.getDueDate()));
 
         if (saved.getAssigneesUserId() != null) {
             saved.getAssigneesUserId().stream()
@@ -367,6 +378,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         taskRepository.saveAll(toDelete);
 
+        for (String deletedTaskId : deletedTaskIds) {
+             eventPublisher.publishEvent(new TaskDeletedEvent(this, deletedTaskId));
+        }
+
         List<TaskEntity> toResequence = resequenceAfterDelete(columnTasks, deletedTaskIds, affectedGroupKeys);
         if (!toResequence.isEmpty()) {
             taskRepository.saveAll(toResequence);
@@ -392,6 +407,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
+            for (TaskEntity task : tasks) {
+                eventPublisher.publishEvent(new TaskDeletedEvent(this, task.getId()));
+            }
             broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }
@@ -405,6 +423,9 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
+            for (TaskEntity task : tasks) {
+                eventPublisher.publishEvent(new TaskDeletedEvent(this, task.getId()));
+            }
             broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }

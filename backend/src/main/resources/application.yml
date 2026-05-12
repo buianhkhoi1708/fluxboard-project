@@ -62,6 +62,10 @@ auth:
 app:
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
+  deadline:
+    max-extensions: ${DEADLINE_MAX_EXTENSIONS:2}
+    reminder-offset: ${DEADLINE_REMINDER_OFFSET_MINUTES:1440}
+  timezone: ${APP_TIMEZONE:Asia/Ho_Chi_Minh}
 
 seeddata: ${SEED_DATA}
 seed-system-admin-email: ${SEED_SYSTEM_ADMIN_EMAIL}

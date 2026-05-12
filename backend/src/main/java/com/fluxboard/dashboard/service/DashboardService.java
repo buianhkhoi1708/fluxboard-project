@@ -1,389 +1,212 @@
 package com.fluxboard.dashboard.service;
 
-import com.fluxboard.activity.entity.ActivityEntity;
-import com.fluxboard.activity.repository.ActivityRepository;
-import com.fluxboard.board.task.entity.TaskEntity;
-import com.fluxboard.board.task.repository.TaskRepository;
-import com.fluxboard.project.entity.ProjectEntity;
-import com.fluxboard.project.repository.ProjectRepository;
-import com.fluxboard.organization.department.service.DepartmentService;
-import com.fluxboard.user.entity.User;
-import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.common.exception.AppException;
+import com.fluxboard.common.exception.ErrorCode;
+import com.fluxboard.rbac.entity.RoleEntity;
+import com.fluxboard.rbac.repository.RoleRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.temporal.WeekFields;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class DashboardService {
 
-    private final UserRepository userRepository;
-    private final ProjectRepository projectRepository;
-    private final TaskRepository taskRepository;
-    private final ActivityRepository activityRepository;
-    private final DepartmentService departmentService;
     private final MongoTemplate mongoTemplate;
+    private final RoleRepository roleRepository;
 
-    public DashboardService(UserRepository userRepository,
-                            ProjectRepository projectRepository,
-                            TaskRepository taskRepository,
-                            ActivityRepository activityRepository,
-                            DepartmentService departmentService,
-                            MongoTemplate mongoTemplate) {
-        this.userRepository = userRepository;
-        this.projectRepository = projectRepository;
-        this.taskRepository = taskRepository;
-        this.activityRepository = activityRepository;
-        this.departmentService = departmentService;
-        this.mongoTemplate = mongoTemplate;
-    }
+    public Object getDashboardMetrics(String timeRange, String departmentId, String teamId, AuthenticatedUser currentUser) {
+        RoleEntity roleEntity = roleRepository.findById(currentUser.roleId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User permissions not found."));
+        
+        String roleName = roleEntity.getName().name().toUpperCase();
 
-    private Map<String, String> getUserNameMap() {
-        return userRepository.findAll().stream()
-                .collect(Collectors.toMap(User::getId, User::getFullName, (a, b) -> a));
-    }
-
-    private String getRelativeTime(Instant createdAt) {
-        if (createdAt == null) return "Gần đây";
-        long minutes = Duration.between(createdAt, Instant.now()).toMinutes();
-        if (minutes < 60) return minutes + " phút trước";
-        long hours = minutes / 60;
-        if (hours < 24) return hours + " giờ trước";
-        return (hours / 24) + " ngày trước";
-    }
-
-    // ========== PHƯƠNG THỨC GỘP (DÙNG CHO ENDPOINT /metrics) ==========
-    public Map<String, Object> getDashboardMetrics(String roleName, String currentUserId) {
         if (roleName.contains("ADMIN")) {
-            return getSystemAdminMetrics();
-        } else if (roleName.contains("MANAGER")) {
-            return getManagerMetrics();
-        } else if (roleName.contains("LEAD")) {
-            return getLeadMetrics();
+            return getAdminMetrics(timeRange, departmentId);
+        } else if (roleName.contains("MANAGER") || roleName.contains("LEAD")) {
+            return getManagerMetrics(timeRange, teamId);
         } else {
-            return getMemberMetrics(currentUserId);
+            return getMemberMetrics(currentUser.userId());
         }
     }
 
-    // ==========================================
-    // CÁC PHƯƠNG THỨC PUBLIC CHO TỪNG ROLE (ĐÃ SỬA private -> public)
-    // ==========================================
+    @SuppressWarnings("rawtypes")
+    private Map<String, Object> getAdminMetrics(String timeRange, String departmentId) {
+        Map<String, Object> result = new HashMap<>();
 
-    // 1. ADMIN
-    public Map<String, Object> getSystemAdminMetrics() {
-    Map<String, Object> data = new HashMap<>();
-    Map<String, String> userNames = getUserNameMap();
+        long totalUsers = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "users");
+        long totalDepartments = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "departments");
+        long totalTeams = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "teams");
+        result.put("organization_kpi", Map.of(
+                "total_users", totalUsers,
+                "total_departments", totalDepartments,
+                "total_teams", totalTeams
+        ));
 
-    // ---------- CARDS ----------
-    Map<String, Object> cards = new HashMap<>();
-    long totalUsers = userRepository.countByDeletedFalse();
-    cards.put("total_users", totalUsers);
-    cards.put("total_members", totalUsers);
+        Aggregation healthAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false)),
+                Aggregation.group()
+                        .sum(ConditionalOperators.when(Criteria.where("status").is("ON_TRACK")).then(1).otherwise(0)).as("on_track")
+                        .sum(ConditionalOperators.when(Criteria.where("status").is("AT_RISK")).then(1).otherwise(0)).as("at_risk")
+                        .sum(ConditionalOperators.when(Criteria.where("status").in("OVERDUE", "LATE")).then(1).otherwise(0)).as("overdue")
+                        .sum("extension_count").as("total_extensions")
+        );
+        AggregationResults<Map> healthResults = mongoTemplate.aggregate(healthAgg, "task_deadlines", Map.class);
+        Map<String, Object> healthMap = healthResults.getUniqueMappedResult() != null 
+                ? new HashMap<String, Object>(healthResults.getUniqueMappedResult()) 
+                : new HashMap<>(Map.of("on_track", 0, "at_risk", 0, "overdue", 0, "total_extensions", 0));
+        healthMap.remove("_id");
+        result.put("company_deadline_health", healthMap);
 
-    List<ProjectEntity> allProjects = projectRepository.findByDeletedFalse();
-    long activeProjects = allProjects.stream()
-            .filter(p -> p.getStatus() != null && !"ARCHIVED".equalsIgnoreCase(p.getStatus()))
-            .count();
-    long archivedProjects = allProjects.stream()
-            .filter(p -> p.getStatus() != null && "ARCHIVED".equalsIgnoreCase(p.getStatus()))
-            .count();
-
-    Map<String, Long> projectsMap = new HashMap<>();
-    projectsMap.put("active", activeProjects);
-    projectsMap.put("archived", archivedProjects);
-    projectsMap.put("total", activeProjects + archivedProjects);
-    cards.put("projects", projectsMap);
-
-    cards.put("total_departments", departmentService.getTotalDepartments());
-    data.put("cards", cards);
-
-    // ---------- PROJECT STATUS DISTRIBUTION ----------
-    Query projQuery = new Query(Criteria.where("is_deleted").is(false));
-    projQuery.fields().include("status");
-    List<ProjectEntity> projects = mongoTemplate.find(projQuery, ProjectEntity.class);
-
-        Map<String, Long> statusCount = projects.stream()
-                .filter(p -> p.getStatus() != null)
-                .collect(Collectors.groupingBy(ProjectEntity::getStatus, Collectors.counting()));
-
-        List<Map<String, Object>> projectDistribution = new ArrayList<>();
-        statusCount.forEach((status, count) -> {
-            Map<String, Object> stat = new HashMap<>();
-            stat.put("status", status);
-            stat.put("count", count);
-            String color = "#3b82f6";
-            if ("Active".equalsIgnoreCase(status)) color = "#3b82f6";
-            else if ("At Risk".equalsIgnoreCase(status)) color = "#ef4444";
-            else if ("Delayed".equalsIgnoreCase(status)) color = "#f59e0b";
-            else if ("Archived".equalsIgnoreCase(status)) color = "#64748b";
-            else if ("Done".equalsIgnoreCase(status)) color = "#10b981";
-            stat.put("color", color);
-            projectDistribution.add(stat);
-        });
-        projectDistribution.sort(Comparator.comparing(m -> {
-            String status = (String) m.get("status");
-            if ("Active".equalsIgnoreCase(status)) return 1;
-            if ("At Risk".equalsIgnoreCase(status)) return 2;
-            if ("Delayed".equalsIgnoreCase(status)) return 3;
-            if ("Archived".equalsIgnoreCase(status)) return 4;
-            return 5;
-        }));
-        data.put("project_status_distribution", projectDistribution);
-
-        // ---------- AT RISK PROJECTS ----------
-        List<Map<String, Object>> atRiskProjects = projects.stream()
-                .filter(p -> p.getStatus() != null &&
-                        ("At Risk".equalsIgnoreCase(p.getStatus()) || "Delayed".equalsIgnoreCase(p.getStatus())))
-                .map(p -> {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("name", p.getName() != null ? p.getName() : "Unnamed Project");
-                    map.put("status", p.getStatus());
-                    return map;
-                })
-                .collect(Collectors.toList());
-        data.put("at_risk_projects", atRiskProjects);
-
-        // ---------- AUDIT LOGS ----------
-        List<ActivityEntity> recentActivities = activityRepository.findTop10ByOrderByCreatedAtDesc();
-        List<Map<String, Object>> auditLogs = recentActivities.stream().map(act -> {
-            Map<String, Object> log = new HashMap<>();
-            log.put("id", act.getId());
-            log.put("actor", act.getActorUserId() != null ? userNames.getOrDefault(act.getActorUserId(), "System") : "System");
-            log.put("action", act.getAction());
-            log.put("target", act.getMessage() != null ? act.getMessage() : act.getSourceType().toString() + " update");
-            boolean isCritical = act.getAction().toString().contains("DELETE");
-            log.put("severity", isCritical ? "CRITICAL" : "INFO");
-            log.put("created_at", act.getCreatedAt());
-            return log;
+        Aggregation deptPointsAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false).and("story_point").ne(null)),
+                Aggregation.unwind("assignees_user_id"),
+                Aggregation.lookup("users", "assignees_user_id", "_id", "user_info"),
+                Aggregation.unwind("user_info"),
+                Aggregation.lookup("departments", "user_info.department_id", "_id", "dept_info"),
+                Aggregation.unwind("dept_info", true),
+                Aggregation.project("story_point", "status", "dept_info._id"),
+                Aggregation.group("dept_info._id")
+                        .sum("story_point").as("total_points")
+                        .sum(ConditionalOperators.when(Criteria.where("status").is("DONE")).thenValueOf("story_point").otherwise(0)).as("completed_points")
+        );
+        AggregationResults<Map> deptPointsResults = mongoTemplate.aggregate(deptPointsAgg, "tasks", Map.class);
+        List<Map<String, Object>> deptPoints = deptPointsResults.getMappedResults().stream().map(doc -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("department_id", doc.get("_id") != null ? doc.get("_id").toString() : "Unassigned");
+            map.put("total_points", doc.getOrDefault("total_points", 0));
+            map.put("completed_points", doc.getOrDefault("completed_points", 0));
+            map.put("overdue_tasks", 0); 
+            return map;
         }).collect(Collectors.toList());
-        data.put("audit_logs", auditLogs);
-         List<Map<String, Object>> membersByDept = departmentService.getMemberDistributionByDepartment();
-    data.put("members_by_department", membersByDept);
+        result.put("department_points_distribution", deptPoints);
 
-        return data;
+        return result;
     }
 
-    // 2. MANAGER
-    public Map<String, Object> getManagerMetrics() {
-        Map<String, Object> data = new HashMap<>();
-        Map<String, String> userNames = getUserNameMap();
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Map<String, Object> getManagerMetrics(String timeRange, String teamId) {
+        Map<String, Object> result = new HashMap<>();
 
-        Query taskQuery = new Query(Criteria.where("is_deleted").is(false));
-        taskQuery.fields().include("assigneesUserId", "status", "aiSuggestedPoint", "storyPoint", "title");
-        List<TaskEntity> optimizedTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
+        Aggregation workloadAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false).and("status").ne("DONE").and("story_point").ne(null)),
+                Aggregation.unwind("assignees_user_id"),
+                Aggregation.lookup("users", "assignees_user_id", "_id", "user_details"),
+                Aggregation.unwind("user_details"),
+                Aggregation.project("assignees_user_id", "story_point", "user_details.team_id", "user_details.full_name"),
+                Aggregation.match(teamId != null && !teamId.isEmpty() ? Criteria.where("user_details.team_id").is(teamId) : new Criteria()),
+                Aggregation.group("assignees_user_id")
+                        .first("user_details.full_name").as("full_name")
+                        .sum("story_point").as("current_points")
+        );
+        AggregationResults<Map> workloadResults = mongoTemplate.aggregate(workloadAgg, "tasks", Map.class);
+        List<Map<String, Object>> teamWorkload = workloadResults.getMappedResults().stream().map(doc -> {
+            long points = ((Number) doc.getOrDefault("current_points", 0)).longValue();
+            Map<String, Object> map = new HashMap<>();
+            map.put("user_id", doc.get("_id").toString());
+            map.put("full_name", doc.get("full_name"));
+            map.put("current_points", points);
+            map.put("status", points > 20 ? "OVERLOADED" : "AVAILABLE");
+            return map;
+        }).collect(Collectors.toList());
+        result.put("team_workload_capacity", teamWorkload);
 
-        Query projQuery = new Query(Criteria.where("is_deleted").is(false));
-        projQuery.fields().include("name", "title");
-        List<ProjectEntity> allProjects = mongoTemplate.find(projQuery, ProjectEntity.class);
-        Map<String, String> projectNames = new HashMap<>();
-        for (ProjectEntity p : allProjects) {
-            String pName = p.getName() != null ? p.getName() : "Dự án " + p.getId().substring(0, 4);
-            projectNames.put(p.getId(), pName);
-        }
+        Aggregation atRiskAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false).and("status").in("AT_RISK", "OVERDUE", "LATE")),
+                Aggregation.lookup("tasks", "task_id", "_id", "task_info"),
+                Aggregation.unwind("task_info"),
+                Aggregation.project("task_id", "due_date", "status", "extension_count", "task_info.title", "task_info.story_point", "task_info.priority"),
+                Aggregation.limit(10)
+        );
+        AggregationResults<Map> atRiskResults = mongoTemplate.aggregate(atRiskAgg, "task_deadlines", Map.class);
+        List<Map<String, Object>> atRiskTasks = atRiskResults.getMappedResults().stream().map(doc -> {
+            Map<String, Object> taskInfo = (Map<String, Object>) doc.get("task_info");
+            Map<String, Object> map = new HashMap<>();
+            map.put("task_id", doc.get("task_id"));
+            map.put("title", taskInfo != null ? taskInfo.get("title") : "Unknown");
+            map.put("story_point", taskInfo != null ? taskInfo.get("story_point") : 0);
+            map.put("priority", taskInfo != null ? taskInfo.get("priority") : "NORMAL");
+            map.put("due_date", doc.get("due_date"));
+            map.put("deadline_status", doc.get("status"));
+            map.put("extension_count", doc.getOrDefault("extension_count", 0));
+            return map;
+        }).collect(Collectors.toList());
+        result.put("at_risk_tasks", atRiskTasks);
 
-        Instant fourWeeksAgo = Instant.now().minus(Duration.ofDays(28));
-        Query actQuery = new Query(Criteria.where("is_deleted").is(false).and("created_at").gte(fourWeeksAgo));
-        actQuery.fields().include("projectId", "createdAt");
-        List<ActivityEntity> recentActs = mongoTemplate.find(actQuery, ActivityEntity.class);
+        Aggregation aiAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false).and("ai_suggested_point").ne(null).and("story_point").ne(null)),
+                Aggregation.project("title", "ai_suggested_point", "story_point", "created_at"),
+                Aggregation.sort(Sort.Direction.DESC, "created_at"),
+                Aggregation.limit(10)
+        );
+        AggregationResults<Map> aiResults = mongoTemplate.aggregate(aiAgg, "tasks", Map.class);
+        List<Map<String, Object>> aiEfficiency = aiResults.getMappedResults().stream().map(doc -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("task_title", doc.get("title"));
+            map.put("ai_suggested_point", doc.get("ai_suggested_point"));
+            map.put("actual_point", doc.get("story_point"));
+            return map;
+        }).collect(Collectors.toList());
+        result.put("ai_efficiency", aiEfficiency);
 
-        WeekFields weekFields = WeekFields.of(Locale.getDefault());
-        Map<String, Map<String, Integer>> weeklyStats = new TreeMap<>();
-
-        for (ActivityEntity act : recentActs) {
-            if (act.getProjectId() == null || act.getCreatedAt() == null) continue;
-            ZonedDateTime zdt = act.getCreatedAt().atZone(ZoneId.systemDefault());
-            int weekNum = zdt.get(weekFields.weekOfWeekBasedYear());
-            String weekStr = "W" + weekNum;
-            String pName = projectNames.getOrDefault(act.getProjectId(), "Khác");
-            weeklyStats.putIfAbsent(weekStr, new HashMap<>());
-            Map<String, Integer> projCount = weeklyStats.get(weekStr);
-            projCount.put(pName, projCount.getOrDefault(pName, 0) + 1);
-        }
-
-        List<Map<String, Object>> weeklyProgress = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Integer>> entry : weeklyStats.entrySet()) {
-            Map<String, Object> weekData = new HashMap<>();
-            weekData.put("week", entry.getKey());
-            for (Map.Entry<String, Integer> pEntry : entry.getValue().entrySet()) {
-                weekData.put(pEntry.getKey(), pEntry.getValue());
-            }
-            weeklyProgress.add(weekData);
-        }
-
-        if (weeklyProgress.isEmpty()) {
-            Map<String, Object> emptyWeek = new HashMap<>();
-            int currentWeek = ZonedDateTime.now().get(weekFields.weekOfWeekBasedYear());
-            emptyWeek.put("week", "W" + currentWeek);
-            emptyWeek.put("Chưa có dữ liệu", 0);
-            weeklyProgress.add(emptyWeek);
-        }
-        data.put("weekly_progress", weeklyProgress);
-
-        // TASK COMPLETION BY TEAM
-        Map<String, int[]> userTaskStats = new HashMap<>();
-        for (TaskEntity task : optimizedTasks) {
-            if (task.getAssigneesUserId() != null && !task.getAssigneesUserId().isEmpty()) {
-                for (String userId : task.getAssigneesUserId()) {
-                    userTaskStats.putIfAbsent(userId, new int[]{0, 0});
-                    userTaskStats.get(userId)[0]++;
-                    if ("DONE".equalsIgnoreCase(task.getStatus())) {
-                        userTaskStats.get(userId)[1]++;
-                    }
-                }
-            }
-        }
-
-        List<Map<String, Object>> completionByTeam = new ArrayList<>();
-        for (Map.Entry<String, int[]> entry : userTaskStats.entrySet()) {
-            String userId = entry.getKey();
-            int totalTasks = entry.getValue()[0];
-            int completedTasks = entry.getValue()[1];
-            double percentage = totalTasks == 0 ? 0 : Math.round(((double) completedTasks / totalTasks) * 100);
-            Map<String, Object> stat = new HashMap<>();
-            stat.put("team", userNames.getOrDefault(userId, "Ẩn danh"));
-            stat.put("percentage", percentage);
-            completionByTeam.add(stat);
-        }
-        if (completionByTeam.isEmpty()) {
-            completionByTeam.add(Map.of("team", "Chưa có dữ liệu", "percentage", 0));
-        }
-        data.put("task_completion_by_team", completionByTeam);
-
-        // AI VS ACTUAL POINTS
-        List<Map<String, Object>> aiPoints = optimizedTasks.stream()
-                .filter(t -> t.getAiSuggestedPoint() != null && t.getStoryPoint() != null)
-                .map(t -> {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("task_id", t.getTitle());
-                    map.put("ai_point", t.getAiSuggestedPoint());
-                    map.put("actual_point", t.getStoryPoint());
-                    return map;
-                })
-                .limit(10)
-                .collect(Collectors.toList());
-        data.put("ai_vs_actual_points", aiPoints);
-
-        return data;
+        return result;
     }
 
-    // 3. LEAD
-    public Map<String, Object> getLeadMetrics() {
-        Map<String, Object> data = new HashMap<>();
-        Map<String, String> userNames = getUserNameMap();
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Map<String, Object> getMemberMetrics(String userId) {
+        Map<String, Object> result = new HashMap<>();
 
-        Query taskQuery = new Query(Criteria.where("is_deleted").is(false));
-        taskQuery.fields().include("assigneesUserId", "status", "storyPoint", "dueDate", "title", "priority");
-        List<TaskEntity> optimizedTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
+        Aggregation contribAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false).and("assignees_user_id").is(userId)),
+                Aggregation.group()
+                        .count().as("total_assigned")
+                        .sum(ConditionalOperators.when(Criteria.where("status").is("DONE")).then(1).otherwise(0)).as("completed_tasks")
+        );
+        AggregationResults<Map> contribResults = mongoTemplate.aggregate(contribAgg, "tasks", Map.class);
+        Map<String, Object> contribMap = contribResults.getUniqueMappedResult() != null 
+                ? new HashMap<String, Object>(contribResults.getUniqueMappedResult()) 
+                : new HashMap<>(Map.of("completed_tasks", 0, "total_assigned", 0));
+        contribMap.remove("_id");
+        result.put("my_contribution", contribMap);
 
-        Map<String, Integer> workloadMap = new HashMap<>();
-        for (TaskEntity task : optimizedTasks) {
-            if (task.getAssigneesUserId() != null && !"DONE".equalsIgnoreCase(task.getStatus()) && task.getStoryPoint() != null) {
-                for (String userId : task.getAssigneesUserId()) {
-                    workloadMap.put(userId, workloadMap.getOrDefault(userId, 0) + task.getStoryPoint());
-                }
-            }
-        }
+        Aggregation focusAgg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("is_deleted").is(false)
+                        .and("assignees_user_id").is(userId)
+                        .and("status").ne("DONE")
+                        .and("priority").in("HIGH", "CRITICAL")),
+                Aggregation.lookup("task_deadlines", "_id", "task_id", "deadline_info"),
+                Aggregation.unwind("deadline_info", true),
+                Aggregation.project("title", "priority", "story_point", "deadline_info.due_date", "deadline_info.status", "deadline_info.extension_count"),
+                Aggregation.sort(Sort.Direction.ASC, "deadline_info.due_date"),
+                Aggregation.limit(5)
+        );
+        AggregationResults<Map> focusResults = mongoTemplate.aggregate(focusAgg, "tasks", Map.class);
+        List<Map<String, Object>> focusTasks = focusResults.getMappedResults().stream().map(doc -> {
+            Map<String, Object> deadlineInfo = (Map<String, Object>) doc.get("deadline_info");
+            Map<String, Object> map = new HashMap<>();
+            map.put("task_id", doc.get("_id").toString());
+            map.put("title", doc.get("title"));
+            map.put("priority", doc.get("priority"));
+            map.put("story_point", doc.getOrDefault("story_point", 0));
+            map.put("due_date", deadlineInfo != null ? deadlineInfo.get("due_date") : null);
+            map.put("deadline_status", deadlineInfo != null ? deadlineInfo.get("status") : "ON_TRACK");
+            map.put("extensions_used", deadlineInfo != null ? deadlineInfo.getOrDefault("extension_count", 0) : 0);
+            return map;
+        }).collect(Collectors.toList());
+        result.put("my_focus_board", focusTasks);
 
-        List<Map<String, Object>> teamWorkload = workloadMap.entrySet().stream()
-                .map(entry -> {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("user_id", entry.getKey());
-                    map.put("name", userNames.getOrDefault(entry.getKey(), "Unknown"));
-                    map.put("total_points", entry.getValue());
-                    return map;
-                })
-                .sorted((a, b) -> (Integer) b.get("total_points") - (Integer) a.get("total_points"))
-                .collect(Collectors.toList());
-        data.put("team_workload", teamWorkload);
-
-        Instant now = Instant.now();
-        List<Map<String, Object>> atRiskTasks = optimizedTasks.stream()
-                .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()) && t.getDueDate() != null && t.getDueDate().isBefore(now))
-                .map(t -> {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("id", t.getId());
-                    map.put("title", t.getTitle());
-                    map.put("due_date", t.getDueDate().toString().substring(0, 10));
-                    map.put("priority", t.getPriority() != null ? t.getPriority() : "HIGH");
-                    map.put("reason", "OVERDUE");
-                    return map;
-                })
-                .limit(10)
-                .collect(Collectors.toList());
-        data.put("at_risk_tasks", atRiskTasks);
-
-        List<ActivityEntity> recentActivities = activityRepository.findTop10ByOrderByCreatedAtDesc();
-        List<Map<String, Object>> recentActs = recentActivities.stream()
-                .limit(5)
-                .map(act -> {
-                    Map<String, Object> map = new HashMap<>();
-                    String userName = act.getActorUserId() != null ? userNames.getOrDefault(act.getActorUserId(), "System") : "System";
-                    String[] nameParts = userName.split(" ");
-                    String shortName = nameParts[nameParts.length - 1];
-                    map.put("user", shortName);
-                    map.put("content", act.getMessage() != null ? act.getMessage() : String.valueOf(act.getAction()));
-                    map.put("time", getRelativeTime(act.getCreatedAt()));
-                    return map;
-                }).collect(Collectors.toList());
-        data.put("recent_activities", recentActs);
-
-        return data;
-    }
-
-    // 4. MEMBER
-    public Map<String, Object> getMemberMetrics(String userId) {
-        Map<String, Object> data = new HashMap<>();
-
-        Query taskQuery = new Query(Criteria.where("is_deleted").is(false).and("assigneesUserId").is(userId));
-        taskQuery.fields().include("status", "priority", "dueDate", "title");
-        List<TaskEntity> myTasks = mongoTemplate.find(taskQuery, TaskEntity.class);
-
-        long totalAssigned = myTasks.size();
-        long completed = myTasks.stream().filter(t -> "DONE".equalsIgnoreCase(t.getStatus())).count();
-
-        Map<String, Object> contribution = new HashMap<>();
-        contribution.put("completed", completed);
-        contribution.put("total", totalAssigned);
-        data.put("my_contribution", contribution);
-
-        List<Map<String, Object>> myFocus = myTasks.stream()
-                .filter(t -> !"DONE".equalsIgnoreCase(t.getStatus()))
-                .filter(t -> "HIGH".equalsIgnoreCase(String.valueOf(t.getPriority())) || "CRITICAL".equalsIgnoreCase(String.valueOf(t.getPriority())))
-                .sorted((t1, t2) -> {
-                    if (t1.getDueDate() == null && t2.getDueDate() == null) return 0;
-                    if (t1.getDueDate() == null) return 1;
-                    if (t2.getDueDate() == null) return -1;
-                    return t1.getDueDate().compareTo(t2.getDueDate());
-                })
-                .map(t -> {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("id", t.getId());
-                    map.put("title", t.getTitle());
-                    map.put("priority", t.getPriority());
-
-                    String dueDateStr = "Chưa rõ";
-                    if (t.getDueDate() != null) {
-                        long days = Duration.between(Instant.now(), t.getDueDate()).toDays();
-                        if (days == 0) dueDateStr = "Hôm nay";
-                        else if (days == 1) dueDateStr = "Ngày mai";
-                        else if (days < 0) dueDateStr = "Quá hạn";
-                        else dueDateStr = t.getDueDate().toString().substring(0, 10);
-                    }
-                    map.put("due_date", dueDateStr);
-                    return map;
-                })
-                .limit(5)
-                .collect(Collectors.toList());
-        data.put("my_focus", myFocus);
-
-        return data;
+        return result;
     }
 }
