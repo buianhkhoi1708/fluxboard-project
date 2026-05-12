@@ -13,7 +13,6 @@ import { useParams } from 'react-router-dom';
 const BoardView = () => {
   const { board, setBoard, fetchBoardData, updateTaskPositionApi } = useBoardStore();
   
-  // 🚀 LẤY TỪ ĐIỂN USER TỪ KHO TOÀN CỤC
   const { userDictionary } = useUserStore();
 
   const [activeTask, setActiveTask] = useState(null);
@@ -107,11 +106,10 @@ const BoardView = () => {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex flex-col h-full bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white relative overflow-hidden">
-        <AiGeneratorPanel />
 
         <div className="px-4 py-3 md:px-6 md:py-4 bg-white/70 backdrop-blur-xl border-b border-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 lg:gap-4 shrink-0 z-10 sticky top-0">
           
-          <div className="flex items-center gap-3 w-full lg:w-auto overflow-hidden">
+          <div className="flex items-center gap-1 w-full lg:w-auto overflow-hidden">
             <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-lg md:text-xl shadow-md shrink-0">
               {board.board_name?.charAt(0) || 'F'}
             </div>

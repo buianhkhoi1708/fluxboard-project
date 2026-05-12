@@ -37,28 +37,17 @@ public class ProjectMemberController {
     }
 
     @RequirePermission("PROJECT_VIEW")
-    @GetMapping("/members")
-    public ResponseEntity<ApiResponse<List<TaskUserSummaryResponse>>> getProjectMembers(@PathVariable String projectId) {
+    @GetMapping("/members/summary")
+    public ResponseEntity<ApiResponse<List<TaskUserSummaryResponse>>> getProjectMembersSummary(@PathVariable String projectId) {
         return ResponseFactory.ok(
                 "Project members retrieved successfully.",
                 projectService.getProjectMembers(projectId)
         );
     }
 
-    @RequirePermission("PROJECT_UPDATE")
-    @PostMapping("/members")
-    public ResponseEntity<ApiResponse<Void>> addProjectMember(
-            @PathVariable String projectId,
-            @Valid @RequestBody AddProjectMemberRequest request,
-            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
-    ) {
-        projectService.addProjectMember(projectId, request, authUser.userId());
-        return ResponseFactory.ok("Member added to project successfully.");
-    }
-
     @RequirePermission("PROJECT_VIEW")
-    @GetMapping("/project-members")
-    public ResponseEntity<ApiResponse<List<ProjectMemberResponse>>> getProjectMemberDetails(@PathVariable String projectId) {
+    @GetMapping("/members")
+    public ResponseEntity<ApiResponse<List<ProjectMemberResponse>>> getProjectMembers(@PathVariable String projectId) {
         return ResponseFactory.ok(
                 "Project member details retrieved successfully.",
                 projectMemberService.getMembers(projectId)
@@ -66,39 +55,52 @@ public class ProjectMemberController {
     }
 
     @RequirePermission("PROJECT_VIEW")
-    @GetMapping("/project-members/{memberId}")
+    @GetMapping("/members/{userId}")
     public ResponseEntity<ApiResponse<ProjectMemberResponse>> getProjectMemberById(
             @PathVariable String projectId,
-            @PathVariable String memberId
+            @PathVariable("userId") String userId
     ) {
         return ResponseFactory.ok(
                 "Project member retrieved successfully.",
-                projectMemberService.getMemberById(projectId, memberId)
+                projectMemberService.getMemberById(projectId, userId)
         );
     }
 
     @RequirePermission("PROJECT_UPDATE")
-    @PutMapping("/project-members/{memberId}")
+    @PostMapping("/members")
+    public ResponseEntity<ApiResponse<ProjectMemberResponse>> addProjectMember(
+            @PathVariable String projectId,
+            @Valid @RequestBody AddProjectMemberRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.ok(
+                "Member added to project successfully.",
+                projectMemberService.addMember(projectId, request, authUser.userId())
+        );
+    }
+
+    @RequirePermission("PROJECT_UPDATE")
+    @PutMapping("/members/{userId}")
     public ResponseEntity<ApiResponse<ProjectMemberResponse>> updateProjectMember(
             @PathVariable String projectId,
-            @PathVariable String memberId,
+            @PathVariable("userId") String userId,
             @RequestBody UpdateProjectMemberRequest request,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
     ) {
         return ResponseFactory.ok(
                 "Project member updated successfully.",
-                projectMemberService.updateMember(projectId, memberId, request, authUser.userId())
+                projectMemberService.updateMember(projectId, userId, request, authUser.userId())
         );
     }
 
     @RequirePermission("PROJECT_UPDATE")
-    @DeleteMapping("/project-members/{memberId}")
+    @DeleteMapping("/members/{userId}")
     public ResponseEntity<ApiResponse<Void>> removeProjectMember(
             @PathVariable String projectId,
-            @PathVariable String memberId,
+            @PathVariable("userId") String userId,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
     ) {
-        projectMemberService.removeMember(projectId, memberId, authUser.userId());
+        projectMemberService.removeMember(projectId, userId, authUser.userId());
         return ResponseFactory.ok("Project member removed successfully.");
     }
 }

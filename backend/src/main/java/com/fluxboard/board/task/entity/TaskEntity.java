@@ -5,15 +5,23 @@ import com.fluxboard.common.entity.BaseDocument;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "tasks")
-@CompoundIndex(
-        name = "uniq_column_parent_order_active",
-        def = "{'column_id': 1, 'parent_task_id': 1, 'order': 1, 'is_deleted': 1}",
-        unique = true
-)
+@CompoundIndexes({
+        @CompoundIndex(
+                name = "uniq_column_parent_order_active",
+                def = "{'column_id': 1, 'parent_task_id': 1, 'order': 1, 'is_deleted': 1}",
+                unique = true
+        ),
+        @CompoundIndex(
+                name = "dashboard_tasks_idx",
+                def = "{'is_deleted': 1, 'status': 1, 'assignees_user_id': 1}"
+        )
+})
 public class TaskEntity extends BaseDocument {
 
     @Field("title")
@@ -25,13 +33,13 @@ public class TaskEntity extends BaseDocument {
     @Field("column_id")
     private String columnId;
 
-    // 🚀 BỔ SUNG TRƯỜNG NÀY ĐỂ FIX LỖI CRASH APP VÀ PHỤC VỤ TÍNH NĂNG AI INSIGHT
     @Field("project_id")
     private String projectId;
 
     @Field("parent_task_id")
     private String parentTaskId;
 
+    @Indexed 
     @Field("assignees_user_id")
     private List<String> assigneesUserId;
 
@@ -44,6 +52,7 @@ public class TaskEntity extends BaseDocument {
     @Field("due_date")
     private Instant dueDate;
 
+    @Indexed 
     @Field("status")
     private String status;
 
