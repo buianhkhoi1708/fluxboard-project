@@ -16,7 +16,6 @@ import com.fluxboard.deadline.repository.TaskDeadlineRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import com.fluxboard.rbac.service.PermissionEvaluatorService;
 
-// Kết nối trực tiếp với code của đồng đội[cite: 8]
 import com.fluxboard.project.projectmember.entity.ProjectMember; 
 import com.fluxboard.project.projectmember.repository.ProjectMemberRepository; 
 
@@ -53,10 +52,10 @@ public class TaskDeadlineService {
 
     private void validateManagerAccess(String projectId, String userId) {
         // Lấy thông tin thực tế từ database thay vì hard-code[cite: 4, 8]
-        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserIdAndDeletedFalse(projectId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
         
-        if (Boolean.FALSE.equals(member.getIsActive())) {
+        if (Boolean.FALSE.equals(member.isActive())) {
             throw new AppException(ErrorCode.FORBIDDEN, "Access denied. Your account is suspended in this project.");
         }
 
@@ -78,10 +77,10 @@ public class TaskDeadlineService {
 
     private void validateStatusUpdateAccess(String projectId, String userId) {
         // Kiểm tra quyền TASK_MOVE thực tế của User trong Project[cite: 4, 8]
-        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserIdAndDeletedFalse(projectId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Access denied. You are not a member of this project."));
 
-        if (Boolean.FALSE.equals(member.getIsActive())) {
+        if (Boolean.FALSE.equals(member.isActive())) {
             throw new AppException(ErrorCode.FORBIDDEN, "The account has been suspended from this project.");
         }
 
