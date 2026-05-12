@@ -29,11 +29,11 @@ const MainLayout = () => {
       <div className="flex flex-1 w-full overflow-hidden">
         <Sidebar />
         
-        <main className="flex-1 w-full overflow-hidden flex flex-col bg-white shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10">
+        <main className="flex-1 w-full overflow-y-auto flex flex-col bg-white shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10">
           
           {/* Thanh trạng thái API đã được xóa khỏi UI */}
           
-          <div className="flex-1 overflow-hidden min-h-0 relative">
+          <div className="flex-1 relative">
              {/* Outlet bơm trang con vào đây */}
             <Outlet />
           </div>
