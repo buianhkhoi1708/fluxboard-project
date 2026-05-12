@@ -9,11 +9,18 @@ public record AiPromptRequest(
     @NotBlank(message = "Prompt không được để trống")
     String prompt,
     
-    @JsonProperty("project_id") // Khớp với SNAKE_CASE
+    @JsonProperty("project_id")
     @NotBlank(message = "Project ID không được để trống")
     String projectId,
 
-    @JsonProperty("member_ids") // 🚀 CHÌA KHÓA ĐÂY SẾP!
+    @JsonProperty("member_ids")
     @NotEmpty(message = "Danh sách nhân sự không được để trống")
-    List<String> memberIds
+    List<String> memberIds,
+
+    // 🚀 BỔ SUNG ĐỂ KHỚP VỚI FRONTEND V5
+    @JsonProperty("generation_mode")
+    String generationMode, // SIMPLE hoặc ADVANCED
+
+    @JsonProperty("project_start_date")
+    String projectStartDate // Định dạng YYYY-MM-DD từ Frontend
 ) {}

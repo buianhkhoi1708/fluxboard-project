@@ -1,17 +1,39 @@
 import axiosClient from '../../../lib/axiosClient';
 
-export const organizationApi = {
-  // 1.1 & 2.1: Lấy danh sách (Phân trang)
-  getDepartments: (page = 0) => axiosClient.get('/departments', { params: { page } }),
-  getTeams: (page = 0) => axiosClient.get('/teams', { params: { page } }),
+export interface DepartmentPayload {
+  name: string;
+  code: string;
+  manager_id: string;
+  manager_name?: string; 
+  description?: string;
+}
 
-  // 1.2 & 2.2: Tạo mới
-  createDepartment: (data) => axiosClient.post('/departments', data),
-  createTeam: (data) => axiosClient.post('/teams', data),
+export interface TeamPayload {
+  name: string;
+  code: string;
+  department_id: string;
+  lead_id: string;
+  lead_name?: string; 
+  description?: string;
+}
 
-  // 3.1: Lấy Logs Dashboard
-  getRecentActivities: () => axiosClient.get('/activities/recent'),
-
-  // 4.1: Lấy Cây tổ chức (Dữ liệu lồng nhau)
-  getOrgTree: () => axiosClient.get('/organizations/tree')
+export const orgApi = {
+  getOrgTree: async () => {
+    return axiosClient.get('/departments/tree'); 
+  },
+  saveDepartment: async (payload: DepartmentPayload) => {
+    return axiosClient.post('/departments', payload);
+  },
+  saveTeam: async (payload: TeamPayload) => {
+    return axiosClient.post('/teams', payload);
+  },
+  assignUserToTeam: async (userId: string, teamId: string, departmentId: string) => {
+    return axiosClient.post(`/teams/${teamId}/members`, { user_id: userId, department_id: departmentId });
+  },
+  getUnassignedUsers: async () => {
+    return axiosClient.get('/users/unassigned');
+  },
+  searchOrgUsers: async (keyword: string) => {
+    return axiosClient.get(`/users/search`, { params: { keyword } });
+  }
 };

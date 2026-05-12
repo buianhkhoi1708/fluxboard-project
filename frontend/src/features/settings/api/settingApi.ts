@@ -1,4 +1,4 @@
-import axiosClient from '../../../lib/axiosClient'; // Nhớ điều chỉnh lại đường dẫn import này cho đúng với dự án của bạn
+import axiosClient from '../../../lib/axiosClient';
 
 export const settingApi = {
   getNotificationSettings: () => {
