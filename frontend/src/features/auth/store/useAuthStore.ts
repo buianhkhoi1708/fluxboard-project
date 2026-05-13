@@ -48,30 +48,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email, password) => {
     set({ isLoading: true });
     try {
-      const response = await axiosClient.post('/auth/login', { email, password });
+      // 1. axiosClient interceptor đã trả về response.data (Cục ApiResponse của Java)
+      const res: any = await axiosClient.post('/auth/login', { email, password });
 
-      console.log("LOGIN RESPONSE:", response.data);
+      console.log("📦 DỮ LIỆU TỪ BACKEND GỬI VỀ:", res);
 
-      // 👉 Hỗ trợ cả 2 kiểu response:
-      // 1. { access_token, user: {...} }
-      // 2. { access_token, id, email, ... }
-      const { access_token, user, ...rest } = response.data;
+      // 2. Lấy đúng lõi payload (Chứa token và user)
+      const payload = res.data || res;
 
-      const rawUser = user || rest;
+      // 3. 🚀 CHÌA KHÓA: Hứng cả chuẩn Java (camelCase) lẫn JS (snake_case)
+      const finalAccessToken = payload.accessToken || payload.access_token;
+      const finalUser = payload.user || payload;
 
-      // 👉 Normalize ID (tránh lỗi undefined)
+      // 🚨 Báo động đỏ nếu không tìm thấy token
+      if (!finalAccessToken) {
+        console.error("🔴 CẢNH BÁO: Không tìm thấy Access Token! Code Java đang trả về cái gì thế này?");
+      } else {
+        // Típ nhỏ: In 10 ký tự đầu của Token ra để đối chiếu xem có đúng Access Token không
+        console.log("🔑 Đang lưu Access Token:", finalAccessToken.substring(0, 10) + "...");
+      }
+
+      // 4. Chuẩn hóa User
       const normalizedUser: UserProfile = {
-        ...rawUser,
-        id: rawUser.id || rawUser.user_id
+        ...finalUser,
+        id: finalUser.id || finalUser.user_id
       };
 
-      // Lưu localStorage
-      localStorage.setItem('token', access_token);
+      // 5. Ghi vào LocalStorage (Đảm bảo là ghi biến finalAccessToken chuẩn)
+      localStorage.setItem('token', finalAccessToken);
       localStorage.setItem('user', JSON.stringify(normalizedUser));
 
-      // Update state
+      // 6. Cập nhật State
       set({
-        token: access_token,
+        token: finalAccessToken,
         user: normalizedUser,
         isLoading: false
       });

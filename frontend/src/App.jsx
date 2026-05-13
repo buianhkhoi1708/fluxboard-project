@@ -41,7 +41,7 @@ function App() {
                 <Route path="/workspaces" element={<WorkspacesPage />} />
                 <Route path="/board/:id" element={<BoardView />} />
                 <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard" element={<DashboardPage/>} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/activity" element={<ActivityLogPage />} />
                 <Route path="/organization" element={<OrganizationPage />} />
