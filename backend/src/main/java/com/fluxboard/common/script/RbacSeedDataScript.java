@@ -2,8 +2,8 @@ package com.fluxboard.common.script;
 
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.entity.ProjectEntity;
-import com.fluxboard.project.entity.ProjectMember;
-import com.fluxboard.project.repository.ProjectMemberRepository;
+import com.fluxboard.project.projectmember.entity.ProjectMember;
+import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.rbac.entity.PermissionEntity;
 import com.fluxboard.rbac.entity.RoleEntity;
@@ -411,7 +411,6 @@ private User createAiUser(String name, String email, String team, Map<RoleKey, R
         u.setEmail(email);
         u.setPassword(passwordEncoder.encode("123456"));
         u.setTeamId(team); // AI Service sẽ dựa vào đây để gán việc
-        u.setDepartmentId("IT-DEPT");
         
         // Gán Role mặc định là EMPLOYEE (Scope SYSTEM)
         RoleEntity employeeRole = rolesByKey.get(new RoleKey(Role.EMPLOYEE, Scope.SYSTEM));

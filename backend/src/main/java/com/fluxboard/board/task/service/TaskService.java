@@ -21,6 +21,10 @@ import com.fluxboard.project.entity.ProjectEntity;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.activity.enums.ActivityAction;
+import com.fluxboard.activity.enums.ActivitySource;
+import com.fluxboard.activity.event.ActivityCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
@@ -29,6 +33,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fluxboard.board.task.event.TaskCreatedEvent;
+import com.fluxboard.board.task.event.TaskUpdatedEvent;
+import com.fluxboard.board.task.event.TaskDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.*;
@@ -38,7 +46,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TaskService implements CrudService<TaskResponse, String, CreateTaskRequest, UpdateTaskRequest> {
 
-    private final TaskRepository taskRepository;
+    
+private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
     private final BoardRepository boardRepository;
     private final BoardColumnRepository boardColumnRepository;
@@ -46,6 +55,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationDispatcher notificationDispatcher;
     private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ========================================================================
     // 1. PUBLIC CRUD & BUSINESS METHODS
@@ -56,6 +66,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return create(request, null);
     }
 
+    @Transactional 
     public TaskResponse create(CreateTaskRequest request, String authorUserId) {
         String columnId = TextUtils.trim(request.columnId());
         BoardColumnEntity column = findBoardColumnById(columnId);
@@ -80,6 +91,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         entity.setParentTaskId(parentTaskId);
         entity.setAssigneesUserId(assigneesUserId);
         entity.setPriority(request.priority());
+
         entity.setStartDate(request.startDate());
         entity.setDueDate(request.dueDate());
         entity.setStatus(TextUtils.trim(request.status()));
@@ -92,12 +104,19 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         TaskEntity saved = taskRepository.save(entity);
 
+        eventPublisher.publishEvent(new TaskCreatedEvent(this, saved.getId(), saved.getStartDate(), saved.getDueDate()));
+
         if (saved.getAssigneesUserId() != null && !saved.getAssigneesUserId().isEmpty()) {
             saved.getAssigneesUserId().forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
 
-        broadcastBoardChange(boardId);
-        activityService.logTaskCreated(saved.getId(), boardId, projectId, normalizedAuthorUserId, saved.getTitle());
+        broadcastBoardChange(boardId, "TASK_CREATED", saved.getId());
+        
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.TASK, saved.getId(), projectId, boardId, saved.getId(),
+                normalizedAuthorUserId, ActivityAction.CREATE, null, null, null,
+                "Task created: " + saved.getTitle()
+        ));
 
         return toResponse(saved, resolveUserSummaries(List.of(saved)));
     }
@@ -162,6 +181,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         return update(id, request, null);
     }
 
+    @Transactional 
     public TaskResponse update(String id, UpdateTaskRequest request, String actorUserId) {
         TaskEntity entity = findTaskById(id);
         String previousTitle = entity.getTitle();
@@ -215,17 +235,23 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
 
         TaskEntity saved = taskRepository.save(entity);
 
+        eventPublisher.publishEvent(new TaskUpdatedEvent(this, saved.getId(), saved.getStartDate(), saved.getDueDate()));
+
         if (saved.getAssigneesUserId() != null) {
             saved.getAssigneesUserId().stream()
                     .filter(assigneeId -> !oldAssignees.contains(assigneeId))
                     .forEach(assigneeId -> notificationDispatcher.notifyTaskAssigned(assigneeId, saved));
         }
 
-        broadcastBoardChange(boardId);
+        broadcastBoardChange(boardId, "TASK_UPDATED", saved.getId());
         String normalizedActorUserId = TextUtils.trimToNull(actorUserId);
 
         if (!sameText(previousColumnId, saved.getColumnId())) {
-            activityService.logTaskMoved(saved.getId(), boardId, projectId, normalizedActorUserId, previousColumnId, saved.getColumnId(), saved.getTitle());
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.TASK, saved.getId(), projectId, boardId, saved.getId(),
+                    normalizedActorUserId, ActivityAction.MOVE, "columnId", previousColumnId, saved.getColumnId(),
+                    "Task moved: " + saved.getTitle()
+            ));
         } else {
             String changedField = null;
             String oldValue = null;
@@ -242,7 +268,11 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             }
 
             if (changedField != null) {
-                activityService.logTaskUpdated(saved.getId(), boardId, projectId, normalizedActorUserId, changedField, oldValue, newValue, saved.getTitle());
+                eventPublisher.publishEvent(new ActivityCreatedEvent(
+                        this, ActivitySource.TASK, saved.getId(), projectId, boardId, saved.getId(),
+                        normalizedActorUserId, ActivityAction.UPDATE, changedField, oldValue, newValue,
+                        "Task updated: " + saved.getTitle()
+                ));
             }
         }
 
@@ -288,9 +318,26 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             entity.setColumnId(newColumnId);
             entity.setOrder(targetOrder);
 
+            if (newColumn.getName() != null) {
+                String colName = newColumn.getName().toUpperCase();
+                if (colName.contains("DONE") || colName.contains("HOÀN THÀNH")) {
+                    entity.setStatus("DONE");
+                } else if (colName.contains("PROGRESS") || colName.contains("ĐANG LÀM") || colName.contains("DOING")) {
+                    entity.setStatus("IN_PROGRESS");
+                } else {
+                    entity.setStatus("TODO");
+                }
+            }
+
             TaskEntity saved = taskRepository.save(entity);
-            broadcastBoardChange(boardId);
-            activityService.logTaskMoved(saved.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), currentColumnId, newColumnId, saved.getTitle());
+            
+            broadcastBoardChange(boardId, "TASK_MOVED", saved.getId());
+            
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.TASK, saved.getId(), projectId, boardId, saved.getId(),
+                    TextUtils.trimToNull(actorUserId), ActivityAction.MOVE, "columnId", currentColumnId, newColumnId,
+                    "Task moved: " + saved.getTitle()
+            ));
 
             return toResponse(saved, resolveUserSummaries(List.of(saved)));
             
@@ -304,6 +351,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         delete(id, null);
     }
 
+    @Transactional 
     public void delete(String id, String actorUserId) {
         TaskEntity entity = findTaskById(id);
         String columnId = entity.getColumnId();
@@ -330,15 +378,25 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         }
         taskRepository.saveAll(toDelete);
 
+        for (String deletedTaskId : deletedTaskIds) {
+             eventPublisher.publishEvent(new TaskDeletedEvent(this, deletedTaskId));
+        }
+
         List<TaskEntity> toResequence = resequenceAfterDelete(columnTasks, deletedTaskIds, affectedGroupKeys);
         if (!toResequence.isEmpty()) {
             taskRepository.saveAll(toResequence);
         }
         
-        broadcastBoardChange(boardId);
-        activityService.logTaskDeleted(entity.getId(), boardId, projectId, TextUtils.trimToNull(actorUserId), entity.getTitle());
+        broadcastBoardChange(boardId, "TASK_DELETED", entity.getId());
+        
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.TASK, entity.getId(), projectId, boardId, entity.getId(),
+                TextUtils.trimToNull(actorUserId), ActivityAction.DELETE, null, null, null,
+                "Task deleted: " + entity.getTitle()
+        ));
     }
 
+    @Transactional 
     public void softDeleteByBoardId(String boardId) {
         List<String> columnIds = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
                 .stream().map(BoardColumnEntity::getId).toList();
@@ -349,10 +407,14 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
-            broadcastBoardChange(boardId);
+            for (TaskEntity task : tasks) {
+                eventPublisher.publishEvent(new TaskDeletedEvent(this, task.getId()));
+            }
+            broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }
 
+    @Transactional 
     public void softDeleteByColumnId(String columnId) {
         BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
         String boardId = columnForBoardId.getBoardId();
@@ -361,7 +423,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (!tasks.isEmpty()) {
             tasks.forEach(TaskEntity::markDeleted);
             taskRepository.saveAll(tasks);
-            broadcastBoardChange(boardId);
+            for (TaskEntity task : tasks) {
+                eventPublisher.publishEvent(new TaskDeletedEvent(this, task.getId()));
+            }
+            broadcastBoardChange(boardId, "COLUMN_TASKS_DELETED", "");
         }
     }
 
@@ -369,9 +434,10 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     // 2. PRIVATE HELPER METHODS (VALIDATION & LOGIC)
     // ========================================================================
 
-    private void broadcastBoardChange(String boardId) {
+    private void broadcastBoardChange(String boardId, String action, String taskId) {
         if (boardId != null) {
-            messagingTemplate.convertAndSend("/topic/board/" + boardId, "CHANGED");
+            String payload = String.format("{\"action\":\"%s\", \"taskId\":\"%s\"}", action, taskId != null ? taskId : "");
+            messagingTemplate.convertAndSend("/topic/board/" + boardId, payload);
         }
     }
 

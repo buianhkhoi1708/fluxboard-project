@@ -1,114 +1,116 @@
 // src/features/dashboard/api/dashboardApi.ts
+import axiosClient from '../../../lib/axiosClient'; // Điều chỉnh path phù hợp với cấu trúc dự án của bạn
 
-const mockData = {
-  SYSTEM_ADMIN: {
-    cards: {
-      total_users: 1250,
-      total_members: 1034,
-      projects: {
-        active: 45,
-        archived: 10,
-        total: 55
-      },
-      total_departments: 15
-    },
-    // Danh sách cho bảng "Project Status" trong Admin Dashboard
-    at_risk_projects: [
-      { id: 'P1', name: 'Domnimors', status: 'At Risk' },
-      { id: 'P2', name: 'Transparency status', status: 'At Risk' },
-      { id: 'P3', name: 'Project projects', status: 'At Risk' },
-      { id: 'P4', name: 'Migration V2', status: 'Delayed' }
-    ],
-    // Dữ liệu cho Bar Chart (Có cột Total đầu tiên)
-    project_status_distribution: [
-      { status: "Total", count: 55, color: "#93c5fd" },
-      { status: "Active", count: 45, color: "#3b82f6" },
-      { status: "At Risk", count: 12, color: "#10b981" },
-      { status: "Delayed", count: 7, color: "#f59e0b" },
-      { status: "Archived", count: 10, color: "#64748b" }
-    ],
-    audit_logs: [
-      { id: "LOG_1", action: "Admin changed user roles for Team Alpha", actor: "System" },
-      { id: "LOG_2", action: "User 123 deleted project archives", actor: "User 123" }
-    ]
-  },
+// ==========================================
+// INTERFACE CHO DỮ LIỆU TỪ BACKEND
+// ==========================================
 
-  MANAGER: {
-    // Tiến độ dự án theo tuần (Story Points)
-    weekly_progress: [
-      { week: "W14", fluxboard: 20, potpan: 15, projectC: 10 },
-      { week: "W15", fluxboard: 45, potpan: 35, projectC: 25 },
-      { week: "W16", fluxboard: 70, potpan: 55, projectC: 40 },
-      { week: "W17", fluxboard: 95, potpan: 80, projectC: 85 }
-    ],
-    // Hoàn thành theo Team (Donut Chart)
-    task_completion_by_team: [
-      { team: "Frontend", percentage: 85 },
-      { team: "Backend", percentage: 70 },
-      { team: "Design", percentage: 92 }
-    ],
-    // AI Prediction vs Actual
-    ai_vs_actual_points: [
-      { task_id: "T-101", ai_point: 8, actual_point: 5 },
-      { task_id: "T-102", ai_point: 13, actual_point: 13 },
-      { task_id: "T-103", ai_point: 15, actual_point: 21 },
-      { task_id: "T-104", ai_point: 5, actual_point: 8 }
-    ]
-  },
+export interface AdminDashboardData {
+  cards: {
+    total_users: number;
+    total_members: number;
+    projects: {
+      active: number;
+      archived: number;
+      total: number;
+    };
+    total_departments: number;
+  };
+  project_status_distribution: Array<{
+    status: string;
+    count: number;
+    color: string;
+  }>;
+  at_risk_projects: Array<{
+    id?: string;
+    name: string;
+    status: string;
+  }>;
+  audit_logs: Array<{
+    id: string;
+    actor: string;
+    action: string;
+    severity: string;
+    created_at?: string;
+  }>;
+}
 
-  LEAD: {
-    // Workload của từng mem (Ánh xạ chuẩn theo ERD total_points)
-    team_workload: [
-      { user_id: "U01", name: "Bùi Anh Khôi", total_points: 65 },
-      { user_id: "U02", name: "Nguyễn Văn Mạnh", total_points: 95 },
-      { user_id: "U03", name: "Lê Hồng Quang", total_points: 40 }
-    ],
-    // Các Task đang "cháy" cần Assignee rõ ràng
-    at_risk_tasks: [
-      { 
-        id: "T-202", 
-        title: "Fix bug Realtime", 
-        due_date: "2026-04-18", 
-        priority: "CRITICAL", 
-        reason: "OVERDUE",
-        assignee_name: "Khôi" 
-      },
-      { 
-        id: "T-205", 
-        title: "Deploy K8s", 
-        due_date: "2026-04-20", 
-        priority: "HIGH", 
-        reason: "STUCK",
-        assignee_name: "Mạnh"
-      }
-    ],
-    recent_activities: [
-      { user: "Mạnh", content: "Đã hoàn thành API Dashboard", time: "5 phút trước" },
-      { user: "Quang", content: "Kẹt ở phần kéo thả UI", time: "20 phút trước" },
-      { user: "Khôi", content: "Đã review code phần Auth", time: "1 giờ trước" }
-    ]
-  },
+export interface ManagerDashboardData {
+  weekly_progress: Array<Record<string, any>>;
+  task_completion_by_team: Array<{
+    team: string;
+    percentage: number;
+  }>;
+  ai_vs_actual_points: Array<{
+    task_id: string;
+    ai_point: number;
+    actual_point: number;
+  }>;
+}
 
-  MEMBER: {
-    my_contribution: { completed: 79, total: 100 },
-    // Danh sách task chi tiết từ bảng `tasks`
-    my_focus: [
-      { id: "T-301", title: "Viết Unit Test cho Auth", priority: "URGENT", due_date: "Due, Today" },
-      { id: "T-302", title: "Update Documentation", priority: "MEDIUM", due_date: "Tomorrow" },
-      { id: "T-303", title: "Fix CSS Mobile Responsive", priority: "HIGH", due_date: "22 Apr" }
-    ],
-    // Dữ liệu Velocity & Transparency Index (PHẦN ĐẮP THỊT QUAN TRỌNG)
-    sprint_history: [
-      { name: 'Sprint 1', velocity: 400, transparency: 450, trend: 350 },
-      { name: 'Sprint 2', velocity: 600, transparency: 650, trend: 600 },
-      { name: 'Sprint 3', velocity: 850, transparency: 950, trend: 1000 }
-    ]
-  }
-};
+export interface LeadDashboardData {
+  team_workload: Array<{
+    user_id: string;
+    name: string;
+    total_points: number;
+  }>;
+  at_risk_tasks: Array<{
+    id: string;
+    title: string;
+    due_date: string;
+    priority: string;
+    reason: string;
+    assignee_name?: string;
+  }>;
+  recent_activities: Array<{
+    user: string;
+    content: string;
+    time: string;
+  }>;
+}
+
+export interface MemberDashboardData {
+  my_contribution: {
+    completed: number;
+    total: number;
+  };
+  my_focus: Array<{
+    id: string;
+    title: string;
+    priority: string;
+    due_date: string;
+  }>;
+  sprint_history?: Array<{
+    name: string;
+    velocity: number;
+    transparency: number;
+    trend: number;
+  }>;
+}
+
+// ==========================================
+// API CALLS – SỬ DỤNG AXIOS CLIENT ĐÃ CẤU HÌNH
+// ==========================================
 
 export const dashboardApi = {
-  getAdminMetrics: () => new Promise<any>(resolve => setTimeout(() => resolve({ data: mockData.SYSTEM_ADMIN }), 500)),
-  getManagerMetrics: () => new Promise<any>(resolve => setTimeout(() => resolve({ data: mockData.MANAGER }), 500)),
-  getLeadMetrics: () => new Promise<any>(resolve => setTimeout(() => resolve({ data: mockData.LEAD }), 500)),
-  getMemberMetrics: () => new Promise<any>(resolve => setTimeout(() => resolve({ data: mockData.MEMBER }), 500)),
+  // Admin
+  getAdminMetrics: async (): Promise<AdminDashboardData> => {
+    // axiosClient trả về chính là response.data nhờ interceptor
+    return await axiosClient.get('/dashboard/admin');
+  },
+
+  // Manager
+  getManagerMetrics: async (): Promise<ManagerDashboardData> => {
+    return await axiosClient.get('/dashboard/manager');
+  },
+
+  // Lead
+  getLeadMetrics: async (): Promise<LeadDashboardData> => {
+    return await axiosClient.get('/dashboard/lead');
+  },
+
+  // Member
+  getMemberMetrics: async (): Promise<MemberDashboardData> => {
+    return await axiosClient.get('/dashboard/member');
+  },
 };

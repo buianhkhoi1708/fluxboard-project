@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
-
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
+  /* 🔥 Đã chỉnh chữ thành màu đen/xám cực đậm */
+  --text: #1f2937;     /* gray-800 - Xám đen cho text thường */
+  --text-h: #000000;   /* Đen tuyền cho thẻ Heading (h1, h2...) */
+  
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
@@ -20,7 +21,10 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
+  
+  /* Xóa color-scheme để tránh tự nhảy màu theo OS nếu không cần thiết */
+  /* color-scheme: light dark; */ 
+  
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -33,10 +37,13 @@
   }
 }
 
+/* ⚠️ Nếu sếp vẫn muốn UI có Dark Mode, nhưng CHỮ PHẢI MÀU ĐEN (không khuyến cáo vì sẽ khó đọc trên nền đen)
+   thì uncomment đoạn này. Tốt nhất nếu ép chữ đen thì nên vô hiệu hóa luôn Dark Mode của text */
+/*
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
+    --text: #1f2937;
+    --text-h: #000000;
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
@@ -47,15 +54,15 @@
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
 }
+*/
 
 body {
-  @apply antialiased text-gray-800;
+  /* @apply antialiased text-gray-800; <- Đã gán color var(--text) ở root nên có thể bỏ text-gray-800 ở đây */
+  @apply antialiased;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text) !important; /* 🔥 Ép cứng màu đen toàn cục */
+  
   /* Đảm bảo body không có margin gây xuất hiện lề trắng */
   margin: 0;
   padding: 0;
@@ -72,10 +79,14 @@ body {
 }
 
 h1,
-h2 {
+h2, 
+h3, 
+h4, 
+h5, 
+h6 {
   font-family: var(--heading);
   font-weight: 500;
-  color: var(--text-h);
+  color: var(--text-h) !important; /* 🔥 Ép cứng màu đen cho Heading */
 }
 
 h1 {

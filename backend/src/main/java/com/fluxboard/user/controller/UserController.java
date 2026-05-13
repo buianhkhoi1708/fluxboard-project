@@ -11,6 +11,7 @@ import com.fluxboard.rbac.annotation.RequirePermission;
 import com.fluxboard.user.dto.request.CreateUserRequest;
 import com.fluxboard.user.dto.request.UpdateNotificationPrefRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
+import com.fluxboard.user.dto.response.UnassignedUserResponse;
 import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.service.UserNotificationPrefService;
@@ -54,6 +55,12 @@ public class UserController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<UserResponse> page = userService.getPage(pageable);
         return ResponseFactory.paged("Users retrieved successfully.", page);
+    }
+
+    @RequirePermission("USER_VIEW")
+    @GetMapping("/unassigned")
+    public ResponseEntity<ApiResponse<List<UnassignedUserResponse>>> getUnassignedUsers() {
+        return ResponseFactory.ok("Unassigned users retrieved successfully.", userService.getUnassignedUsers());
     }
 
     @GetMapping("/{userId}")
@@ -163,10 +170,13 @@ public class UserController {
             return targetUserId;
         }
 
-        // Nếu là ADMIN (được phép xem/sửa data người khác) -> OK
-        String roleName = String.valueOf(currentUser.roleId());
-        if (roleName.contains("ADMIN")) {
-            return targetUserId;
+        boolean isAdmin = currentUser.authorities() != null && 
+                          currentUser.authorities().stream()
+                                     .anyMatch(auth -> auth != null && 
+                                                       auth.toUpperCase().contains("ADMIN"));
+
+        if (isAdmin) {
+            return targetUserId; 
         }
 
         throw new AppException(ErrorCode.FORBIDDEN, "Security: You do not have permission to access other users' data!");

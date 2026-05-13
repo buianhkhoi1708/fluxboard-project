@@ -29,11 +29,16 @@ public class User extends BaseDocument {
     @Field("role_id")
     private String roleId;
 
+    @Indexed
+    @Field("team_id")
+    private String teamId;
+
+    @Indexed
     @Field("department_id")
     private String departmentId;
 
-    @Field("team_id")
-    private String teamId;
+    @Field("status")
+    private String status = "ACTIVE";
 
     @JsonIgnore
     @Field("reset_token")
@@ -83,6 +88,14 @@ public class User extends BaseDocument {
         this.roleId = roleId;
     }
 
+    public String getTeamId() {
+        return teamId;
+    }
+
+    public void setTeamId(String teamId) {
+        this.teamId = teamId;
+    }
+
     public String getDepartmentId() {
         return departmentId;
     }
@@ -91,12 +104,12 @@ public class User extends BaseDocument {
         this.departmentId = departmentId;
     }
 
-    public String getTeamId() {
-        return teamId;
+    public String getStatus() {
+        return status;
     }
 
-    public void setTeamId(String teamId) {
-        this.teamId = teamId;
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public String getResetToken() {

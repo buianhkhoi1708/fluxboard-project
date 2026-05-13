@@ -1,0 +1,215 @@
+package com.fluxboard.organization.department.service;
+
+import com.fluxboard.common.exception.AppException;
+import com.fluxboard.common.exception.ErrorCode;
+import com.fluxboard.common.service.CrudService;
+import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.organization.department.entity.DepartmentEntity;
+import com.fluxboard.organization.department.dto.request.CreateDepartmentRequest;
+import com.fluxboard.organization.department.dto.request.UpdateDepartmentRequest;
+import com.fluxboard.organization.department.dto.response.OrganizationDepartmentResponse;
+import com.fluxboard.organization.department.repository.DepartmentRepository;
+import com.fluxboard.user.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class DepartmentService implements CrudService<
+        OrganizationDepartmentResponse,
+        String,
+        CreateDepartmentRequest,
+        UpdateDepartmentRequest> {
+
+    private final DepartmentRepository departmentRepository;
+    private final UserRepository userRepository;
+    private final com.fluxboard.organization.team.repository.TeamRepository teamRepository;
+
+    public DepartmentService(DepartmentRepository departmentRepository,
+                             UserRepository userRepository,
+                             com.fluxboard.organization.team.repository.TeamRepository teamRepository) {
+        this.departmentRepository = departmentRepository;
+        this.userRepository = userRepository;
+        this.teamRepository = teamRepository;
+    }
+
+    @Override
+    public OrganizationDepartmentResponse create(CreateDepartmentRequest request) {
+        String code = TextUtils.trim(request.code());
+        if (departmentRepository.existsByCodeAndDeletedFalse(code)) {
+            throw new AppException(ErrorCode.CONFLICT, "Department code already exists.");
+        }
+
+        DepartmentEntity entity = new DepartmentEntity();
+        entity.setName(TextUtils.trim(request.name()));
+        entity.setCode(code);
+        entity.setDescription(TextUtils.trimToNull(request.description()));
+        entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        if (request.status() != null) entity.setStatus(TextUtils.trim(request.status()));
+
+        return toResponse(departmentRepository.save(entity));
+    }
+
+    @Override
+    public OrganizationDepartmentResponse getById(String id) {
+        return toResponse(findById(id));
+    }
+
+    @Override
+    public Page<OrganizationDepartmentResponse> getPage(Pageable pageable) {
+        return departmentRepository.findByDeletedFalse(pageable).map(this::toResponse);
+    }
+
+    @Override
+    public OrganizationDepartmentResponse update(String id, UpdateDepartmentRequest request) {
+        DepartmentEntity entity = findById(id);
+
+        if (request.name() != null) {
+            entity.setName(TextUtils.trim(request.name()));
+        }
+        
+        if (request.code() != null) {
+            String code = TextUtils.trim(request.code());
+            if (!entity.getCode().equals(code) && departmentRepository.existsByCodeAndDeletedFalse(code)) {
+                throw new AppException(ErrorCode.CONFLICT, "Department code already exists.");
+            }
+            entity.setCode(code);
+        }
+
+        if (request.description() != null) {
+            entity.setDescription(TextUtils.trimToNull(request.description()));
+        }
+        
+        if (request.managerId() != null) {
+            entity.setManagerId(TextUtils.trimToNull(request.managerId()));
+        }
+
+        if (request.status() != null) {
+            entity.setStatus(TextUtils.trim(request.status()));
+        }
+
+        return toResponse(departmentRepository.save(entity));
+    }
+
+    @Override
+    public void delete(String id) {
+        DepartmentEntity entity = findById(id);
+        entity.markDeleted();
+        departmentRepository.save(entity);
+    }
+
+    // ========== CÁC PHƯƠNG THỨC HỖ TRỢ CHO DASHBOARD ==========
+
+    /**
+     * Tổng số phòng ban đang hoạt động (chưa bị xóa mềm)
+     */
+    public long getTotalDepartments() {
+        return departmentRepository.countByDeletedFalse();
+    }
+
+    /**
+     * Phân bố số lượng thành viên theo từng phòng ban.
+     * Trả về List<Map> với key: "department" (tên phòng ban), "count" (số người)
+     */
+    public List<Map<String, Object>> getMemberDistributionByDepartment() {
+        List<DepartmentEntity> departments = departmentRepository.findByDeletedFalse(Pageable.unpaged()).getContent();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (DepartmentEntity dept : departments) {
+            List<String> teamIds = teamRepository.findByDepartmentIdAndDeletedFalse(dept.getId(), Pageable.unpaged())
+                    .getContent()
+                    .stream()
+                    .map(com.fluxboard.common.entity.BaseDocument::getId)
+                    .toList();
+            
+            long count = 0;
+            if (!teamIds.isEmpty()) {
+                count = userRepository.countByTeamIdInAndDeletedFalse(teamIds);
+            }
+            
+            Map<String, Object> item = new HashMap<>();
+            item.put("department", dept.getName());
+            item.put("count", count);
+            result.add(item);
+        }
+        return result;
+    }
+
+    // ========== API HIERARCHY ==========
+    public com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse getDepartmentHierarchy(String departmentId) {
+        DepartmentEntity dept = departmentRepository.findByIdAndDeletedFalse(departmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Department not found."));
+
+        List<com.fluxboard.organization.team.entity.TeamEntity> teams = teamRepository.findByDepartmentIdAndDeletedFalse(departmentId);
+        List<String> teamIds = teams.stream().map(com.fluxboard.organization.team.entity.TeamEntity::getId).toList();
+        List<com.fluxboard.user.entity.User> users = teamIds.isEmpty() ? List.of() : userRepository.findByTeamIdInAndDeletedFalse(teamIds);
+
+        Map<String, List<com.fluxboard.organization.department.dto.response.UserHierarchyResponse>> usersByTeam = users.stream()
+                .filter(u -> u.getTeamId() != null)
+                .collect(Collectors.groupingBy(
+                        com.fluxboard.user.entity.User::getTeamId,
+                        Collectors.mapping(
+                                u -> new com.fluxboard.organization.department.dto.response.UserHierarchyResponse(
+                                        u.getId(),
+                                        u.getFullName(),
+                                        u.getEmail(),
+                                        u.getStatus()
+                                ),
+                                Collectors.toList()
+                        )
+                ));
+
+        List<com.fluxboard.organization.department.dto.response.TeamHierarchyResponse> teamResponses = teams.stream()
+                .map(t -> new com.fluxboard.organization.department.dto.response.TeamHierarchyResponse(
+                        t.getId(),
+                        t.getName(),
+                        t.getLeadId(),
+                        usersByTeam.getOrDefault(t.getId(), List.of())
+                ))
+                .toList();
+
+        return new com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse(
+                dept.getId(),
+                dept.getName(),
+                dept.getManagerId(),
+                teamResponses
+        );
+    }
+
+    // ========== CÁC PHƯƠNG THỨC HIỆN CÓ ==========
+
+    public boolean existsById(String id) {
+        return departmentRepository.findByIdAndDeletedFalse(TextUtils.trim(id)).isPresent();
+    }
+
+    private DepartmentEntity findById(String id) {
+        return departmentRepository.findByIdAndDeletedFalse(TextUtils.trim(id))
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Department not found."));
+    }
+
+    private OrganizationDepartmentResponse toResponse(DepartmentEntity entity) {
+        return new OrganizationDepartmentResponse(
+                entity.getId(),
+                entity.getName(),
+                entity.getCode(),
+                entity.getDescription(),
+                entity.getManagerId(),
+                entity.getStatus(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+        public long countActive() {
+        return departmentRepository.countByDeletedFalse();
+    }
+
+   
+}

@@ -94,6 +94,32 @@ public class ActivityService {
         log(ActivitySource.TASK, taskId, projectId, boardId, taskId, actorUserId, ActivityAction.DELETE, null, null, null, buildMessage("Task deleted", taskTitle));
     }
 
+    // ==========================================
+    // EXTENSION DEADLINE LOGGING
+    // ==========================================
+    public void logExtensionRequested(String taskId, String projectId, String actorUserId, String currentDueDate, String requestedDueDate, String reason) {
+        String validReason = TextUtils.trimToNull(reason);
+        String message = validReason != null 
+                ? "Deadline extension requested: " + validReason 
+                : "Deadline extension requested";
+
+        log(ActivitySource.TASK, taskId, projectId, null, taskId, actorUserId, ActivityAction.UPDATE, "due_date_request", TextUtils.trimToNull(currentDueDate), TextUtils.trimToNull(requestedDueDate), message);
+    }
+
+    public void logExtensionApproved(String taskId, String projectId, String managerId, String oldDueDate, String newDueDate) {
+        log(ActivitySource.TASK, taskId, projectId, null, taskId, managerId, ActivityAction.UPDATE, "due_date", TextUtils.trimToNull(oldDueDate), TextUtils.trimToNull(newDueDate), "Deadline extension approved");
+    }
+
+    public void logExtensionRejected(String taskId, String currentDueDate, String managerReason) {
+        String validReason = TextUtils.trimToNull(managerReason);
+        String message = validReason != null 
+                ? "Deadline extension rejected: " + validReason 
+                : "Deadline extension rejected";
+
+        // Sử dụng taskId làm projectId và sourceId tạm do Event chưa truyền đủ thông tin, cần đảm bảo DB không bị constraint lỗi.
+        log(ActivitySource.TASK, taskId, null, null, taskId, null, ActivityAction.UPDATE, "due_date_reject", TextUtils.trimToNull(currentDueDate), TextUtils.trimToNull(currentDueDate), message);
+    }
+
     public void logUserCreated(String userId, String actorUserId, String email, String fullName) {
         log(ActivitySource.USER, userId, null, null, null, actorUserId, ActivityAction.CREATE, null, null, null, "User created: %s (%s)".formatted(display(fullName), display(email)));
     }
