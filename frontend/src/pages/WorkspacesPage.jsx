@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback  } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useProjectStore from '../features/workspaces/store/useProjectStore';
 import CreateProjectModal from '../features/workspaces/components/CreateProjectModal';
@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 
 const WorkspacesPage = () => {
-  // 🚀 Đã xóa fetchProjectMembers cho sạch code vì Store tự lo rồi
-  const { projects, isLoading, fetchProjects } = useProjectStore();
+  // 🚀 Đã lấy thêm loadMoreProjects và hasMore từ Store
+  const { projects, isLoading, fetchProjects, loadMoreProjects, hasMore } = useProjectStore();
   
   const getUser = useUserStore((state) => state.getUser);
 
@@ -20,44 +20,32 @@ const WorkspacesPage = () => {
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
-  const [visibleCount, setVisibleCount] = useState(4);
-
-
-  // Vừa vào trang là chỉ cần gọi 1 cú này, Store sẽ tự kéo Project -> tự kéo Member
+  // Vừa vào trang là lấy data trang 0
   useEffect(() => {
-    fetchProjects(); 
-  }, []);
+    fetchProjects(0); 
+  }, [fetchProjects]);
 
-  useEffect(() => {
-      setVisibleCount(4);
-  }, [searchTerm]);
+  // 🚀 Hàm xử lý bắt sự kiện cuộn chuột
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    // Nếu cuộn cách đáy khoảng 50px và chưa đang load, và còn data
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+      if (!isLoading && hasMore) {
+        loadMoreProjects();
+      }
+    }
+  };
 
   const filteredProjects = projects.filter(item => 
     item.project?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Cài đặt Infinite Scroll với Intersection Observer
-  const observer = useRef();
-  const triggerRef = useCallback(node => {
-      if (isLoading) return;
-      
-      // Ngắt kết nối cảm biến cũ nếu có
-      if (observer.current) observer.current.disconnect();
-      
-      // Tạo cảm biến mới
-      observer.current = new IntersectionObserver(entries => {
-          if (entries[0].isIntersecting && visibleCount < filteredProjects.length) {
-              // Tải thêm 2 dự án nữa
-              setVisibleCount(prev => prev + 2); 
-          }
-      });
-      
-      // Gắn cảm biến vào thẻ (node) hiện tại
-      if (node) observer.current.observe(node);
-  }, [isLoading, visibleCount, filteredProjects.length]);
-
   return (
-    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+    <div 
+      // 🚀 Gắn sự kiện onScroll vào div chứa thanh cuộn
+      onScroll={handleScroll}
+      className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8"
+    >
       <div className="max-w-7xl mx-auto">
         
         {/* HEADER */}
@@ -96,8 +84,8 @@ const WorkspacesPage = () => {
           </div>
         </div>
 
-        {/* LOADING & EMPTY STATE */}
-        {isLoading ? (
+        {/* LOADING LẦN ĐẦU & EMPTY STATE */}
+        {isLoading && projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-80 text-slate-400">
             <div className="relative">
               <div className="absolute inset-0 bg-indigo-200/30 blur-2xl rounded-full"></div>
@@ -125,21 +113,15 @@ const WorkspacesPage = () => {
           </div>
         ) : (
           <div className="space-y-8">
-            {filteredProjects.slice(0, visibleCount).map((item, index) => {
+            {filteredProjects.map((item) => {
               const workspace = item.project; 
               const boardsData = item.boards || []; 
               const membersData = item.members || []; 
               
               if (!workspace) return null; 
 
-              const isTriggerElement = index === visibleCount - 2;
-
               return (
-                <section 
-                  ref={isTriggerElement ? triggerRef : null}
-                  key={workspace.id || workspace._id} 
-                  className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all hover:shadow-xl hover:border-indigo-200/50"
-                >
+                <section key={workspace.id || workspace._id} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all hover:shadow-xl hover:border-indigo-200/50">
                   <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-200/50 shrink-0">
@@ -148,29 +130,18 @@ const WorkspacesPage = () => {
                         </span>
                       </div>
                       <div>
-                        {/* 👉 BỌC LINK CHO TÊN DỰ ÁN */}
-                        <Link 
-                            to={`/projects/${workspace.id || workspace._id}?tab=boards`}
-                            className="group-hover/title:text-indigo-600 transition-colors"
-                        >
-                            <h2 className="text-lg font-bold text-slate-800 tracking-tight hover:text-indigo-600">
-                                {workspace.name}
-                            </h2>
-                        </Link>
+                        <h2 className="text-lg font-bold text-slate-800 tracking-tight">
+                          {workspace.name}
+                        </h2>
                         <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 mt-1">
                           <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full">
                             <LayoutGrid size={12} /> {boardsData.length} boards
                           </span>
 
                           {/* AVATAR STACK */}
-                          <Link 
-                            to={`/projects/${workspace.id || workspace._id}?tab=members`}
-                            title="Quản lý nhân sự dự án"
-                            className="flex items-center gap-2 bg-slate-100/80 hover:bg-indigo-50 px-2.5 py-1 rounded-full cursor-pointer transition-all group"
-                          >
-                            <Users size={12} className="text-slate-400 group-hover:text-indigo-500 transition-colors" />
-                            
-                            {membersData.length > 0 ? (
+                          {membersData.length > 0 ? (
+                            <div className="flex items-center gap-2 bg-slate-100/80 px-2.5 py-1 rounded-full">
+                              <Users size={12} className="text-slate-400" />
                               <div className="flex items-center -space-x-1.5">
                                 {membersData.slice(0, 4).map((rawMember, idx) => {
                                   const memberId = rawMember.id || rawMember._id || rawMember.user_id;
@@ -208,13 +179,13 @@ const WorkspacesPage = () => {
                                     </span>
                                   </div>
                                 )}
+                              </div>
                             </div>
-                            ) : (
-                              <span className="text-slate-400 group-hover:text-indigo-600 font-medium transition-colors">
-                                0 members
-                              </span>
-                            )}
-                          </Link>
+                          ) : (
+                            <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-full text-slate-400">
+                              <Users size={12} /> 0 members
+                            </span>
+                          )}
 
                         </div>
                       </div>
@@ -269,10 +240,24 @@ const WorkspacesPage = () => {
                 </section>
               );
             })}
+
+            {/* 🚀 HIỂN THỊ LOADING KHI ĐANG CUỘN (LOAD MORE) */}
+            {isLoading && projects.length > 0 && (
+              <div className="flex justify-center py-6">
+                <Loader2 size={28} className="animate-spin text-indigo-500" />
+              </div>
+            )}
+
+            {/* 🚀 THÔNG BÁO KHI ĐÃ HẾT DATA */}
+            {!hasMore && projects.length > 0 && (
+              <div className="text-center py-6 text-slate-400 text-sm font-medium">
+                You have reached the end of your workspaces.
+              </div>
+            )}
           </div>
         )}
 
-        <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => { setIsModalOpen(false); fetchProjects(); }} />
+        <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => { setIsModalOpen(false); fetchProjects(0); }} />
         <CreateBoardModal isOpen={isBoardModalOpen} onClose={() => setIsBoardModalOpen(false)} projectId={selectedProjectId} onSuccess={() => setIsBoardModalOpen(false)} />
 
       </div>
