@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, UserPlus, Loader2 } from 'lucide-react';
 import { useOrgStore } from '../state/useOrganizationStore';
 import { orgApi } from '../api/organizationApi';
-import { OrgUser } from '../types/orgTypes';
+import { OrgMember } from '../types/orgTypes';
 
 export interface UserPickerModalProps {
   isOpen: boolean;
@@ -14,9 +14,10 @@ export interface UserPickerModalProps {
 const UserPickerModal: React.FC<UserPickerModalProps> = ({ isOpen, onClose, targetDeptId, targetTeamId }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [results, setResults] = useState<OrgUser[]>([]);
+  const [results, setResults] = useState<OrgMember[]>([]);
   const { addMemberToTeam } = useOrgStore();
 
+  // Reset modal và fetch danh sách mặc định khi mở
   useEffect(() => {
     if (!isOpen) {
       setSearchTerm('');
@@ -26,11 +27,39 @@ const UserPickerModal: React.FC<UserPickerModalProps> = ({ isOpen, onClose, targ
     }
   }, [isOpen]);
 
+  // FIX LỖI SPAM API: Thêm Debounce cho Search
+  useEffect(() => {
+    // Không chạy nếu modal đang đóng hoặc search rỗng (vì search rỗng đã được xử lý gọi danh sách mặc định)
+    if (!isOpen || searchTerm.trim().length === 0) return;
+
+    if (searchTerm.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const res: any = await orgApi.searchOrgUsers(searchTerm);
+        // FIX LỖI DATA: Trích xuất đúng chuẩn ResponseFactory của Backend
+        setResults(res.data?.data || []);
+      } catch (error) {
+        console.error("Lỗi tìm kiếm user:", error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500); // Chờ 500ms sau khi ngừng gõ mới gọi API
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, isOpen]);
+
   const fetchUnassigned = async () => {
     setIsSearching(true);
     try {
+      // Giả sử orgApi.getUnassignedUsers() đã được định nghĩa trong file api
       const res: any = await orgApi.getUnassignedUsers();
-      setResults(res.data || []);
+      // FIX LỖI DATA
+      setResults(res.data?.data || []);
     } catch (error) {
       console.error("Lỗi lấy danh sách user:", error);
     } finally {
@@ -38,25 +67,17 @@ const UserPickerModal: React.FC<UserPickerModalProps> = ({ isOpen, onClose, targ
     }
   };
 
-  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchTerm(val);
-    if (val.length > 2) {
-      setIsSearching(true);
-      try {
-        const res: any = await orgApi.searchOrgUsers(val);
-        setResults(res.data || []);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setIsSearching(false);
-      }
-    } else if (val.length === 0) {
+    
+    // Nếu xóa hết chữ, gọi lại danh sách mặc định
+    if (val.length === 0) {
       fetchUnassigned();
     }
   };
 
-  const handleAssignUser = async (user: OrgUser) => {
+  const handleAssignUser = async (user: OrgMember) => {
     if (!targetDeptId || !targetTeamId) return;
     try {
       const userId = user.id || user.user_id;
@@ -104,7 +125,7 @@ const UserPickerModal: React.FC<UserPickerModalProps> = ({ isOpen, onClose, targ
               type="text" 
               placeholder="Tìm theo tên, email..." 
               value={searchTerm}
-              onChange={handleSearch}
+              onChange={handleSearchChange}
               className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-sm shadow-sm"
             />
           </div>
