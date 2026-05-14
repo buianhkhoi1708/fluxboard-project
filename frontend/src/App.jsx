@@ -18,6 +18,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import OrganizationPage from "./pages/OrganizationPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
+import CreateUserTab from "./features/user/components/CreateUserTab";
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/activity" element={<ActivityLogPage />} />
                 <Route path="/organization" element={<OrganizationPage />} />
+                <Route path="/createuser" element={<CreateUserTab />} />
                 <Route
                   path="/projects/:projectId"
                   element={<ProjectDetailPage />}

@@ -45,7 +45,9 @@ export interface OrgDepartment {
 export interface OrgModalState {
   isOpen: boolean;
   mode: 'DEPARTMENT' | 'TEAM';
+  action: 'CREATE' | 'EDIT'; // <--- Thêm dòng này
   targetDeptId: string | null;
+  targetTeam: any | null;    // <--- Thêm dòng này
 }
 
 export interface OrgTargetIds {

@@ -2,6 +2,7 @@ package com.fluxboard.organization.team.controller;
 
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.organization.team.dto.request.AssignMemberRequest;
 import com.fluxboard.organization.team.dto.request.CreateTeamRequest;
 import com.fluxboard.organization.team.dto.request.UpdateTeamRequest;
 import com.fluxboard.organization.team.dto.response.OrganizationTeamResponse;
@@ -78,5 +79,16 @@ public class TeamController {
     public ResponseEntity<ApiResponse<Void>> deleteTeam(@PathVariable String teamId) {
         teamService.delete(teamId);
         return ResponseFactory.ok("Team deleted successfully.");
+    }
+
+    @RequirePermission("TEAM_UPDATE") // Tùy vào quy định bảo mật, thường người có quyền sửa Team sẽ được gán người
+    @PostMapping("/{teamId}/members")
+    public ResponseEntity<ApiResponse<Void>> assignMemberToTeam(
+            @PathVariable String teamId,
+            @Valid @RequestBody AssignMemberRequest request
+    ) {
+        // Gọi Service để xử lý logic gán user vào team
+        teamService.assignMember(teamId, request);
+        return ResponseFactory.ok("User assigned to team successfully.");
     }
 }

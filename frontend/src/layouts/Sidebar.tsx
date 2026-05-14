@@ -1,43 +1,20 @@
 import React, { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuthStore } from "../features/auth/store/useAuthStore";
+import { useRoleAccess } from "../features/rbac/hooks/useRoleAccess"; // 👈 Import Custom Hook phân quyền
 import {
   LayoutDashboard, Briefcase, KanbanSquare, ListTodo,
   Building2, ShieldCheck, Activity, Settings, LogOut,
 } from "lucide-react";
 
 const Sidebar = () => {
-  const { logout, user } = useAuthStore();
+  const { logout } = useAuthStore();
+
+  // 🚀 Gọi 1 dòng duy nhất để lấy hàm kiểm tra quyền (Đã bao gồm logic dịch Role ID động)
+  const { hasAccess } = useRoleAccess();
 
   // ==========================================
-  // 🚀 CƠ CHẾ ĐỒNG BỘ: Bóc tách Role chuẩn từ Profile/Dashboard
-  // ==========================================
-  const currentRole = useMemo(() => {
-    const role = 
-      user?.system_role || 
-      user?.role_name || 
-      user?.role?.name || 
-      user?.role || 
-      user?.role_id || 
-      "MEMBER";
-
-    return String(role).toUpperCase().trim();
-  }, [user]);
-
-  // Mã ID dự phòng cho Admin (Dùng để thông chốt nếu Backend chưa trả về tên Role)
-  const ADMIN_ID = "69CFD39A34353F3CA08D52CE";
-
-  // Hàm kiểm tra quyền năng động
-  const hasAccess = (allowedRoles: string[]) => {
-    // Nếu là ID Admin tối cao hoặc tên Role có chữ ADMIN -> Cho qua hết
-    if (currentRole === ADMIN_ID || currentRole.includes('ADMIN')) return true;
-    
-    // Ngược lại, kiểm tra xem Role hiện tại có nằm trong danh sách cho phép không
-    return allowedRoles.some(role => currentRole.includes(role.toUpperCase()));
-  };
-
-  // ==========================================
-  // DANH SÁCH MENU (Giữ nguyên cấu trúc sếp đã dựng)
+  // DANH SÁCH MENU
   // ==========================================
   const executionItems = [
     { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Dashboard", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
@@ -48,23 +25,24 @@ const Sidebar = () => {
 
   const managementItems = [
     { path: "/organization", icon: <Building2 size={20} />, label: "Organization", roles: ["ADMIN"] },
+    { path: "/createuser", icon: <Building2 size={20} />, label: "Create User", roles: ["ADMIN"] },
     { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Role Access (RBAC)", roles: ["ADMIN"] },
     { path: "/activity", icon: <Activity size={20} />, label: "Activities", roles: ["MANAGER", "ADMIN"] },
     { path: "/settings", icon: <Settings size={20} />, label: "Settings", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
   ];
 
   // ==========================================
-  // 🛠️ BỘ LỌC THỰC THI (Áp dụng cơ chế đồng bộ)
+  // 🛠️ BỘ LỌC THỰC THI (Tự động cập nhật khi hook load xong từ điển Quyền)
   // ==========================================
   const visibleExecutionItems = useMemo(() => {
     return executionItems.filter(item => hasAccess(item.roles));
-  }, [currentRole]);
+  }, [hasAccess]); // Đưa hasAccess vào dependency
 
   const visibleManagementItems = useMemo(() => {
     return managementItems.filter(item => hasAccess(item.roles));
-  }, [currentRole]);
+  }, [hasAccess]);
 
-  // Component Item con (giữ nguyên UI đẹp của sếp)
+  // Component Item con (Giữ nguyên UI của bạn)
   const NavItem = ({ item, isAiHighlight }: { item: any, isAiHighlight?: boolean }) => (
     <NavLink
       to={item.path}
