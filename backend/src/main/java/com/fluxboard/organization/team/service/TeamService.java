@@ -59,6 +59,28 @@ public class TeamService implements CrudService<
         userRepository.save(user);
     }
 
+    public void removeMember(String teamId, String userId) {
+        // 1. Kiểm tra xem Team có tồn tại không
+        TeamEntity team = findById(teamId);
+
+        // 2. Tìm User trong hệ thống
+        User user = userRepository.findById(TextUtils.trim(userId))
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found."));
+
+        // 3. Kiểm tra an toàn: Đảm bảo user này thực sự đang thuộc team này
+        if (user.getTeamId() == null || !user.getTeamId().equals(team.getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "User does not belong to this team.");
+        }
+
+        // 4. Xóa User khỏi Team và Department (Trả về trạng thái Unassigned)
+        user.setTeamId(null);
+        user.setDepartmentId(null);
+        // user.setRoleId(null); // (Tùy chọn) Bỏ comment dòng này nếu bạn muốn reset luôn quyền của họ
+
+        // 5. Lưu lại thay đổi
+        userRepository.save(user);
+    }
+
     @Override
     public OrganizationTeamResponse create(CreateTeamRequest request) {
         String code = TextUtils.trim(request.code());

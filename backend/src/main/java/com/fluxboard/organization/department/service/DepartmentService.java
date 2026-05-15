@@ -171,14 +171,23 @@ public class DepartmentService implements CrudService<
                         t.getId(),
                         t.getName(),
                         t.getLeadId(),
+                        t.getCode(),
                         usersByTeam.getOrDefault(t.getId(), List.of())
                 ))
                 .toList();
+        String managerName = "Chưa phân công";
+        if (dept.getManagerId() != null && !dept.getManagerId().isEmpty()) {
+            managerName = userRepository.findById(dept.getManagerId())
+                    .map(com.fluxboard.user.entity.User::getFullName)
+                    .orElse("Chưa phân công");
+        }
 
         return new com.fluxboard.organization.department.dto.response.DepartmentHierarchyResponse(
                 dept.getId(),
                 dept.getName(),
+                dept.getCode(),
                 dept.getManagerId(),
+                managerName,
                 teamResponses
         );
     }

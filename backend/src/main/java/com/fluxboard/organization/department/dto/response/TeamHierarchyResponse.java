@@ -6,6 +6,7 @@ public record TeamHierarchyResponse(
         String id,
         String name,
         String leadId,
+        String code,
         List<UserHierarchyResponse> members
 ) {
 }

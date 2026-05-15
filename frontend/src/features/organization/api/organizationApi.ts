@@ -9,6 +9,12 @@ export const orgApi = {
 
   createDepartment: (payload: any) =>
     axiosClient.post('/organizations/departments', payload),
+
+  updateDepartment: (id: string, payload: any) => 
+    axiosClient.put(`/organizations/departments/${id}`, payload),
+
+  deleteDepartment: (id: string) => 
+    axiosClient.delete(`/organizations/departments/${id}`),
   
   getDepartmentHierarchy: (id: string) => 
     axiosClient.get(`/organizations/departments/${id}/detail`),
@@ -23,11 +29,17 @@ export const orgApi = {
   updateTeam: (teamId: string, payload: any) =>
     axiosClient.put(`/organizations/teams/${teamId}`, payload),
 
+  deleteTeam: (teamId: string) =>
+    axiosClient.delete(`/organizations/teams/${teamId}`),
+
   assignUserToTeam: (userId: string, teamId: string, departmentId: string) =>
     axiosClient.post(`/organizations/teams/${teamId}/members`, {
       user_id: userId,
       department_id: departmentId
     }),
+
+  removeUserFromTeam: (teamId: string, userId: string) =>
+    axiosClient.delete(`/organizations/teams/${teamId}/members/${userId}`),
 
   /* =========================
      USERS & SEARCH

@@ -48,6 +48,7 @@ export interface OrgModalState {
   action: 'CREATE' | 'EDIT'; // <--- Thêm dòng này
   targetDeptId: string | null;
   targetTeam: any | null;    // <--- Thêm dòng này
+  targetDept?: any | null;
 }
 
 export interface OrgTargetIds {

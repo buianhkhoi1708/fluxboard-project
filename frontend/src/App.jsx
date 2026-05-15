@@ -19,6 +19,7 @@ import ActivityLogPage from "./pages/ActivityLogPage";
 import OrganizationPage from "./pages/OrganizationPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import CreateUserTab from "./features/user/components/CreateUserTab";
+import UnauthorizedPage from "./pages/UnAuthorizedPage"; // 🚀 Nhớ import trang 403 nếu bạn có tạo
 
 function App() {
   return (
@@ -27,30 +28,41 @@ function App() {
         <NuqsAdapter>
           <Routes>
 
-            {/* Route công khai */}
+            {/* ROUTE CÔNG KHAI (Không cần đăng nhập) */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/403" element={<UnauthorizedPage />} /> {/* Trang báo lỗi không có quyền */}
 
-            {/* Route cần đăng nhập */}
+            {/* ROUTE CẦN ĐĂNG NHẬP */}
             <Route element={<ProtectedRoute />}>
               <Route element={<MainLayout />}>
-                <Route path="/" element={<Navigate to="/login" replace />} />
+                
+                {/* Đã đăng nhập thì chuyển hướng "/" về Dashboard thay vì Login */}
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                <Route path="/board" element={<BoardPage />} />
-                <Route path="/adminrbac" element={<AdminRBACPage />} />
-                <Route path="/workspaces" element={<WorkspacesPage />} />
-                <Route path="/board/:id" element={<BoardView />} />
-                <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
+                {/* ========================================== */}
+                {/* 🟢 KHU VỰC CHUNG (Member, Manager, Admin đều xem được) */}
+                {/* ========================================== */}
                 <Route path="/dashboard" element={<DashboardPage/>} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/activity" element={<ActivityLogPage />} />
-                <Route path="/organization" element={<OrganizationPage />} />
-                <Route path="/createuser" element={<CreateUserTab />} />
-                <Route
-                  path="/projects/:projectId"
-                  element={<ProjectDetailPage />}
-                />
+                <Route path="/board" element={<BoardPage />} />
+                <Route path="/board/:id" element={<BoardView />} />
+                <Route path="/workspaces" element={<WorkspacesPage />} />
+                <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
+                <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+                <Route path="/settings" element={<SettingsPage />} /> {/* Thường settings cá nhân ai cũng có */}
+
+
+                {/* ========================================== */}
+                {/* 🔴 KHU VỰC QUẢN TRỊ (Chỉ Admin hoặc Role được cấp phép) */}
+                {/* ========================================== */}
+                <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'SYSTEM_ADMIN']} />}>
+                  <Route path="/adminrbac" element={<AdminRBACPage />} />
+                  <Route path="/organization" element={<OrganizationPage />} />
+                  <Route path="/createuser" element={<CreateUserTab />} />
+                  <Route path="/activity" element={<ActivityLogPage />} />
+                </Route>
+
               </Route>
             </Route>
 

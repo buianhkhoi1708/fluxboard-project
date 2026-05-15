@@ -1,26 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Users, Plus, UserPlus, ShieldAlert, Loader2, Edit2, ChevronRight } from 'lucide-react';
-
-// Import Store và các Interface
+import { Building2, Users, Plus, UserPlus, ShieldAlert, Loader2, Edit2, UserMinus, Trash2 } from 'lucide-react';
 import { useOrgStore } from '../features/organization/state/useOrganizationStore';
 import { OrgDepartment, OrgTeam, OrgMember, OrgModalState, OrgTargetIds, OrganizationPageProps } from '../features/organization/types/orgTypes';
 import OrgFormModal from '../features/organization/components/OrgFormModal';
 import UserPickerModal from '../features/organization/components/UserPickerModal';
-
-interface ExtendedModalState extends OrgModalState {
-  action?: 'CREATE' | 'EDIT';
-  targetTeam?: any | null;
-}
+import { orgApi } from '../features/organization/api/organizationApi';
 
 const OrganizationPage: React.FC<OrganizationPageProps> = () => {
   const { orgTree, isLoading, fetchTree } = useOrgStore();
 
-  const [modalState, setModalState] = useState<ExtendedModalState>({ 
+  const [modalState, setModalState] = useState<OrgModalState>({ 
     isOpen: false, 
     mode: 'DEPARTMENT', 
     action: 'CREATE',
     targetDeptId: null,
-    targetTeam: null
+    targetTeam: null,
+    targetDept: null
   });
   
   const [isUserPickerOpen, setIsUserPickerOpen] = useState<boolean>(false);
@@ -33,8 +28,37 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
     fetchTree();
   }, [fetchTree]);
 
-  const openCreateDeptModal = () => setModalState({ isOpen: true, mode: 'DEPARTMENT', action: 'CREATE', targetDeptId: null, targetTeam: null });
-  const openCreateTeamModal = (deptId: string) => setModalState({ isOpen: true, mode: 'TEAM', action: 'CREATE', targetDeptId: deptId, targetTeam: null });
+  // ==========================================
+  // HÀM ĐIỀU KHIỂN MODAL & THAO TÁC PHÒNG BAN
+  // ==========================================
+  const openCreateDeptModal = () => setModalState({ isOpen: true, mode: 'DEPARTMENT', action: 'CREATE', targetDeptId: null, targetTeam: null, targetDept: null });
+  
+  const openEditDeptModal = (dept: OrgDepartment, displayManagerName: string) => {
+    setModalState({ 
+      isOpen: true, 
+      mode: 'DEPARTMENT', 
+      action: 'EDIT', 
+      targetDeptId: null, 
+      targetTeam: null,
+      targetDept: { ...dept, managerName: displayManagerName } 
+    });
+  };
+
+  const handleDeleteDepartment = async (deptId: string, deptName: string) => {
+    if (!window.confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa phòng ban "${deptName}" không?\nTất cả các Team bên trong cũng có thể bị ảnh hưởng.`)) return;
+    try {
+      await orgApi.deleteDepartment(deptId);
+      fetchTree(); 
+    } catch (error: any) {
+      console.error("Lỗi khi xóa phòng ban:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi xóa phòng ban.");
+    }
+  };
+
+  // ==========================================
+  // HÀM ĐIỀU KHIỂN MODAL & THAO TÁC TEAM
+  // ==========================================
+  const openCreateTeamModal = (deptId: string) => setModalState({ isOpen: true, mode: 'TEAM', action: 'CREATE', targetDeptId: deptId, targetTeam: null, targetDept: null });
   
   const openEditTeamModal = (deptId: string, team: OrgTeam, displayLeadName: string) => {
     setModalState({ 
@@ -42,13 +66,40 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
       mode: 'TEAM', 
       action: 'EDIT', 
       targetDeptId: deptId, 
-      targetTeam: { ...team, leadName: displayLeadName } 
+      targetTeam: { ...team, leadName: displayLeadName },
+      targetDept: null
     });
   };
 
+  // 🚀 HÀM XÓA TEAM
+  const handleDeleteTeam = async (teamId: string, teamName: string) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa Team "${teamName}" không?\nCác thành viên trong team sẽ trở về trạng thái chưa gán nhóm.`)) return;
+    try {
+      await orgApi.deleteTeam(teamId);
+      fetchTree(); 
+    } catch (error: any) {
+      console.error("Lỗi khi xóa team:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi xóa team.");
+    }
+  };
+
+  // ==========================================
+  // HÀM ĐIỀU KHIỂN THÀNH VIÊN
+  // ==========================================
   const openAddMemberModal = (deptId: string, teamId: string) => {
     setTargetIds({ deptId, teamId });
     setIsUserPickerOpen(true);
+  };
+
+  const handleRemoveMember = async (teamId: string, userId: string, userName: string) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn gỡ nhân sự "${userName}" khỏi Team này?`)) return;
+    try {
+      await orgApi.removeUserFromTeam(teamId, userId);
+      fetchTree(); 
+    } catch (error: any) {
+      console.error("Lỗi khi xóa member:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi gỡ nhân sự.");
+    }
   };
 
   return (
@@ -111,7 +162,7 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
                       <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm border border-indigo-100">
                         <ShieldAlert size={28} strokeWidth={1.5} />
                       </div>
-                      <div>
+                      <div className="group/dept relative">
                         <div className="flex items-center gap-3">
                           <h2 className="text-xl font-black text-slate-800 tracking-tight">
                             {dept.name}
@@ -121,6 +172,24 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
                               {dept.code}
                             </span>
                           )}
+                          
+                          {/* NÚT SỬA PHÒNG BAN */}
+                          <button 
+                            onClick={() => openEditDeptModal(dept, displayManagerName)}
+                            title="Chỉnh sửa Phòng ban"
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover/dept:opacity-100"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+
+                          {/* NÚT XÓA PHÒNG BAN */}
+                          <button 
+                            onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                            title="Xóa Phòng ban"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover/dept:opacity-100"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                         <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
                           Giám đốc / Trưởng phòng: <span className="text-slate-800 font-bold">{displayManagerName}</span>
@@ -139,20 +208,26 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
                   <div className="p-8 grid grid-cols-1 xl:grid-cols-2 gap-6 bg-slate-50/30">
                     {dept.teams && dept.teams.length > 0 ? dept.teams.map((team: OrgTeam) => {
                       
-                      const leaderInfo = team.members?.find(m => m.id === team.lead_id || m.userId === team.lead_id);
+                      const actualLeadId = team.leadId || team.lead_id;
+                      const leaderInfo = team.members?.find((m: any) => m.id === actualLeadId || m.userId === actualLeadId);
                       const displayLeadName = team.lead_name || team.leadName || leaderInfo?.full_name || leaderInfo?.fullName || 'Chưa gán';
 
                       return (
-                        <div key={team.id} className="group bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-300 relative">
+                        <div key={team.id} className="group/team bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-300 relative">
                           
                           <div className="flex justify-between items-start mb-6">
                             <div className="flex items-center gap-4">
-                              <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-colors">
+                              <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 group-hover/team:text-indigo-600 group-hover/team:bg-indigo-50 transition-colors">
                                 <Users size={22} strokeWidth={1.5} />
                               </div>
                               <div>
-                                <h3 className="font-bold text-lg text-slate-800 leading-tight">
+                                <h3 className="font-bold text-lg text-slate-800 leading-tight flex items-center gap-2">
                                   {team.name}
+                                  {team.code && (
+                                    <span className="bg-indigo-50 text-indigo-600 border border-indigo-100 text-[9px] px-2 py-0.5 rounded-md font-black uppercase tracking-wider">
+                                      {team.code}
+                                    </span>
+                                  )}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className="text-[11px] text-slate-400 font-medium">Team Lead:</span>
@@ -161,35 +236,61 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
                               </div>
                             </div>
                             
-                            {/* Nút Sửa ẩn hiện mượt mà khi hover vào Team */}
-                            <button 
-                              onClick={() => openEditTeamModal(dept.id, team, displayLeadName)}
-                              title="Cập nhật thông tin Team"
-                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            >
-                              <Edit2 size={16} />
-                            </button>
+                            {/* KHU VỰC NÚT ACTION CỦA TEAM (ẨN HIỆN KHI HOVER) */}
+                            <div className="flex items-center gap-1 opacity-0 group-hover/team:opacity-100 transition-all">
+                              <button 
+                                onClick={() => openEditTeamModal(dept.id, team, displayLeadName)}
+                                title="Cập nhật thông tin Team"
+                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              
+                              {/* 🚀 NÚT XÓA TEAM */}
+                              <button 
+                                onClick={() => handleDeleteTeam(team.id, team.name)}
+                                title="Xóa Team"
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Danh sách Member */}
                           <div className="space-y-2 mb-6 min-h-[80px]">
-                            {team.members && team.members.length > 0 ? team.members.map((member: OrgMember) => (
-                              <div key={member.id || member.userId} className="group/member flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm">
-                                    {(member?.full_name || member?.fullName || 'U').charAt(0)}
+                            {team.members && team.members.length > 0 ? team.members.map((member: OrgMember) => {
+                              const memberId = member.id || member.userId || member.user_id;
+                              const memberName = member.full_name || member.fullName || 'U';
+
+                              return (
+                                <div key={memberId} className="group/member flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 relative">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm">
+                                      {memberName.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-bold text-slate-700 group-hover/member:text-indigo-700 transition-colors">{memberName}</p>
+                                      <p className="text-[11px] text-slate-400 font-medium">{member?.email}</p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-sm font-bold text-slate-700 group-hover/member:text-indigo-700 transition-colors">{member?.full_name || member?.fullName}</p>
-                                    <p className="text-[11px] text-slate-400 font-medium">{member?.email}</p>
+                                  
+                                  {/* Trạng thái Active */}
+                                  <div className="flex items-center justify-center w-6 h-6 group-hover/member:hidden transition-all">
+                                    <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
                                   </div>
+
+                                  {/* 🚀 NÚT GỠ MEMBER */}
+                                  <button 
+                                    onClick={() => handleRemoveMember(team.id, memberId as string, memberName)}
+                                    title="Gỡ khỏi Team"
+                                    className="hidden group-hover/member:flex items-center justify-center w-8 h-8 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                                  >
+                                    <UserMinus size={14} strokeWidth={2.5} />
+                                  </button>
                                 </div>
-                                {/* Dấu chấm trạng thái tối giản */}
-                                <div className="flex items-center justify-center w-6 h-6">
-                                  <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                </div>
-                              </div>
-                            )) : (
+                              );
+                            }) : (
                               <div className="flex flex-col items-center justify-center h-full py-4 text-slate-400">
                                 <p className="text-[13px] font-medium">Chưa có thành viên nào.</p>
                               </div>
@@ -223,6 +324,7 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
         mode={modalState.mode}
         action={modalState.action}
         targetTeam={modalState.targetTeam}
+        targetDept={modalState.targetDept} 
         targetDeptId={modalState.targetDeptId}
         onClose={() => setModalState({ ...modalState, isOpen: false })} 
       />
