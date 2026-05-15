@@ -2,6 +2,7 @@ package com.fluxboard.organization.team.controller;
 
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.organization.team.dto.request.AssignMemberRequest;
 import com.fluxboard.organization.team.dto.request.CreateTeamRequest;
 import com.fluxboard.organization.team.dto.request.UpdateTeamRequest;
 import com.fluxboard.organization.team.dto.response.OrganizationTeamResponse;
@@ -73,10 +74,31 @@ public class TeamController {
                 teamService.update(teamId, request));
     }
 
+    @RequirePermission("TEAM_UPDATE") // Dùng chung quyền UPDATE team vì đây là thao tác chỉnh sửa thành viên
+    @DeleteMapping("/{teamId}/members/{userId}")
+    public ResponseEntity<ApiResponse<Void>> removeMemberFromTeam(
+            @PathVariable String teamId,
+            @PathVariable String userId
+    ) {
+        teamService.removeMember(teamId, userId);
+        return ResponseFactory.ok("User removed from team successfully.");
+    }
+
     @RequirePermission("TEAM_DELETE")
     @DeleteMapping("/{teamId}")
     public ResponseEntity<ApiResponse<Void>> deleteTeam(@PathVariable String teamId) {
         teamService.delete(teamId);
         return ResponseFactory.ok("Team deleted successfully.");
+    }
+
+    @RequirePermission("TEAM_UPDATE") // Tùy vào quy định bảo mật, thường người có quyền sửa Team sẽ được gán người
+    @PostMapping("/{teamId}/members")
+    public ResponseEntity<ApiResponse<Void>> assignMemberToTeam(
+            @PathVariable String teamId,
+            @Valid @RequestBody AssignMemberRequest request
+    ) {
+        // Gọi Service để xử lý logic gán user vào team
+        teamService.assignMember(teamId, request);
+        return ResponseFactory.ok("User assigned to team successfully.");
     }
 }
