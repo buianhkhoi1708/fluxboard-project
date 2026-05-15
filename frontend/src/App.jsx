@@ -19,7 +19,7 @@ import ActivityLogPage from "./pages/ActivityLogPage";
 import OrganizationPage from "./pages/OrganizationPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import CreateUserTab from "./features/user/components/CreateUserTab";
-import UnauthorizedPage from "./pages/UnAuthorizedPage"; // 🚀 Nhớ import trang 403 nếu bạn có tạo
+import UnauthorizedPage from "./pages/UnauthorizedPage"; // 🚀 Nhớ import trang 403 nếu bạn có tạo
 
 function App() {
   return (
