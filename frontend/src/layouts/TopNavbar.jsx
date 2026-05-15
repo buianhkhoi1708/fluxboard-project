@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import Logo from '../../src/assets/icon.svg'; // Check the path nếu báo lỗi
-import { Bell, ChevronDown, Search, User } from 'lucide-react';
-import { useAuthStore } from '../features/auth/store/useAuthStore'; // 👈 Import store
-import { useRoleAccess } from '../features/rbac/hooks/useRoleAccess'; // 👈 Import hook phân quyền
+import Logo from '../../src/assets/icon.svg'; 
+import { ChevronDown, Search, User } from 'lucide-react';
+import { useAuthStore } from '../features/auth/store/useAuthStore'; 
+import { useRoleAccess } from '../features/rbac/hooks/useRoleAccess'; 
+
+import NotificationDropdown from '../features/notification/components/NotificationDropdown';
 
 const TopNavbar = () => {
-  // 1. Lấy thông tin user từ Global Store
   const { user, logout } = useAuthStore();
   const { currentRoleName } = useRoleAccess(); 
   
-  // State để mở dropdown menu của User (nếu cần)
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // 2. Xử lý Avatar và Tên hiển thị
   const userName = user?.full_name || user?.fullName || "Guest User";
   const userInitial = userName.charAt(0).toUpperCase();
   const avatarUrl = user?.avatar_url || user?.avatarUrl;
@@ -65,19 +64,13 @@ const TopNavbar = () => {
       {/* RIGHT SECTION: Notifications & Profile */}
       <div className="flex items-center gap-4 md:gap-5">
         
-        {/* Notification Button */}
-        <button className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all">
-          <Bell size={20} />
-          {/* Ví dụ: Có thể ẩn badge này nếu không có thông báo */}
-          <span className="absolute top-1.5 right-1.5 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
-            3
-          </span>
-        </button>
+        {/* 🚀 ĐÃ THAY THẾ NÚT BELL TĨNH BẰNG COMPONENT NOTIFICATION ĐỘNG */}
+        <NotificationDropdown />
         
         {/* Vertical Divider */}
         <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
 
-        {/* 🚀 User Profile Section (Dynamic) */}
+        {/* User Profile Section */}
         <div className="relative">
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -96,7 +89,7 @@ const TopNavbar = () => {
             )}
           </button>
 
-          {/* Profile Dropdown (Tùy chọn) */}
+          {/* Profile Dropdown */}
           {isProfileOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-lg border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
               <div className="px-4 py-2 border-b border-slate-100 mb-1">

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Info, AlertTriangle, XCircle, Clock } from 'lucide-react';
-import { useNotificationStore } from '../features/notification/stores/useNotificationStore';
-// Import userStore để lấy userId ném vào WebSocket
-import { useUserStore } from '../features/user/store/useUserStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useUserStore } from '../../user/store/useUserStore';
+import { useNavigate } from 'react-router-dom'; // 🚀 IMPORT THÊM CÁI NÀY
 
 const NotificationDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate(); // 🚀 KHAI BÁO HÀM CHUYỂN TRANG
   
   const currentUser = useUserStore((state: any) => state.currentUser);
   const { 
@@ -14,41 +15,30 @@ const NotificationDropdown: React.FC = () => {
     markAsRead, markAllAsRead 
   } = useNotificationStore();
 
-  // Khi User đăng nhập thì khởi tạo WebSocket
   useEffect(() => {
     const userId = currentUser?.id || currentUser?._id;
-    if (userId) {
-      connectWebSocket(userId);
-    }
-    return () => {
-      // Khi User đăng xuất hoặc rời khỏi app thì ngắt kết nối
-      disconnectWebSocket();
-    };
+    if (userId) connectWebSocket(userId);
+    return () => disconnectWebSocket();
   }, [currentUser, connectWebSocket, disconnectWebSocket]);
 
-  // Click ra ngoài để đóng dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 🚀 Hàm hỗ trợ nhận diện Icon và màu sắc dựa trên nội dung thông báo từ Spring Boot
   const getNotificationStyle = (message: string) => {
     if (message.includes('🚨') || message.includes('WARNING')) return { icon: <AlertTriangle size={16} className="text-orange-500" />, bg: 'bg-orange-50', border: 'border-orange-100' };
     if (message.includes('🛑') || message.includes('OVERDUE')) return { icon: <XCircle size={16} className="text-rose-500" />, bg: 'bg-rose-50', border: 'border-rose-100' };
     if (message.includes('✅') || message.includes('APPROVED')) return { icon: <Check size={16} className="text-emerald-500" />, bg: 'bg-emerald-50', border: 'border-emerald-100' };
     if (message.includes('⏳') || message.includes('EXTENSION')) return { icon: <Clock size={16} className="text-amber-500" />, bg: 'bg-amber-50', border: 'border-amber-100' };
-    return { icon: <Info size={16} className="text-indigo-500" />, bg: 'bg-indigo-50', border: 'border-indigo-100' }; // Default (Assigned task)
+    return { icon: <Info size={16} className="text-indigo-500" />, bg: 'bg-indigo-50', border: 'border-indigo-100' }; 
   };
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Nút Chuông */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors focus:outline-none"
@@ -59,7 +49,6 @@ const NotificationDropdown: React.FC = () => {
         )}
       </button>
 
-      {/* Box Dropdown */}
       {isOpen && (
         <div className="absolute right-0 mt-3 w-80 md:w-96 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
           
@@ -72,20 +61,18 @@ const NotificationDropdown: React.FC = () => {
             )}
           </div>
 
-          <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2">
+          <div className="max-h-[350px] overflow-y-auto custom-scrollbar p-2">
             {notifications.length === 0 ? (
               <div className="py-8 text-center text-slate-400">
                 <Bell size={32} className="mx-auto mb-2 opacity-20" />
                 <p className="text-sm font-medium">No new notifications</p>
               </div>
             ) : (
-              notifications.map((notif) => {
+              notifications.slice(0, 5).map((notif) => { // Tối ưu chỉ hiện 5 cái mới nhất ở Dropdown
                 const style = getNotificationStyle(notif.message);
-                
                 return (
                   <div 
-                    key={notif.id}
-                    onClick={() => markAsRead(notif.id)}
+                    key={notif.id} onClick={() => markAsRead(notif.id)}
                     className={`p-3 mb-2 rounded-xl flex gap-3 cursor-pointer transition-all ${notif.isRead ? 'opacity-60 hover:bg-slate-50' : `bg-white hover:${style.bg} border ${style.border} shadow-sm`}`}
                   >
                     <div className={`mt-0.5 shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${style.bg}`}>
@@ -93,24 +80,32 @@ const NotificationDropdown: React.FC = () => {
                     </div>
                     <div className="flex-1">
                       <p className={`text-sm ${notif.isRead ? 'text-slate-600' : 'text-slate-800 font-semibold'} leading-snug`}>
-                        {/* Loại bỏ emoji thừa vì đã có icon rồi */}
                         {notif.message.replace(/🚨|🛑|✅|⏳/g, '').trim()}
                       </p>
                       <span className="text-[10px] font-bold text-slate-400 mt-1 block">
                         {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    {!notif.isRead && (
-                      <div className="shrink-0 flex items-center justify-center w-3">
-                        <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                      </div>
-                    )}
+                    {!notif.isRead && <div className="shrink-0 flex items-center justify-center w-3"><div className="w-2 h-2 rounded-full bg-indigo-500"></div></div>}
                   </div>
                 );
               })
             )}
           </div>
           
+          {/* 🚀 THÊM NÚT XEM TẤT CẢ Ở ĐÂY */}
+          <div className="p-3 border-t border-slate-100 bg-slate-50/80">
+            <button 
+              onClick={() => {
+                setIsOpen(false);
+                navigate('/notifications');
+              }}
+              className="w-full py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm"
+            >
+              Xem tất cả thông báo
+            </button>
+          </div>
+
         </div>
       )}
     </div>
