@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Info, AlertTriangle, XCircle, Clock } from 'lucide-react';
 import { useNotificationStore } from '../stores/useNotificationStore';
 import { useUserStore } from '../../user/store/useUserStore';
-import { useNavigate } from 'react-router-dom'; // 🚀 IMPORT THÊM CÁI NÀY
+import { useNavigate } from 'react-router-dom';
 
 const NotificationDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
