@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workspaceApi } from '../api/wokspaceApi';
+import { workspaceApi } from '../api/workspaceApi'; // 🚀 ĐÃ FIX TYPO: 'wokspaceApi' -> 'workspaceApi'
 import { WorkspaceOverview } from '../types/workspaceTypes';
 import { useUserStore } from '../../user/store/useUserStore';
 
@@ -12,32 +12,37 @@ export const useWorkspaces = () => {
     queryKey: WORKSPACE_KEYS.all,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      // 🚀 Luôn lấy đúng 2 project mỗi lần tải
+      // 🚀 Mỗi trang lấy đúng 2 project để test Infinite Scroll
       const response: any = await workspaceApi.getProjectOverviews(pageParam as number, 2);
       
+      // Bọc lót mọi cấu trúc dữ liệu trả về từ API phân trang
       const rawData = response.content || response.data?.content || response.data || [];
       
+      // Lọc bỏ các project đã bị đánh dấu xóa mờ (is_deleted === true)
       const activeProjects = rawData.filter((item: WorkspaceOverview) => {
         const p = item.project;
         return p && (p.is_deleted === false || p.is_deleted === undefined);
       }) as WorkspaceOverview[];
 
-      // Lưu User vào Cache toàn cục
+      // Lưu thông tin thành viên (User) vào Cache toàn cục trong Store để modal bốc ra dùng luôn
       activeProjects.forEach(item => {
         const pid = item.project?.id || item.project?._id;
-        if (pid && item.members?.length > 0) {
-          useUserStore.getState().saveUsersToCache(item.members, pid);
+        if (pid && item.members && item.members.length > 0) {
+          useUserStore.getState().saveUsersToCache(item.members, String(pid));
         }
       });
 
-      // Nếu API trả về đủ 2 phần tử, chứng tỏ vẫn còn trang tiếp theo
-      const hasNext = rawData.length === 2;
-
+      // 🚀 FIX LOGIC LẬT TRANG: 
+      // Kiểm tra xem Backend có báo là trang cuối chưa (chuẩn Spring Data Pageable)
+      // Nếu không có trường 'last', ta dự phòng bằng cách kiểm tra số lượng dữ liệu thô trả về
+      const isLastPage = response.last !== undefined ? response.last : rawData.length < 2;
+      
       return {
         data: activeProjects,
-        nextPage: hasNext ? (pageParam as number) + 1 : undefined,
+        nextPage: !isLastPage ? (pageParam as number) + 1 : undefined,
       };
     },
+    // Trả về số trang kế tiếp, nếu là undefined thì Tanstack Query tự hiểu là hết trang để cuộn
     getNextPageParam: (lastPage) => lastPage.nextPage,
   });
 };
