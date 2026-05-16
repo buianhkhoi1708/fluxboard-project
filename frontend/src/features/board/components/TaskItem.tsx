@@ -2,43 +2,93 @@ import React, { useState, memo } from 'react';
 import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
 import { useBoardStore } from '../stores/useBoardStore';
-// 🚀 1. IMPORT KHO TOÀN CỤC VÀO ĐÂY
 import { useUserStore } from '../../user/store/useUserStore'; 
+import { useDeleteTask, useUpdateTask, useGetBoardDetail } from '../hooks/useBoardQueries';
+
 import DeleteConfirmModal from './DeleteConfirmModal'; 
 import TaskDetailModal from './TaskDetailModal'; 
 
-const priorityColors = { 
-  Low: 'bg-blue-100 text-blue-700', 
+// 🚀 1. IMPORT TYPE TỪ FILE INDEX CHUNG
+import { TaskItemProps, Task } from '../types/index';
+
+// 🚀 2. ÉP KIỂU RECORD CHO DICTIONARY MÀU SẮC
+const priorityColors: Record<string, string> = { 
+  Low: 'bg-blue-100 text-blue-700',  
   Medium: 'bg-yellow-100 text-yellow-700', 
   High: 'bg-orange-100 text-orange-700', 
   Critical: 'bg-red-100 text-red-700' 
 };
 
-const formatDateForInput = (dateString) => {
+// 🚀 3. ĐỊNH NGHĨA TYPE STRING CHO THAM SỐ
+const formatDateForInput = (dateString?: string | null) => {
   if (!dateString) return '';
   return dateString.split('T')[0];
 };
 
-const TaskItem = memo(({ task, listId, isOverlay }) => {
-  // 🚀 2. XÓA getMemberById, CHỈ LẤY deleteTask và toggleSubtask
-  const { deleteTask, toggleSubtask, board } = useBoardStore(); 
+// 🚀 4. BỌC COMPONENT VỚI REACT.FC VÀ PROPS TƯƠNG ỨNG
+const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => {
+  const { activeBoardId } = useBoardStore();
   
-  // 🚀 3. LÔI HÀM getUser TỪ KHO TOÀN CỤC RA
+  // Ép kiểu activeBoardId về string để truyền vào hook
+  const { data: board } = useGetBoardDetail(activeBoardId as string);
+  const projectId = board?.projectId || board?.project_id;
+
   const getUser = useUserStore((state) => state.getUser);
   
-  // Lấy ProjectID hiện tại để hàm getUser biết đường mà mò đúng Role
-  const projectId = board?.projectId || board?.project_id;
+  const { mutateAsync: deleteApiTask } = useDeleteTask();
+  const { mutateAsync: updateApiTask } = useUpdateTask();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); 
   
+  // Đảm bảo ID ném vào useSortable là string thuần
+  const safeTaskId = String(task.id || task._id);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id || task._id, 
+    id: safeTaskId, 
     data: { type: 'Task', task, listId }
   });
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+
+  const handleDeleteTask = async () => {
+    if (!activeBoardId) return;
+    try {
+      await deleteApiTask({ taskId: safeTaskId, boardId: activeBoardId });
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Lỗi khi xóa Task:", error);
+    }
+  };
+
+  // 🚀 5. ÉP KIỂU CHO EVENT CLICK VÀ ID SUBTASK
+  const handleToggleSubtask = async (e: React.MouseEvent, subtaskId: string) => {
+    e.stopPropagation(); 
+    if (!activeBoardId) return;
+
+    const subtask = task.subtasks?.find((st: Task) => st.id === subtaskId || st._id === subtaskId);
+    if (!subtask) return;
+
+    const newStatus = (subtask.status === 'DONE' || subtask.is_done) ? 'TODO' : 'DONE';
+
+    try {
+      await updateApiTask({
+        taskId: subtaskId,
+        boardId: activeBoardId,
+        updateData: {
+          title: subtask.title,
+          description: subtask.description || "",
+          column_id: listId,
+          parent_task_id: safeTaskId,
+          status: newStatus
+        }
+      });
+    } catch (error) {
+      console.error("Lỗi khi cập nhật Subtask:", error);
+    }
+  };
 
   return (
     <>
@@ -59,7 +109,7 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
           </div>
         )}
 
-        {(task.due_date || task.estimated_days) && (
+        {(task.due_date || (task.estimated_days && task.estimated_days > 0)) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] font-medium text-slate-500">
             {task.due_date && (
               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 whitespace-nowrap">
@@ -67,21 +117,22 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
                 <span>{formatDateForInput(task.due_date)}</span>
               </div>
             )}
-            {task.estimated_days > 0 && (
+            {task.estimated_days && task.estimated_days > 0 ? (
               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-100 whitespace-nowrap">
                 <Clock size={10} />
                 <span>{task.estimated_days} days</span>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
-        {task.subtasks?.length > 0 && (
+        {task.subtasks && task.subtasks.length > 0 && (
           <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2 cursor-default">
-            {task.subtasks.map(st => (
+            {/* 🚀 6. ĐỊNH NGHĨA ST LÀ TYPE TASK */}
+            {task.subtasks.map((st: Task) => (
               <div 
-                key={st.id || st._id} 
-                onClick={(e) => { e.stopPropagation(); toggleSubtask(listId, task.id || task._id, st.id || st._id); }} 
+                key={String(st.id || st._id)} 
+                onClick={(e) => handleToggleSubtask(e, String(st.id || st._id))} 
                 className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors"
               >
                 {st.status === 'DONE' ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
@@ -95,7 +146,12 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-medium border-t border-slate-100 pt-2.5">
           <div className="flex items-center gap-2">
-            {task.priority && <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[task.priority] || priorityColors.Medium}`}><Flag size={10} /> <span className="text-[10px] font-bold uppercase">{task.priority}</span></span>}
+            {task.priority && (
+              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[task.priority] || priorityColors.Medium}`}>
+                <Flag size={10} /> 
+                <span className="text-[10px] font-bold uppercase">{task.priority}</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -105,10 +161,9 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
               if (assigneeArray.length > 0) {
                 return (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    {assigneeArray.map((item, idx) => {
+                    {/* 🚀 7. ĐỊNH NGHĨA ITEM */}
+                    {assigneeArray.map((item: any, idx: number) => {
                       const userId = typeof item === 'object' ? (item.id || item._id) : item;
-                      
-                      // 🚀 4. ĐIỂM ĂN TIỀN LÀ ĐÂY: Dùng getUser thay cho getMemberById
                       const member = getUser(userId, projectId); 
                       
                       const displayName = member?.full_name || 'Unnamed';
@@ -162,11 +217,23 @@ const TaskItem = memo(({ task, listId, isOverlay }) => {
         </div>
       </div>
 
-      <DeleteConfirmModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} onConfirm={() => deleteTask(listId, task.id || task._id)} taskTitle={task.title} />
+      <DeleteConfirmModal 
+        isOpen={isDeleteModalOpen} 
+        onClose={() => setIsDeleteModalOpen(false)} 
+        onConfirm={handleDeleteTask} 
+        taskTitle={task.title} 
+      />
       
-      <TaskDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} task={task} listId={listId} />
+      <TaskDetailModal 
+        isOpen={isDetailModalOpen} 
+        onClose={() => setIsDetailModalOpen(false)} 
+        task={task} 
+        listId={listId} 
+      />
     </>
   );
 });
+
+TaskItem.displayName = 'TaskItem';
 
 export default TaskItem;
