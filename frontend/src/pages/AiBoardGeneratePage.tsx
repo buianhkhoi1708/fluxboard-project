@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useProjectStore from '../features/workspaces/store/useProjectStore';
-import { useAllUsers, useGenerateAiBoard } from '../features/ai/hooks/useAiQueries';
+import { useGenerateAiBoard } from '../features/ai/hooks/useAiQueries';
 import { useRbacStore } from '../features/rbac/store/useRbacStore';
+import { useQuery } from '@tanstack/react-query';
 import axiosClient from '../lib/axiosClient';
+
+// 🚀 IMPORT MODAL THÊM THÀNH VIÊN VỪA LÀM
+import ProjectDetailMemberModal from '../features/project/components/ProjectDetailMemberModal';
 
 import {
   Sparkles, ArrowRight, ArrowLeft,
@@ -55,25 +59,28 @@ const ErrorAlert = ({ message }) => {
 // ===================== MAIN COMPONENT =====================
 const AiBoardGeneratorPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { projectId: passedProjectId, members: passedMembers } = location.state || {};
   
   // --- 1. GLOBAL STORES ---
   const { projects, fetchProjects } = useProjectStore();
-  const { data: dbUsers = [], isLoading: isUsersLoading } = useAllUsers();
   const { mutateAsync: generateAiBoard, isPending: isGeneratingAi } = useGenerateAiBoard();
-  
   const { roles: systemRoles, fetchInitialData: fetchRbacData } = useRbacStore();
   
-  // 🚀 LỌC QUYỀN AN TOÀN (WHITELIST)
+  // LỌC QUYỀN AN TOÀN (WHITELIST)
   const ALLOWED_ROLES = ['PROJECT_ADMIN', 'PM', 'LEAD', 'MEMBER', 'VIEWER'];
   const projectRoles = systemRoles.filter(r => ALLOWED_ROLES.includes(r.name));
-  
-  const defaultRoleId = projectRoles.find(r => r.name === 'MEMBER')?.id || projectRoles[0]?.id;
   const viewerRoleId = projectRoles.find(r => r.name === 'VIEWER')?.id;
 
   // --- 2. LOCAL STATE ---
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
+  
+  // 🚀 TÍCH HỢP MODAL
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [memberToEdit, setMemberToEdit] = useState(null);
+
   const [prompt, setPrompt] = useState('');
   const [generationMode, setGenerationMode] = useState('ADVANCED');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -81,64 +88,81 @@ const AiBoardGeneratorPage = () => {
   const [loadingText, setLoadingText] = useState('Đang khởi tạo...');
   const [isSyncingRbac, setIsSyncingRbac] = useState(false);
 
+  // 🚀 3. FETCH PROJECT MEMBERS (CHỈ KHI ĐÃ CHỌN PROJECT)
+  const { data: projectMembers = [], isLoading: isMembersLoading, refetch: refetchMembers } = useQuery({
+    queryKey: ['project-members', selectedProjectId],
+    queryFn: async () => {
+        if (!selectedProjectId) return [];
+        const response: any = await axiosClient.get(`/projects/${selectedProjectId}/members`);
+        return response.data?.data || response.data || [];
+    },
+    enabled: !!selectedProjectId, // Tự động chạy khi có Project ID
+  });
+
+  // Tự động update state được chọn khi list member thay đổi (VD: Thêm/Xóa xong)
+  useEffect(() => {
+    if (projectMembers.length > 0) {
+        // Mặc định chọn TẤT CẢ member có trong project để gán vào Board
+        const defaultSelections = projectMembers.map((m: any) => ({
+            userId: m.userId || m.user_id || m.user?.id || m.id,
+            roleId: (m.roleIds && m.roleIds[0]) || (m.role_ids && m.role_ids[0]) || ''
+        }));
+        setSelectedMembers(defaultSelections);
+    } else {
+        setSelectedMembers([]);
+    }
+  }, [projectMembers]);
+
+
+  // 4. AUTO-FILL DATA (NẾU NHẢY TỪ MODAL)
+  useEffect(() => {
+    if (passedProjectId) {
+      setSelectedProjectId(passedProjectId);
+      setCurrentStep(2); // Dừng ở Bước 2 để kiểm tra nhân sự
+    }
+  }, [passedProjectId]);
+
+
   useEffect(() => {
     if (projects.length === 0) fetchProjects();
     if (systemRoles.length === 0) fetchRbacData();
   }, [fetchProjects, fetchRbacData, projects.length, systemRoles.length]);
 
-  // --- 3. HANDLERS ---
-  const toggleMember = (userId) => {
+  // --- 5. HANDLERS ---
+  const toggleMember = (userId, existingRoleId) => {
     setSelectedMembers(prev => {
       const exists = prev.find(m => m.userId === userId);
       if (exists) return prev.filter(m => m.userId !== userId);
-      return [...prev, { userId, roleId: defaultRoleId }]; 
+      return [...prev, { userId, roleId: existingRoleId }]; 
     });
     setErrors({});
   };
 
-  const updateMemberRole = (userId, roleId) => {
-    setSelectedMembers(prev => prev.map(m => m.userId === userId ? { ...m, roleId } : m));
-  };
-
   const nextStep = () => {
     if (currentStep === 1 && !selectedProjectId) return setErrors({ project: "Sếp chọn 1 Workspace để tiếp tục nhé!" });
-    if (currentStep === 2 && selectedMembers.length === 0) return setErrors({ members: "Dự án cần ít nhất 1 nhân sự tham gia!" });
+    if (currentStep === 2 && selectedMembers.length === 0) return setErrors({ members: "Cần tích chọn ít nhất 1 nhân sự để đưa vào Board!" });
     setErrors({});
     setCurrentStep(prev => prev + 1);
   };
 
-const handleFinalGenerate = async () => {
-    // 1. Kiểm tra đầu vào
+  const handleFinalGenerate = async () => {
     if (!prompt.trim()) { 
       setErrors({ prompt: "Nhập mô tả để AI làm việc sếp ơi!" }); 
       return; 
     }
     
-    // 2. Bật trạng thái loading (Sử dụng đúng biến sếp đang khai báo ở useState)
     setIsSyncingRbac(true);
-    setLoadingText("Đang đồng bộ nhân sự & tạo Board...");
+    setLoadingText("AI đang phân rã task & tính Deadline (khoảng 1 phút)...");
     
     try {
-      // 3. Bước 1: Gán nhân sự vào Workspace
-      // Chạy Promise.all để tối ưu tốc độ
-      await Promise.all(selectedMembers.map(m => 
-        axiosClient.post(`/projects/${selectedProjectId}/members`, { 
-          user_id: m.userId, 
-          role_ids: [m.roleId] 
-        }).catch((err) => {
-          console.warn(`User ${m.userId} có thể đã tồn tại trong project:`, err);
-        }) 
-      ));
-
-      setLoadingText("AI đang phân rã task & tính Deadline (khoảng 1 phút)...");
+      // 🚀 BƯỚC 1 (ĐÃ BỎ): Không cần đồng bộ (POST API thêm member) nữa vì mình load member TRỰC TIẾP TỪ PROJECT ra rồi. Những người này ĐÃ CÓ trong Project.
       
-      // 4. Bước 2: Lọc danh sách nhân sự thực thi (loại Viewer)
+      // BƯỚC 2: Lọc danh sách nhân sự thực thi (loại Viewer)
       const validAssignees = selectedMembers
         .filter(m => m.roleId !== viewerRoleId)
         .map(m => m.userId);
 
-      // 5. Bước 3: Gọi Hook tạo Board qua AI (ÉP ĐÚNG SNAKE_CASE CHO JAVA V6)
-      // Lưu ý: Tui đổi 'user_prompt' thành 'prompt' để khớp với record AiPromptRequest.java
+      // BƯỚC 3: Gọi Hook tạo Board qua AI
       const newBoardId = await generateAiBoard({
         project_id: selectedProjectId,
         prompt: prompt,
@@ -147,16 +171,13 @@ const handleFinalGenerate = async () => {
         project_start_date: new Date(startDate).toISOString()
       });
 
-      // 6. Thành công: Chuyển hướng sang Board mới
       navigate(`/board/${newBoardId}`);
 
     } catch (e) { 
-      // 7. Bắt lỗi chi tiết thay vì thông báo chung chung
       console.error("🚨 LỖI QUY TRÌNH TẠO BOARD:", e);
       const errorMsg = e.response?.data?.message || e.message || "Hệ thống quá tải hoặc hết Token";
-      alert(`Thất bại: ${errorMsg}\nSếp F12 tab Console để xem lỗi chi tiết từ Google nhé!`); 
+      alert(`Thất bại: ${errorMsg}`); 
     } finally {
-      // 8. Tắt trạng thái loading
       setIsSyncingRbac(false);
     }
   };
@@ -165,6 +186,19 @@ const handleFinalGenerate = async () => {
 
   return (
     <div className="flex flex-col h-full absolute inset-0 bg-[#F8FAFC] overflow-hidden">
+      
+      {/* 🚀 MODAL QUẢN LÝ THÀNH VIÊN */}
+      <ProjectDetailMemberModal 
+        isOpen={isMemberModalOpen}
+        onClose={() => {
+            setIsMemberModalOpen(false);
+            setMemberToEdit(null);
+            refetchMembers(); // Gọi lại API để load member mới ngay lập tức
+        }}
+        projectId={selectedProjectId}
+        editMember={memberToEdit}
+      />
+
       {/* ========== HEADER ========== */}
       <header className="h-14 bg-white/80 backdrop-blur-sm border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">
@@ -185,7 +219,6 @@ const handleFinalGenerate = async () => {
         </div>
       </header>
 
-      {/* 🚀 THE BULLETPROOF LOCK: Dùng thẻ absolute bọc toàn bộ nội dung Main */}
       <main className="flex-1 relative bg-[#F8FAFC]">
         <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
           <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col min-h-0">
@@ -223,118 +256,114 @@ const handleFinalGenerate = async () => {
               </div>
             )}
 
-            {/* ---------- STEP 2: RBAC BLOCK (ĐÃ KHÓA CỨNG FLEX & CHIỀU CAO) ---------- */}
+            {/* ---------- STEP 2: RBAC BLOCK (THIẾT KẾ MỚI CHO THÀNH VIÊN ĐÃ CÓ TRONG PROJECT) ---------- */}
             {currentStep === 2 && (
-              <div className="flex-1 flex flex-col min-h-0 h-full animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 flex-1 min-h-0 h-full">
+              <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col min-h-0 h-full animate-in fade-in slide-in-from-right-4 duration-500">
                   
-                  {/* CỘT TRÁI (Danh sách User) */}
-                  <div className="flex flex-col shrink-0 lg:w-4/12 xl:w-3/12 h-1/3 lg:h-full bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hệ thống Nhân sự</span>
-                      <UserPlus size={14} className="text-slate-400"/>
-                    </div>
-                    {isUsersLoading ? <UserListSkeleton /> : (
-                      <div className="p-2 space-y-1 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-                        {dbUsers.map((user) => {
-                          const isSelected = selectedMembers.find(m => m.userId === user.id);
-                          return (
-                            <button key={user.id} onClick={() => toggleMember(user.id)} className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'hover:bg-slate-50'}`}>
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-[10px] ${isSelected ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
-                                {(user.username || user.email || 'U').charAt(0).toUpperCase()}
-                              </div>
-                              <div className="text-left flex-1 min-w-0">
-                                <p className="text-xs font-bold truncate">{user.username || user.email}</p>
-                              </div>
-                              {isSelected && <CheckCircle2 size={14} className="ml-auto shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* CỘT PHẢI (Cấu hình Role) */}
-                  <section className="flex flex-col flex-1 min-h-0 bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-200 overflow-hidden h-2/3 lg:h-full">
+                  {/* CỘT DUY NHẤT (Danh sách User của Project) */}
+                  <section className="flex flex-col flex-1 min-h-0 bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-200 overflow-hidden h-full">
+                    
                     <div className="px-6 py-4 lg:py-5 border-b border-slate-100 shrink-0 bg-gradient-to-r from-white to-slate-50 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-indigo-50 rounded-2xl hidden lg:flex items-center justify-center text-indigo-600 shrink-0">
+                        <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 shrink-0">
                             <KeyRound size={20} />
                         </div>
                         <div>
                             <h2 className="text-base lg:text-lg font-black text-slate-900 flex items-center gap-2">
-                              Phân quyền Dự án
+                              Tổ chức Nhóm ({projectMembers.length} thành viên)
                             </h2>
                             <p className="text-[10px] lg:text-xs text-slate-500 font-medium">
-                              Vai trò cho {selectedMembers.length} nhân sự.
+                              Kiểm tra danh sách và chọn người tham gia Board.
                             </p>
                         </div>
                       </div>
+                      
+                      {/* 🚀 NÚT THÊM NGƯỜI MỚI VÀO PROJECT */}
+                      <button 
+                         onClick={() => setIsMemberModalOpen(true)}
+                         className="flex items-center gap-2 bg-slate-900 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shadow-sm"
+                      >
+                         <UserPlus size={14} /> Mời thêm
+                      </button>
                     </div>
 
-                    {/* Vùng Scroll Nội Bộ của Cột Phải */}
                     <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 lg:p-6 bg-slate-50/30">
-                      {selectedMembers.length === 0 ? (
+                      {isMembersLoading ? (
+                          <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                             <Loader2 size={32} className="animate-spin text-indigo-500 mb-4" />
+                             <span className="text-xs font-bold">Đang tải nhân sự Project...</span>
+                          </div>
+                      ) : projectMembers.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400">
                           <Fingerprint size={48} lg:size={64} className="mb-4 opacity-20" />
-                          <span className="text-xs font-black uppercase tracking-widest opacity-40">Chưa chọn nhân sự</span>
+                          <span className="text-xs font-black uppercase tracking-widest opacity-40">Dự án trống</span>
+                          <button onClick={() => setIsMemberModalOpen(true)} className="mt-4 text-indigo-600 text-sm font-bold underline">Thêm thành viên đầu tiên</button>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-6 max-w-5xl">
-                          {selectedMembers.map(member => {
-                            const user = dbUsers.find(u => u.id === member.userId);
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {projectMembers.map((member: any) => {
+                            const safeUserId = member.userId || member.user_id || member.user?.id || member.id;
+                            const name = member.full_name || member.user?.full_name || member.name || 'Unnamed';
+                            const email = member.email || member.user?.email || '';
+                            const roleId = (member.roleIds && member.roleIds[0]) || (member.role_ids && member.role_ids[0]) || '';
+                            
+                            // Lấy tên Role từ RBAC List
+                            const roleObj = systemRoles.find(r => r.id === roleId);
+                            const roleName = roleObj ? roleObj.name : 'MEMBER';
+
+                            const isSelected = !!selectedMembers.find(m => m.userId === safeUserId);
+
                             return (
-                              <div key={member.userId} className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className="p-1.5 bg-slate-200/50 rounded-lg text-slate-600 shrink-0">
-                                    <ShieldCheck size={16} />
-                                  </div>
-                                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest truncate">
-                                    User: {user?.username || user?.email}
-                                  </h3>
-                                  <div className="h-px flex-1 bg-slate-200" />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                                  {projectRoles.map((role) => {
-                                    const isChecked = member.roleId === role.id;
-                                    return (
-                                      <label
-                                        key={role.id}
-                                        className={`group relative flex items-start justify-between p-3 rounded-2xl border-2 transition-all duration-200 cursor-pointer ${
-                                          isChecked 
-                                            ? 'bg-white border-indigo-200 shadow-md shadow-indigo-50' 
-                                            : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'
-                                        }`}
-                                      >
-                                        <div className="pr-3 flex-1">
-                                          <div className={`font-bold text-xs mb-1 font-mono tracking-tight transition-colors ${isChecked ? 'text-indigo-900' : 'text-slate-800'}`}>
-                                            {role.name}
-                                          </div>
-                                          <div className="text-[9px] text-slate-500 font-medium leading-relaxed line-clamp-2">
-                                            {role.description || 'Quyền hạn trong hệ thống.'}
-                                          </div>
+                                <div key={safeUserId} className={`group relative flex items-center justify-between p-4 rounded-2xl border-2 transition-all duration-200 ${
+                                    isSelected 
+                                      ? 'bg-white border-indigo-200 shadow-md shadow-indigo-50' 
+                                      : 'bg-white border-slate-100 opacity-60 hover:opacity-100 hover:border-slate-300'
+                                  }`}
+                                >
+                                    <div className="flex items-center gap-3 flex-1 min-w-0 pr-4" onClick={() => toggleMember(safeUserId, roleId)} style={{cursor: 'pointer'}}>
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 border ${isSelected ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                            {name.charAt(0).toUpperCase()}
                                         </div>
-
-                                        <div className="relative inline-flex items-center shrink-0 mt-0.5">
-                                           <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${isChecked ? 'border-indigo-600 bg-indigo-600 shadow-sm' : 'border-slate-300 bg-white'}`}>
-                                              {isChecked && <div className="w-1.5 h-1.5 bg-white rounded-full animate-in zoom-in" />}
-                                           </div>
-                                           <input type="radio" className="hidden" checked={isChecked} onChange={() => updateMemberRole(member.userId, role.id)} />
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`font-bold text-sm truncate transition-colors ${isSelected ? 'text-indigo-950' : 'text-slate-800'}`}>
+                                                {name}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{email}</span>
+                                                <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${isSelected ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                    {roleName}
+                                                </span>
+                                            </div>
                                         </div>
-                                      </label>
-                                    );
-                                  })}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {/* Nút Sửa Quyền (Mở lại Modal) */}
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMemberToEdit(member);
+                                                setIsMemberModalOpen(true);
+                                            }}
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                        >
+                                            <ShieldCheck size={16} />
+                                        </button>
+
+                                        {/* Checkbox ảo */}
+                                        <div onClick={() => toggleMember(safeUserId, roleId)} className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer ${isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300 bg-white'}`}>
+                                            {isSelected && <CheckCircle2 size={12} className="text-white shrink-0" strokeWidth={4} />}
+                                        </div>
+                                    </div>
                                 </div>
-                              </div>
                             );
                           })}
                         </div>
                       )}
                     </div>
                   </section>
-                </div>
-                <div className="shrink-0 pt-2">
+                
+                <div className="shrink-0 pt-2 text-center">
                    <ErrorAlert message={errors.members} />
                 </div>
               </div>
@@ -392,7 +421,7 @@ const handleFinalGenerate = async () => {
       {/* ========== FOOTER ========== */}
       <footer className="h-20 bg-white/80 backdrop-blur-sm border-t border-slate-200 px-4 md:px-8 flex items-center justify-between shrink-0 z-20">
         {currentStep > 1 ? (
-          <button onClick={() => setCurrentStep(prev => prev - 1)} className="flex items-center gap-2 text-xs font-black text-slate-400 hover:text-slate-800 transition-all uppercase tracking-widest">
+          <button onClick={() => (passedProjectId && currentStep === 2) ? navigate(-1) : setCurrentStep(prev => prev - 1)} className="flex items-center gap-2 text-xs font-black text-slate-400 hover:text-slate-800 transition-all uppercase tracking-widest">
             <ArrowLeft size={16} /> Quay lại
           </button>
         ) : <div />}

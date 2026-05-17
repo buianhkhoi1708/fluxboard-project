@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workspaceApi } from '../api/workspaceApi'; // 🚀 ĐÃ FIX TYPO: 'wokspaceApi' -> 'workspaceApi'
+import { workspaceApi } from '../api/workspaceApi'; 
 import { WorkspaceOverview } from '../types/workspaceTypes';
 import { useUserStore } from '../../user/store/useUserStore';
 
@@ -12,37 +12,52 @@ export const useWorkspaces = () => {
     queryKey: WORKSPACE_KEYS.all,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      // 🚀 Mỗi trang lấy đúng 2 project để test Infinite Scroll
+      // 1. Kéo danh sách Overview các dự án
       const response: any = await workspaceApi.getProjectOverviews(pageParam as number, 2);
-      
-      // Bọc lót mọi cấu trúc dữ liệu trả về từ API phân trang
       const rawData = response.content || response.data?.content || response.data || [];
       
-      // Lọc bỏ các project đã bị đánh dấu xóa mờ (is_deleted === true)
+      // Lọc bỏ dự án đã xóa
       const activeProjects = rawData.filter((item: WorkspaceOverview) => {
         const p = item.project;
         return p && (p.is_deleted === false || p.is_deleted === undefined);
       }) as WorkspaceOverview[];
 
-      // Lưu thông tin thành viên (User) vào Cache toàn cục trong Store để modal bốc ra dùng luôn
-      activeProjects.forEach(item => {
+      // 🚀 2. GỌI THÊM API LẤY MEMBER CHO TỪNG DỰ ÁN (Chạy song song bằng Promise.all)
+      const projectsWithMembers = await Promise.all(
+        activeProjects.map(async (item) => {
+          const pid = item.project?.id || item.project?._id;
+          if (!pid) return { ...item, members: [] };
+
+          try {
+            // Gọi API lấy members mà sếp vừa nhắc
+            const membersRes: any = await workspaceApi.getProjectMembers(String(pid));
+            const membersData = membersRes.data?.data || membersRes.data?.content || membersRes.data || membersRes || [];
+            
+            // Gộp members vào trong object project để UI có cái xài
+            return { ...item, members: membersData };
+          } catch (error) {
+            console.error(`Lỗi khi lấy member cho project ${pid}:`, error);
+            return { ...item, members: [] }; // Lỗi thì trả về mảng rỗng để không crash app
+          }
+        })
+      );
+
+      // 3. Lưu User vào Cache toàn cục để các modal khác bốc ra nhanh
+      projectsWithMembers.forEach(item => {
         const pid = item.project?.id || item.project?._id;
         if (pid && item.members && item.members.length > 0) {
           useUserStore.getState().saveUsersToCache(item.members, String(pid));
         }
       });
 
-      // 🚀 FIX LOGIC LẬT TRANG: 
-      // Kiểm tra xem Backend có báo là trang cuối chưa (chuẩn Spring Data Pageable)
-      // Nếu không có trường 'last', ta dự phòng bằng cách kiểm tra số lượng dữ liệu thô trả về
+      // 4. Check xem còn trang không
       const isLastPage = response.last !== undefined ? response.last : rawData.length < 2;
       
       return {
-        data: activeProjects,
+        data: projectsWithMembers, // 🚀 Trả về danh sách ĐÃ CÓ MEMBERS
         nextPage: !isLastPage ? (pageParam as number) + 1 : undefined,
       };
     },
-    // Trả về số trang kế tiếp, nếu là undefined thì Tanstack Query tự hiểu là hết trang để cuộn
     getNextPageParam: (lastPage) => lastPage.nextPage,
   });
 };

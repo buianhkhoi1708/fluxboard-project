@@ -19,30 +19,33 @@ export const boardApi = {
   },
 
   getBoard: async (boardId: string): Promise<any> => {
-    // Đã xóa ?t=${Date.now()} vì TanStack Query sẽ lo vụ cache
     const response: any = await axiosClient.get(`/boards/${boardId}`);
     return response.data || response; 
   },
 
-// --- COLUMN ---
-  createColumn: async (payload: { list_name: string; project_id: string; order: number }) => {
-    // 🚀 Sửa '/columns' thành '/board-columns'
-    const response: any = await axiosClient.post('/board-columns', payload);
+  // --- COLUMN ---
+  // 🚀 ĐÃ TỐI ƯU: Chỉ lọc lấy name và board_id gửi đi, loại bỏ hoàn toàn trường 'order' để không bị gãy lỗi 400
+  createColumn: async (payload: { name: string; board_id: string; order?: number }) => {
+    const finalPayload = {
+      name: payload.name,
+      board_id: payload.board_id
+    };
+    const response: any = await axiosClient.post('/board-columns', finalPayload);
     return response.data || response;
   },
 
-  updateColumn: async (columnId: string, payload: { list_name: string }) => {
-    // 🚀 Sửa '/columns' thành '/board-columns'
+  // 🚀 ĐÃ FIX: Đồng bộ đổi list_name thành name gửi lên API cập nhật cột
+  updateColumn: async (columnId: string, payload: { name: string }) => {
     const response: any = await axiosClient.put(`/board-columns/${columnId}`, payload);
     return response.data || response;
   },
 
   deleteColumn: async (columnId: string) => {
-    // 🚀 Sửa '/columns' thành '/board-columns'
     const response: any = await axiosClient.delete(`/board-columns/${columnId}`);
     return response.data || response;
   },
 
+  // --- TASK ---
   createTask: async (taskData: any) => {
     const response: any = await axiosClient.post('/tasks', taskData);
     return response.data || response;
@@ -59,14 +62,12 @@ export const boardApi = {
   },
 
   moveTask: async (taskId: string, columnId: string, order: number, boardId: string) => {
-    // Đảm bảo Backend nhận đúng snake_case như sếp đã viết
     return await axiosClient.patch(`/tasks/${taskId}/move`, {
       new_column_id: columnId, 
       new_order: order,
       board_id: boardId 
     });
   },
-
 
   // --- PROJECT MEMBERS ---
   addProjectMember: async (projectId: string, userId: string, roleIds: string[] = ["MEMBER"]) => {

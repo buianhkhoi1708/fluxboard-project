@@ -126,7 +126,8 @@ export const useCreateColumn = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ list_name, project_id, order, boardId }: { list_name: string, project_id: string, order: number, boardId: string }) => 
-      boardApi.createColumn({ list_name, project_id, order }),
+      // 🚀 FIX TẠI ĐÂY: Dịch list_name thành name, dùng boardId truyền vào board_id
+      boardApi.createColumn({ name: list_name, board_id: boardId, order }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(variables.boardId) });
     },
@@ -137,7 +138,8 @@ export const useUpdateColumn = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ columnId, list_name, boardId }: { columnId: string, list_name: string, boardId: string }) => 
-      boardApi.updateColumn(columnId, { list_name }),
+      // 🚀 FIX TẠI ĐÂY: Dịch list_name thành name
+      boardApi.updateColumn(columnId, { name: list_name }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(variables.boardId) });
     },

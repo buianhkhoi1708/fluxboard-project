@@ -28,9 +28,22 @@ const WorkspacesPage = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // 🚀 3. LÀM PHẲNG DỮ LIỆU TỪ CÁC TRANG (PAGES) CỦA TANSTACK QUERY
+ // 🚀 LÀM PHẲNG VÀ LỌC TRÙNG LẶP DỮ LIỆU (DEDUPLICATE)
   const allProjects = useMemo(() => {
     if (!data?.pages) return [];
-    return data.pages.flatMap(page => page.data);
+    
+    // 1. Gom tất cả các trang lại thành 1 mảng
+    const flatData = data.pages.flatMap(page => page.data);
+    
+    // 2. Lọc bỏ các phần tử trùng ID (Chống lỗi 'Encountered two children with the same key')
+    const uniqueData = Array.from(
+      new Map(flatData.map(item => {
+        const projectId = item.project?.id || item.project?._id;
+        return [projectId, item]; // Key là ID, Value là cục data. Map sẽ tự đè những thằng trùng ID!
+      })).values()
+    );
+    
+    return uniqueData;
   }, [data]);
 
   // Bộ lọc tìm kiếm Client-side trên mảng phẳng dữ liệu đã tải
