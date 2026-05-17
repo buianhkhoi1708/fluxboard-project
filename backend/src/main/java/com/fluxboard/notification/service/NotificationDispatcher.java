@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.email.service.EmailService;
+import com.fluxboard.notification.entity.NotificationEntity;
+import com.fluxboard.notification.repository.NotificationRepository;
 import com.fluxboard.user.dto.response.UserNotificationPrefResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
@@ -27,11 +29,49 @@ import lombok.extern.slf4j.Slf4j;
 public class NotificationDispatcher {
 
     private final EmailService emailService;
+    private final NotificationDebounceService debounceService;
+    private final NotificationRepository notificationRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserNotificationPrefService prefService;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
     
+
+    /**
+     * Kích hoạt thông báo khi Task bị thay đổi (Kéo thả, cập nhật)
+     * Sẽ delay 1 phút để chống Spam.
+     */
+    public void dispatchTaskMovedNotification(String recipientId, String taskId, String taskName, String boardId) {
+        
+        // 1. Tạo một cái Key duy nhất cho sự kiện này
+        String debounceKey = "TASK_MOVED_" + taskId + "_" + recipientId;
+
+        // 2. Truyền lệnh vào Cỗ máy thời gian, setup delay 60000 ms (1 phút)
+        debounceService.debounce(debounceKey, () -> {
+            
+            // --- ĐOẠN CODE NÀY CHỈ CHẠY SAU 1 PHÚT NẾU KHÔNG AI ĐỤNG TỚI TASK ĐÓ NỮA ---
+
+            // A. Lưu vào Database
+            NotificationEntity notif = new NotificationEntity();
+            notif.setRecipientId(recipientId);
+            notif.setType("TASK_MOVED");
+            notif.setTitle("Task update");
+            notif.setMessage("Task '" + taskName + "' Location/status has been updated.");
+            notif.setMetadata(Map.of("taskId", taskId, "boardId", boardId));
+            
+            NotificationEntity savedNotif = notificationRepository.save(notif);
+
+            // B. Bắn Real-time qua WebSocket thẳng tới cá nhân người nhận
+            // Kênh gửi: /topic/user/{recipientId}/notifications
+            messagingTemplate.convertAndSend(
+                    "/topic/user/" + recipientId + "/notifications",
+                    savedNotif
+            );
+
+        }, 60000); // Đếm ngược 60 giây
+    }
+
+
     // Khai báo TaskScheduler và bộ nhớ đệm phục vụ cơ chế Debounce
     private final TaskScheduler taskScheduler;
     private final Map<String, ScheduledFuture<?>> pendingNotifications = new ConcurrentHashMap<>();
