@@ -8,12 +8,15 @@ import { useUserStore } from '../../user/store/useUserStore';
 import { useDeleteTask, useUpdateTask, useGetBoardDetail } from '../hooks/useBoardQueries';
 
 import DeleteConfirmModal from './DeleteConfirmModal'; 
-import TaskDetailModal from './TaskDetailModal'; 
+// 🚀 ĐÃ BỎ IMPORT TaskDetailModal: Vì giờ BoardView đã "thầu" việc hiển thị Modal rồi!
 
-// 🚀 1. IMPORT TYPE TỪ FILE INDEX CHUNG
-import { TaskItemProps, Task } from '../types/index';
+import { TaskItemProps as BaseTaskItemProps, Task } from '../types/index';
 
-// 🚀 2. ÉP KIỂU RECORD CHO DICTIONARY MÀU SẮC
+// 🚀 MỞ RỘNG PROPS ĐỂ NHẬN HÀM TỪ COLUMN TRUYỀN XUỐNG
+interface TaskItemProps extends BaseTaskItemProps {
+  onOpenTaskDetail?: (taskId: string) => void;
+}
+
 const priorityColors: Record<string, string> = { 
   Low: 'bg-blue-100 text-blue-700',  
   Medium: 'bg-yellow-100 text-yellow-700', 
@@ -21,17 +24,15 @@ const priorityColors: Record<string, string> = {
   Critical: 'bg-red-100 text-red-700' 
 };
 
-// 🚀 3. ĐỊNH NGHĨA TYPE STRING CHO THAM SỐ
 const formatDateForInput = (dateString?: string | null) => {
   if (!dateString) return '';
   return dateString.split('T')[0];
 };
 
-// 🚀 4. BỌC COMPONENT VỚI REACT.FC VÀ PROPS TƯƠNG ỨNG
-const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => {
+// 🚀 HỨNG PROPS onOpenTaskDetail TẠI ĐÂY
+const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpenTaskDetail }) => {
   const { activeBoardId } = useBoardStore();
   
-  // Ép kiểu activeBoardId về string để truyền vào hook
   const { data: board } = useGetBoardDetail(activeBoardId as string);
   const projectId = board?.projectId || board?.project_id;
 
@@ -41,9 +42,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
   const { mutateAsync: updateApiTask } = useUpdateTask();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); 
   
-  // Đảm bảo ID ném vào useSortable là string thuần
   const safeTaskId = String(task.id || task._id);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -63,7 +62,6 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
     }
   };
 
-  // 🚀 5. ÉP KIỂU CHO EVENT CLICK VÀ ID SUBTASK
   const handleToggleSubtask = async (e: React.MouseEvent, subtaskId: string) => {
     e.stopPropagation(); 
     if (!activeBoardId) return;
@@ -97,7 +95,12 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
         style={style} 
         {...attributes} 
         {...listeners} 
-        onClick={() => setIsDetailModalOpen(true)}
+        // 🚀 KÍCH HOẠT HÀM ĐỂ BẬT MODAL Ở BOARDVIEW
+        onClick={() => {
+          if (!isOverlay && onOpenTaskDetail) {
+            onOpenTaskDetail(safeTaskId);
+          }
+        }}
         className={`group relative flex flex-col bg-white p-3.5 sm:p-4 rounded-xl shadow-sm border border-slate-200 cursor-grab active:cursor-grabbing hover:border-indigo-300 hover:shadow-md transition-all ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
       >
         <h4 className="text-sm font-semibold text-slate-800 break-words pr-14 leading-snug">{task.title}</h4>
@@ -128,7 +131,6 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
 
         {task.subtasks && task.subtasks.length > 0 && (
           <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2 cursor-default">
-            {/* 🚀 6. ĐỊNH NGHĨA ST LÀ TYPE TASK */}
             {task.subtasks.map((st: Task) => (
               <div 
                 key={String(st.id || st._id)} 
@@ -161,7 +163,6 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
               if (assigneeArray.length > 0) {
                 return (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    {/* 🚀 7. ĐỊNH NGHĨA ITEM */}
                     {assigneeArray.map((item: any, idx: number) => {
                       const userId = typeof item === 'object' ? (item.id || item._id) : item;
                       const member = getUser(userId, projectId); 
@@ -203,7 +204,11 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
 
         <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm rounded-lg p-0.5 shadow-sm border border-slate-100">
           <button 
-            onClick={(e) => { e.stopPropagation(); setIsDetailModalOpen(true); }} 
+            // 🚀 KÍCH HOẠT HÀM Ở NÚT EDIT LUÔN
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (onOpenTaskDetail) onOpenTaskDetail(safeTaskId);
+            }} 
             className="p-2 md:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
           >
             <Edit2 size={14} />
@@ -222,13 +227,6 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay }) => 
         onClose={() => setIsDeleteModalOpen(false)} 
         onConfirm={handleDeleteTask} 
         taskTitle={task.title} 
-      />
-      
-      <TaskDetailModal 
-        isOpen={isDetailModalOpen} 
-        onClose={() => setIsDetailModalOpen(false)} 
-        task={task} 
-        listId={listId} 
       />
     </>
   );

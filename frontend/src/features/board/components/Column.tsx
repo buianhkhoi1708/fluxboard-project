@@ -1,7 +1,7 @@
 import React, { useState, memo, useRef, useEffect } from 'react';
 import { MoreHorizontal, Plus, Trash2, Edit2 } from 'lucide-react';
 import TaskItem from './TaskItem';
-import CreateTaskModal from './CreateTaskModal'; // 🚀 IMPORT MODAL MỚI
+import CreateTaskModal from './CreateTaskModal'; 
 
 import { useBoardStore } from '../stores/useBoardStore';
 import { getColumnTotalPoints } from '../utils/boardUtils'; 
@@ -12,12 +12,16 @@ import { ColumnProps } from '../types/index';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-const Column: React.FC<ColumnProps> = memo(({ list }) => {
+// 🚀 ĐỤC LỖ: Nhận hàm onOpenTaskDetail từ BoardView truyền xuống
+interface ExtendedColumnProps extends ColumnProps {
+  onOpenTaskDetail?: (taskId: string) => void;
+}
+
+const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) => {
   const { activeBoardId } = useBoardStore();
   const { mutateAsync: updateColumnApi } = useUpdateColumn();
   const { mutateAsync: deleteColumnApi } = useDeleteColumn();
 
-  // 🚀 QUẢN LÝ TRẠNG THÁI MỞ MODAL TẠO TASK
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -123,11 +127,19 @@ const Column: React.FC<ColumnProps> = memo(({ list }) => {
       {/* LÕI SCROLL CHỨA TASK */}
       <div ref={setNodeRef} className="flex-1 overflow-y-auto flex flex-col gap-2.5 px-2 pb-2 custom-scrollbar min-h-[50px]">
         <SortableContext items={tasks.map(t => String(t.id || t._id))} strategy={verticalListSortingStrategy}>
-          {tasks.map((task) => <TaskItem key={String(task.id || task._id)} task={task} listId={safeListId} />)}
+          {tasks.map((task) => (
+             <TaskItem 
+               key={String(task.id || task._id)} 
+               task={task} 
+               listId={safeListId} 
+               // 🚀 TIẾP TỤC LUỒN HÀM XUỐNG CHO TASKITEM
+               onOpenTaskDetail={onOpenTaskDetail} 
+             />
+          ))}
         </SortableContext>
       </div>
 
-      {/* FOOTER: CHỈ CÒN DUY NHẤT 1 NÚT BẤM KÍCH HOẠT MODAL */}
+      {/* FOOTER */}
       <div className="shrink-0 p-2 pt-0">
         <button 
           onClick={() => setIsCreateModalOpen(true)} 
@@ -138,7 +150,6 @@ const Column: React.FC<ColumnProps> = memo(({ list }) => {
         </button>
       </div>
 
-      {/* MODAL TẠO TASK ĐƯỢC GỌI TẠI ĐÂY */}
       <CreateTaskModal 
         isOpen={isCreateModalOpen} 
         onClose={() => setIsCreateModalOpen(false)} 

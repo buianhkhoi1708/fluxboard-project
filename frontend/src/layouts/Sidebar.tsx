@@ -20,7 +20,7 @@ const Sidebar = () => {
     { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Dashboard", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
     { path: "/workspaces", icon: <Briefcase size={20} />, label: "Workspaces", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
     { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "AI Boards", roles: ["LEAD", "MANAGER", "ADMIN"] }, 
-    { path: "/tasks", icon: <ListTodo size={20} />, label: "My Tasks", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
+    { path: "/mytasks", icon: <ListTodo size={20} />, label: "My Tasks", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
   ];
 
   const managementItems = [

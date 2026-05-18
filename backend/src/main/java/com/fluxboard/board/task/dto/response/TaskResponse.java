@@ -21,6 +21,7 @@ public record TaskResponse(
         String aiEstimatedReason,
         TaskUserSummaryResponse author,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String boardId
 ) {
 }

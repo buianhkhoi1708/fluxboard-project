@@ -128,4 +128,12 @@ public class TaskController {
         taskService.delete(taskId, authUser.userId());
         return ResponseFactory.ok("Task deleted successfully.");
     }
+
+    @GetMapping("/my-tasks")
+    public ResponseEntity<ApiResponse<List<TaskResponse>>> getMyTasks(
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        List<TaskResponse> myTasks = taskService.getMyTasks(authUser.userId());
+        return ResponseFactory.ok("Fetched My Tasks successfully.", myTasks);
+    }
 }
