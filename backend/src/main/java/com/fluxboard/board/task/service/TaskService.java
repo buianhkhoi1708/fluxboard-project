@@ -3,6 +3,7 @@ package com.fluxboard.board.task.service;
 import com.fluxboard.activity.service.ActivityService;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
+import com.fluxboard.board.dto.response.BoardTaskDetailResponse;
 import com.fluxboard.board.entity.BoardEntity;
 import com.fluxboard.board.repository.BoardRepository;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
@@ -716,11 +717,29 @@ private final TaskRepository taskRepository;
         String authorId = TextUtils.trimToNull(entity.getAuthorUserId());
         TaskUserSummaryResponse author = authorId == null ? null : users.get(authorId);
 
+        // 🚀 TRUY XUẤT BOARD_ID TỪ COLUMN_ID CỦA TASK
+        String boardId = boardColumnRepository.findByIdAndDeletedFalse(entity.getColumnId())
+                .map(BoardColumnEntity::getBoardId)
+                .orElse(null);
+
         return new TaskResponse(
                 entity.getId(), entity.getTitle(), entity.getDescription(), entity.getParentTaskId(),
                 assignees, entity.getPriority(), entity.getStartDate(), entity.getDueDate(),
                 entity.getStatus(), entity.getStoryPoint(), entity.getEstimatedDate(), entity.getOrder(),
-                entity.getAiSuggestedPoint(), entity.getAiEstimatedReason(), author, entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getAiSuggestedPoint(), entity.getAiEstimatedReason(), author, entity.getCreatedAt(), 
+                entity.getUpdatedAt(),
+                boardId // 🚀 TRẢ VỀ THÊM BOARD_ID TRONG PHẢN HỒI API
         );
+    }
+
+    public List<TaskResponse> getMyTasks(String currentUserId) {
+        List<TaskEntity> myTasks = taskRepository.findMyTasks(currentUserId);
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(myTasks);
+
+        return myTasks.stream()
+                .filter(task -> !"DONE".equals(task.getStatus())) 
+                .sorted(Comparator.comparing(TaskEntity::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(entity -> toResponse(entity, users)) 
+                .toList();
     }
 }

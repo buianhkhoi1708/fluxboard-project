@@ -1,29 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, LayoutGrid, Users, Settings, Loader2 } from 'lucide-react';
-import { useProjectStore } from '../features/project/store/useProjectDetailStore';
+import { useProjectOverview } from '../features/project/hooks/useProjectQueries';
 import ProjectMembersTab from '../features/project/components/ProjectDetailMembersTab';
 import ProjectBoardsTab from '../features/project/components/ProjectDetailBoardsTab';
 import ProjectSettingsTab from '../features/project/components/ProjectDetailSettingsTab';
 
 const ProjectDetailPage = () => {
-    const { projectId } = useParams(); 
+    // 🚀 SỬA LỖI TÀNG HÌNH ID: Bắt cả 'id' và 'projectId' để phòng hờ cấu hình Route
+    const params = useParams(); 
+    const safeProjectId = params.projectId || params.id || '';
+    
     const navigate = useNavigate();
-    
-    // Lấy tham số tab từ URL
     const [searchParams, setSearchParams] = useSearchParams();
-    const { currentProject, isLoading, fetchProjectOverview } = useProjectStore();
     
-    // Lấy giá trị tab từ URL (nếu có), nếu không mặc định là 'boards'
-    const defaultTab = searchParams.get('tab') || 'boards';
-    const [activeTab, setActiveTab] = useState(defaultTab); 
+    // Đồng bộ Tab qua URL
+    const activeTab = searchParams.get('tab') || 'boards'; 
 
-    useEffect(() => {
-        if (projectId) fetchProjectOverview(projectId);
-    }, [projectId]);
+    // Gọi dữ liệu Project bằng React Query
+    const { data: projectOverview, isLoading } = useProjectOverview(safeProjectId);
 
-    const handleTabChange = (tabId) => {
-        setActiveTab(tabId);
+    const handleTabChange = (tabId: string) => {
         setSearchParams({ tab: tabId });
     };
 
@@ -33,9 +30,10 @@ const ProjectDetailPage = () => {
         { id: 'settings', label: 'Cài đặt', icon: Settings }
     ];
 
+    const currentProject = projectOverview?.project;
+
     return (
         <div className="min-h-screen bg-slate-50/50 pb-12">
-            {/* Header: Tiêu đề & Nút Back */}
             <div className="bg-white px-6 pt-6 sticky top-0 z-20 border-b border-slate-200">
                 <div className="max-w-6xl mx-auto">
                     <div className="flex items-center gap-4 mb-6">
@@ -53,7 +51,6 @@ const ProjectDetailPage = () => {
                         </div>
                     </div>
 
-                    {/* Dãy Menu Tabs */}
                     <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
                         {TABS.map(tab => {
                             const Icon = tab.icon;
@@ -68,8 +65,7 @@ const ProjectDetailPage = () => {
                                             : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                                     }`}
                                 >
-                                    <Icon size={16} />
-                                    {tab.label}
+                                    <Icon size={16} /> {tab.label}
                                 </button>
                             );
                         })}
@@ -77,18 +73,18 @@ const ProjectDetailPage = () => {
                 </div>
             </div>
 
-            {/* Nội dung của từng Tab */}
             <div className="max-w-6xl mx-auto px-6 mt-8">
-                {activeTab === 'boards' && (
-                    <ProjectBoardsTab projectId={projectId} />
-                )}
-                
-                {activeTab === 'members' && (
-                    <ProjectMembersTab projectId={projectId} />
-                )}
-                
-                {activeTab === 'settings' && (
-                    <ProjectSettingsTab projectId={projectId} />
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                        <Loader2 size={32} className="animate-spin text-indigo-600 mb-4" />
+                        <p className="text-sm font-medium">Đang tải không gian làm việc...</p>
+                    </div>
+                ) : (
+                    <>
+                        {activeTab === 'boards' && <ProjectBoardsTab projectId={safeProjectId} />}
+                        {activeTab === 'members' && <ProjectMembersTab projectId={safeProjectId} />}
+                        {activeTab === 'settings' && <ProjectSettingsTab projectId={safeProjectId} />}
+                    </>
                 )}
             </div>
         </div>

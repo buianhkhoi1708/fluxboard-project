@@ -2,64 +2,80 @@ import React, { useMemo } from 'react';
 import { useDashboardMetrics } from '../features/dashboard/hooks/useDashBoardQueries'; 
 import { useAuthStore } from '../features/auth/store/useAuthStore'; 
 
+// 🚀 IMPORT HOOK TỪ ĐIỂN ROLE CỦA SẾP VÀO
+import { useRolesDictionary } from '../features/rbac/hooks/useRbacQueries'; // Thay đường dẫn cho đúng nhé sếp
+
 import AdminDashboard from '../features/dashboard/components/AdminDashboard';
 import ManagerDashboard from '../features/dashboard/components/ManagerDashboard';
 import MemberDashboard from '../features/dashboard/components/MemberDashboard';
 
 const DashboardPage = () => {
   const { user } = useAuthStore();
+  const { data, isLoading: isDashboardLoading, isError, error } = useDashboardMetrics();
   
-  // 1. TanStack Query lo phần lấy dữ liệu từ Backend
-  const { data, isLoading, isError, error } = useDashboardMetrics();
+  // 🚀 GỌI TỪ ĐIỂN ROLE
+  const { data: rolesList, isLoading: isRolesLoading } = useRolesDictionary();
 
-  // 2. 🛡️ CƠ CHẾ ĐỒNG BỘ: Bóc tách Role chuẩn từ Profile/Sidebar
-  const currentRole = useMemo(() => {
-    const role = 
-      user?.system_role || 
-      user?.role_name || 
-      user?.role?.name || 
-      user?.role || 
-      user?.role_id || 
+  // 🛡️ BÓC TÁCH VÀ DỊCH ROLE TỪ ID SANG TÊN CHUẨN
+  const currentRoleName = useMemo(() => {
+    if (!user) return "MEMBER";
+
+    // 1. Tìm cái dữ liệu role đang bị giấu trong user
+    const rawRole = 
+      user.system_role || 
+      user.systemRole ||
+      user.role_id || 
+      user.role?.id ||
+      user.role_name || 
+      user.role?.name || 
+      user.role || 
       "MEMBER";
 
-    return String(role).toUpperCase().trim();
-  }, [user]);
+    const roleString = String(rawRole).toUpperCase().trim();
 
-  // Mã ID dự phòng cho Admin (Phòng hờ Backend vẫn trả về ID)
-  const ADMIN_ID = "69CFD39A34353F3CA08D52CE";
+    // 2. Tra từ điển: Nếu cái roleString là một cái ID (vd: 69cfd3be...), mình lôi cái tên "MANAGER" ra
+    if (rolesList && rolesList.length > 0) {
+      const matchedRole = rolesList.find(r => r.id.toUpperCase() === roleString);
+      if (matchedRole) {
+        return matchedRole.name.toUpperCase();
+      }
+    }
 
-  // 3. Hàm render component dựa trên quyền thực tế
+    // 3. Nếu nó vốn dĩ đã là chữ (hoặc ko tìm thấy), trả về nguyên gốc
+    return roleString;
+  }, [user, rolesList]);
+
+  // 3. Hàm render component (Bây giờ chỉ cần check tên chữ, không cần quan tâm ID nữa)
   const renderDashboardByRole = () => {
-    // ⚔️ Ưu tiên Admin
-    if (currentRole.includes('ADMIN') || currentRole === ADMIN_ID) {
+    // ⚔️ Nhóm Admin
+    if (currentRoleName.includes('ADMIN') || currentRoleName === 'SYSTEM_ADMIN' || currentRoleName === 'PROJECT_ADMIN') {
       return <AdminDashboard data={data || null} />;
     }
     
-    // ⚔️ Nhóm Manager / Lead / PM
-    if (
-      currentRole.includes('MANAGER') || 
-      currentRole.includes('LEAD') || 
-      currentRole.includes('PM')
-    ) {
+    // ⚔️ Nhóm Manager / PM / Lead
+    if (currentRoleName.includes('MANAGER') || currentRoleName.includes('PM') || currentRoleName.includes('LEAD')) {
       return <ManagerDashboard data={data || null} />;
     }
 
-    // ⚔️ Mặc định là Member
+    // ⚔️ Mặc định
     return <MemberDashboard data={data || null} />;
   };
+
+  const isLoading = isDashboardLoading || isRolesLoading;
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto w-full h-full overflow-y-auto bg-slate-50 transition-all duration-500">
       
-      {/* HEADER TỐI GIẢN & LỊCH SỰ */}
+      {/* HEADER */}
       <div className="flex flex-col mb-8 gap-1">
         <h1 className="text-3xl font-black text-slate-800 tracking-tight">Dashboard</h1>
         <p className="text-sm font-medium text-slate-400">
-          Chào mừng trở lại, <span className="text-indigo-600 font-bold">{user?.full_name || 'Khách'}</span>.
+          Chào mừng trở lại, <span className="text-indigo-600 font-bold">{user?.full_name || 'Khách'}</span>. 
+          {/* Sếp có thể in thử currentRoleName ra đây để test xem nó dịch chuẩn chưa */}
+          {/* (Role hiện tại: {currentRoleName}) */}
         </p>
       </div>
 
-      {/* TRẠNG THÁI LOADING TỪ TANSTACK */}
       {isLoading ? (
         <div className="flex flex-col justify-center items-center h-[400px] gap-4">
            <div className="animate-spin rounded-full h-14 w-14 border-t-4 border-b-4 border-indigo-600"></div>
@@ -79,7 +95,6 @@ const DashboardPage = () => {
           </button>
         </div>
       ) : (
-        /* HIỂN THỊ BIỂU ĐỒ THEO ROLE VỚI HIỆU ỨNG MƯỢT MÀ */
         <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
            {renderDashboardByRole()}
         </div>

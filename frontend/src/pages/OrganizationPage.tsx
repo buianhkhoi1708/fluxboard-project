@@ -1,91 +1,63 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react'; // Xóa useEffect
+import { useQueryClient } from '@tanstack/react-query'; // 🚀 IMPORT MỚI
 import { Building2, Users, Plus, UserPlus, ShieldAlert, Loader2, Edit2, UserMinus, Trash2 } from 'lucide-react';
-import { useOrgStore } from '../features/organization/state/useOrganizationStore';
+import { useGetOrgTree } from '../features/organization/hooks/useOrgQueries'; // 🚀 IMPORT HOOK MỚI
 import { OrgDepartment, OrgTeam, OrgMember, OrgModalState, OrgTargetIds, OrganizationPageProps } from '../features/organization/types/orgTypes';
 import OrgFormModal from '../features/organization/components/OrgFormModal';
 import UserPickerModal from '../features/organization/components/UserPickerModal';
 import { orgApi } from '../features/organization/api/organizationApi';
 
 const OrganizationPage: React.FC<OrganizationPageProps> = () => {
-  const { orgTree, isLoading, fetchTree } = useOrgStore();
+  const queryClient = useQueryClient(); // 🚀 Khởi tạo Query Client để làm mới data
+  
+  // 🚀 LẤY DATA TỪ TANSTACK QUERY (THAY CHO ZUSTAND)
+  const { data: orgTree = [], isLoading } = useGetOrgTree(); 
 
   const [modalState, setModalState] = useState<OrgModalState>({ 
-    isOpen: false, 
-    mode: 'DEPARTMENT', 
-    action: 'CREATE',
-    targetDeptId: null,
-    targetTeam: null,
-    targetDept: null
+    isOpen: false, mode: 'DEPARTMENT', action: 'CREATE', targetDeptId: null, targetTeam: null, targetDept: null
   });
-  
   const [isUserPickerOpen, setIsUserPickerOpen] = useState<boolean>(false);
-  const [targetIds, setTargetIds] = useState<OrgTargetIds>({ 
-    deptId: null, 
-    teamId: null 
-  });
+  const [targetIds, setTargetIds] = useState<OrgTargetIds>({ deptId: null, teamId: null });
 
-  useEffect(() => {
-    fetchTree();
-  }, [fetchTree]);
+  // (ĐÃ XÓA useEffect chứa fetchTree)
 
   // ==========================================
-  // HÀM ĐIỀU KHIỂN MODAL & THAO TÁC PHÒNG BAN
+  // HÀM ĐIỀU KHIỂN & THAO TÁC 
+  // (Thay chữ fetchTree() bằng queryClient.invalidateQueries...)
   // ==========================================
   const openCreateDeptModal = () => setModalState({ isOpen: true, mode: 'DEPARTMENT', action: 'CREATE', targetDeptId: null, targetTeam: null, targetDept: null });
   
   const openEditDeptModal = (dept: OrgDepartment, displayManagerName: string) => {
-    setModalState({ 
-      isOpen: true, 
-      mode: 'DEPARTMENT', 
-      action: 'EDIT', 
-      targetDeptId: null, 
-      targetTeam: null,
-      targetDept: { ...dept, managerName: displayManagerName } 
-    });
+    setModalState({ isOpen: true, mode: 'DEPARTMENT', action: 'EDIT', targetDeptId: null, targetTeam: null, targetDept: { ...dept, managerName: displayManagerName } });
   };
 
   const handleDeleteDepartment = async (deptId: string, deptName: string) => {
     if (!window.confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa phòng ban "${deptName}" không?\nTất cả các Team bên trong cũng có thể bị ảnh hưởng.`)) return;
     try {
       await orgApi.deleteDepartment(deptId);
-      fetchTree(); 
+      // 🚀 TỰ ĐỘNG GỌI LẠI API CẬP NHẬT GIAO DIỆN
+      queryClient.invalidateQueries({ queryKey: ['orgTree'] }); 
     } catch (error: any) {
-      console.error("Lỗi khi xóa phòng ban:", error);
       alert(error.response?.data?.message || "Có lỗi xảy ra khi xóa phòng ban.");
     }
   };
 
-  // ==========================================
-  // HÀM ĐIỀU KHIỂN MODAL & THAO TÁC TEAM
-  // ==========================================
   const openCreateTeamModal = (deptId: string) => setModalState({ isOpen: true, mode: 'TEAM', action: 'CREATE', targetDeptId: deptId, targetTeam: null, targetDept: null });
   
   const openEditTeamModal = (deptId: string, team: OrgTeam, displayLeadName: string) => {
-    setModalState({ 
-      isOpen: true, 
-      mode: 'TEAM', 
-      action: 'EDIT', 
-      targetDeptId: deptId, 
-      targetTeam: { ...team, leadName: displayLeadName },
-      targetDept: null
-    });
+    setModalState({ isOpen: true, mode: 'TEAM', action: 'EDIT', targetDeptId: deptId, targetTeam: { ...team, leadName: displayLeadName }, targetDept: null });
   };
 
-  // 🚀 HÀM XÓA TEAM
   const handleDeleteTeam = async (teamId: string, teamName: string) => {
     if (!window.confirm(`Bạn có chắc chắn muốn xóa Team "${teamName}" không?\nCác thành viên trong team sẽ trở về trạng thái chưa gán nhóm.`)) return;
     try {
       await orgApi.deleteTeam(teamId);
-      fetchTree(); 
+      queryClient.invalidateQueries({ queryKey: ['orgTree'] }); // 🚀 LÀM MỚI
     } catch (error: any) {
-      console.error("Lỗi khi xóa team:", error);
       alert(error.response?.data?.message || "Có lỗi xảy ra khi xóa team.");
     }
   };
 
-  // ==========================================
-  // HÀM ĐIỀU KHIỂN THÀNH VIÊN
-  // ==========================================
   const openAddMemberModal = (deptId: string, teamId: string) => {
     setTargetIds({ deptId, teamId });
     setIsUserPickerOpen(true);
@@ -95,13 +67,11 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
     if (!window.confirm(`Bạn có chắc chắn muốn gỡ nhân sự "${userName}" khỏi Team này?`)) return;
     try {
       await orgApi.removeUserFromTeam(teamId, userId);
-      fetchTree(); 
+      queryClient.invalidateQueries({ queryKey: ['orgTree'] }); // 🚀 LÀM MỚI
     } catch (error: any) {
-      console.error("Lỗi khi xóa member:", error);
       alert(error.response?.data?.message || "Có lỗi xảy ra khi gỡ nhân sự.");
     }
   };
-
   return (
     <div className="flex-1 bg-[#f8fafc] h-full overflow-y-auto p-6 md:p-10 custom-scrollbar relative">
       <div className="max-w-[1400px] mx-auto">

@@ -118,7 +118,12 @@ public class BoardColumnService
         shiftOrdersAfterDelete(boardId, currentOrder, entity.getId());
     }
 
-    public void initializeDefaultColumns(String boardId) {
+    public void initializeDefaultColumns(String boardId, boolean isAiBoard) {
+        // Nếu là AI Board, không làm gì cả, để cho luồng AI tự tạo cột
+        if (isAiBoard) {
+            return;
+        }
+
         List<BoardColumnEntity> existing = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         if (!existing.isEmpty()) {
             return;

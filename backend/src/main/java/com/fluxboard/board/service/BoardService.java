@@ -71,10 +71,34 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
         return create(request, null);
     }
 
+    // 🚀 ĐÃ SỬA: Luồng tạo Bảng Tiêu Chuẩn (Standard Board)
     public BoardResponse create(CreateBoardRequest request, String actorUserId) {
-        String projectId = TextUtils.trim(request.projectId());
+        BoardEntity saved = saveBoardEntity(request.projectId(), request.name());
+        
+        // Truyền false để Bật tính năng tạo 3 cột mặc định (To Do, Doing, Done)
+        boardColumnService.initializeDefaultColumns(saved.getId(), false);
+        
+        publishBoardCreatedEvent(saved, actorUserId);
+        return toResponse(saved);
+    }
+
+    // 🚀 THÊM MỚI: Luồng riêng dành cho AI (Không tự động tạo cột)
+    // Sếp dùng hàm này trong cái Service xử lý Prompt AI nhé!
+    public BoardResponse createAiBoard(CreateBoardRequest request, String actorUserId) {
+        BoardEntity saved = saveBoardEntity(request.projectId(), request.name());
+        
+        // Truyền true để Tắt tính năng tạo 3 cột mặc định
+        boardColumnService.initializeDefaultColumns(saved.getId(), true);
+        
+        publishBoardCreatedEvent(saved, actorUserId);
+        return toResponse(saved);
+    }
+
+    // --- Hàm phụ trợ dùng chung cho cả 2 luồng tạo Board trên ---
+    private BoardEntity saveBoardEntity(String projectIdRaw, String nameRaw) {
+        String projectId = TextUtils.trim(projectIdRaw);
         findProjectById(projectId);
-        String name = TextUtils.trim(request.name());
+        String name = TextUtils.trim(nameRaw);
 
         if (boardRepository.existsByProjectIdAndNameAndDeletedFalse(projectId, name)) {
             throw new AppException(ErrorCode.CONFLICT, "Board name already exists in this project.");
@@ -84,15 +108,17 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
         entity.setProjectId(projectId);
         entity.setName(name);
 
-        BoardEntity saved = boardRepository.save(entity);
-        boardColumnService.initializeDefaultColumns(saved.getId());
+        return boardRepository.save(entity);
+    }
+
+    private void publishBoardCreatedEvent(BoardEntity saved, String actorUserId) {
         eventPublisher.publishEvent(new ActivityCreatedEvent(
                 this, ActivitySource.BOARD, saved.getId(), saved.getProjectId(), saved.getId(), null,
                 actorUserId, ActivityAction.CREATE, null, null, null,
                 "Board created: " + saved.getName()
         ));
-        return toResponse(saved);
     }
+    // -------------------------------------------------------------
 
     @Override
     public BoardResponse getById(String id) {

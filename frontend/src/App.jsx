@@ -19,7 +19,8 @@ import ActivityLogPage from "./pages/ActivityLogPage";
 import OrganizationPage from "./pages/OrganizationPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import CreateUserTab from "./features/user/components/CreateUserTab";
-import UnauthorizedPage from "./pages/UnAuthorizedPage"; // 🚀 Nhớ import trang 403 nếu bạn có tạo
+import UnauthorizedPage from "./pages/UnauthorizedPage"; 
+import MyTasksPage from "./pages/MyTasksPage";
 
 function App() {
   return (
@@ -50,7 +51,9 @@ function App() {
                 <Route path="/workspaces" element={<WorkspacesPage />} />
                 <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
                 <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-                <Route path="/settings" element={<SettingsPage />} /> {/* Thường settings cá nhân ai cũng có */}
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/mytasks" element={<MyTasksPage />} /> 
+
 
 
                 {/* ========================================== */}
