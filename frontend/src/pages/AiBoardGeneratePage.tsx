@@ -6,7 +6,6 @@ import { useRbacStore } from '../features/rbac/store/useRbacStore';
 import { useQuery } from '@tanstack/react-query';
 import axiosClient from '../lib/axiosClient';
 
-// 🚀 IMPORT MODAL THÊM THÀNH VIÊN VỪA LÀM
 import ProjectDetailMemberModal from '../features/project/components/ProjectDetailMemberModal';
 
 import {
@@ -21,17 +20,6 @@ const StepIndicator = ({ currentStep }) => (
   <div className="flex gap-1.5" role="progressbar" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={3}>
     {[1, 2, 3].map(step => (
       <div key={step} className={`h-1.5 rounded-full transition-all duration-500 ${currentStep >= step ? 'w-6 bg-indigo-500 shadow-sm' : 'w-2 bg-slate-200'}`} />
-    ))}
-  </div>
-);
-
-const UserListSkeleton = () => (
-  <div className="p-2 space-y-1 animate-pulse">
-    {[...Array(5)].map((_, i) => (
-      <div key={i} className="flex items-center gap-3 p-3">
-        <div className="w-8 h-8 rounded-lg bg-slate-200" />
-        <div className="flex-1 h-3 bg-slate-200 rounded w-20" />
-      </div>
     ))}
   </div>
 );
@@ -67,17 +55,25 @@ const AiBoardGeneratorPage = () => {
   const { mutateAsync: generateAiBoard, isPending: isGeneratingAi } = useGenerateAiBoard();
   const { roles: systemRoles, fetchInitialData: fetchRbacData } = useRbacStore();
   
-  // LỌC QUYỀN AN TOÀN (WHITELIST)
-  const ALLOWED_ROLES = ['PROJECT_ADMIN', 'PM', 'LEAD', 'MEMBER', 'VIEWER'];
-  const projectRoles = systemRoles.filter(r => ALLOWED_ROLES.includes(r.name));
-  const viewerRoleId = projectRoles.find(r => r.name === 'VIEWER')?.id;
+  // 🚀 FIX 1: RÚT LÕI MẢNG TỪ PHÂN TRANG (Chống Crash)
+  const projectList = useMemo(() => {
+    if (!projects) return [];
+    if (Array.isArray(projects)) return projects; // Nếu đã là mảng thì lấy luôn
+    // Bóc tách mảng content từ cục Page<ProjectResponse> của Spring Boot
+    return projects.content || projects.data?.content || projects.data || [];
+  }, [projects]);
+
+  const viewerRoleId = useMemo(() => {
+    const ALLOWED_ROLES = ['PROJECT_ADMIN', 'PM', 'LEAD', 'MEMBER', 'VIEWER'];
+    const projectRoles = systemRoles.filter(r => ALLOWED_ROLES.includes(r.name));
+    return projectRoles.find(r => r.name === 'VIEWER')?.id;
+  }, [systemRoles]);
 
   // --- 2. LOCAL STATE ---
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
   
-  // 🚀 TÍCH HỢP MODAL
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState(null);
 
@@ -88,45 +84,52 @@ const AiBoardGeneratorPage = () => {
   const [loadingText, setLoadingText] = useState('Đang khởi tạo...');
   const [isSyncingRbac, setIsSyncingRbac] = useState(false);
 
-  // 🚀 3. FETCH PROJECT MEMBERS (CHỈ KHI ĐÃ CHỌN PROJECT)
-  const { data: projectMembers = [], isLoading: isMembersLoading, refetch: refetchMembers } = useQuery({
+  // --- 3. FETCH PROJECT MEMBERS ---
+  const { data: projectMembersRaw, isLoading: isMembersLoading, refetch: refetchMembers } = useQuery({
     queryKey: ['project-members', selectedProjectId],
     queryFn: async () => {
         if (!selectedProjectId) return [];
         const response: any = await axiosClient.get(`/projects/${selectedProjectId}/members`);
-        return response.data?.data || response.data || [];
+        const rawData = response.data?.data || response.data || [];
+        return rawData.content || rawData; 
     },
-    enabled: !!selectedProjectId, // Tự động chạy khi có Project ID
+    enabled: !!selectedProjectId, 
   });
 
-  // Tự động update state được chọn khi list member thay đổi (VD: Thêm/Xóa xong)
+  // 🚀 FIX 1: Dùng useMemo để "đóng băng" địa chỉ bộ nhớ của mảng, chống việc tạo mảng [] mới liên tục
+  const projectMembers = useMemo(() => {
+    const raw = projectMembersRaw || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [projectMembersRaw]);
+
   useEffect(() => {
     if (projectMembers.length > 0) {
-        // Mặc định chọn TẤT CẢ member có trong project để gán vào Board
         const defaultSelections = projectMembers.map((m: any) => ({
             userId: m.userId || m.user_id || m.user?.id || m.id,
             roleId: (m.roleIds && m.roleIds[0]) || (m.role_ids && m.role_ids[0]) || ''
         }));
         setSelectedMembers(defaultSelections);
     } else {
-        setSelectedMembers([]);
+        // 🚀 FIX 2: Mẹo tối thượng của React - Chỉ cập nhật thành [] nếu mảng TRƯỚC ĐÓ đang có phần tử.
+        // Nếu nó đã rỗng sẵn thì giữ nguyên (prev), React sẽ ngắt vòng lặp ngay lập tức!
+        setSelectedMembers(prev => prev.length === 0 ? prev : []);
     }
   }, [projectMembers]);
 
-
-  // 4. AUTO-FILL DATA (NẾU NHẢY TỪ MODAL)
+  // --- 4. AUTO-FILL DATA ---
   useEffect(() => {
     if (passedProjectId) {
       setSelectedProjectId(passedProjectId);
-      setCurrentStep(2); // Dừng ở Bước 2 để kiểm tra nhân sự
+      setCurrentStep(2); 
     }
   }, [passedProjectId]);
 
-
   useEffect(() => {
-    if (projects.length === 0) fetchProjects();
+    // 🚀 Đã đổi projects thành projectList
+    if (projectList.length === 0) fetchProjects();
     if (systemRoles.length === 0) fetchRbacData();
-  }, [fetchProjects, fetchRbacData, projects.length, systemRoles.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- 5. HANDLERS ---
   const toggleMember = (userId, existingRoleId) => {
@@ -155,14 +158,10 @@ const AiBoardGeneratorPage = () => {
     setLoadingText("AI đang phân rã task & tính Deadline (khoảng 1 phút)...");
     
     try {
-      // 🚀 BƯỚC 1 (ĐÃ BỎ): Không cần đồng bộ (POST API thêm member) nữa vì mình load member TRỰC TIẾP TỪ PROJECT ra rồi. Những người này ĐÃ CÓ trong Project.
-      
-      // BƯỚC 2: Lọc danh sách nhân sự thực thi (loại Viewer)
       const validAssignees = selectedMembers
         .filter(m => m.roleId !== viewerRoleId)
         .map(m => m.userId);
 
-      // BƯỚC 3: Gọi Hook tạo Board qua AI
       const newBoardId = await generateAiBoard({
         project_id: selectedProjectId,
         prompt: prompt,
@@ -173,7 +172,7 @@ const AiBoardGeneratorPage = () => {
 
       navigate(`/board/${newBoardId}`);
 
-    } catch (e) { 
+    } catch (e: any) { 
       console.error("🚨 LỖI QUY TRÌNH TẠO BOARD:", e);
       const errorMsg = e.response?.data?.message || e.message || "Hệ thống quá tải hoặc hết Token";
       alert(`Thất bại: ${errorMsg}`); 
@@ -187,17 +186,18 @@ const AiBoardGeneratorPage = () => {
   return (
     <div className="flex flex-col h-full absolute inset-0 bg-[#F8FAFC] overflow-hidden">
       
-      {/* 🚀 MODAL QUẢN LÝ THÀNH VIÊN */}
-      <ProjectDetailMemberModal 
-        isOpen={isMemberModalOpen}
-        onClose={() => {
-            setIsMemberModalOpen(false);
-            setMemberToEdit(null);
-            refetchMembers(); // Gọi lại API để load member mới ngay lập tức
-        }}
-        projectId={selectedProjectId}
-        editMember={memberToEdit}
-      />
+      {isMemberModalOpen && (
+        <ProjectDetailMemberModal 
+          isOpen={isMemberModalOpen}
+          onClose={() => {
+              setIsMemberModalOpen(false);
+              setMemberToEdit(null);
+              refetchMembers(); 
+          }}
+          projectId={selectedProjectId}
+          editMember={memberToEdit}
+        />
+      )}
 
       {/* ========== HEADER ========== */}
       <header className="h-14 bg-white/80 backdrop-blur-sm border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shrink-0 z-20">
@@ -231,7 +231,8 @@ const AiBoardGeneratorPage = () => {
                   <p className="text-sm text-slate-500 font-medium mt-1">Chọn không gian làm việc để AI đồng bộ hóa dữ liệu.</p>
                 </div>
 
-                {projects.length === 0 ? <WorkspaceSkeleton /> : (
+                {/* 🚀 Thay vì projects.length, giờ sếp render bằng projectList.length an toàn tuyệt đối */}
+                {projectList.length === 0 ? <WorkspaceSkeleton /> : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar content-start pb-4">
                     <button className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-white transition-all group">
                       <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
@@ -239,7 +240,7 @@ const AiBoardGeneratorPage = () => {
                       </div>
                       <span className="text-xs font-bold text-slate-400 group-hover:text-indigo-600 uppercase tracking-widest">Tạo mới</span>
                     </button>
-                    {projects.map(item => {
+                    {projectList.map((item: any) => {
                       const p = item.project || item;
                       const isSelected = selectedProjectId === p.id;
                       return (
@@ -256,11 +257,10 @@ const AiBoardGeneratorPage = () => {
               </div>
             )}
 
-            {/* ---------- STEP 2: RBAC BLOCK (THIẾT KẾ MỚI CHO THÀNH VIÊN ĐÃ CÓ TRONG PROJECT) ---------- */}
+            {/* ---------- STEP 2: RBAC BLOCK ---------- */}
             {currentStep === 2 && (
               <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col min-h-0 h-full animate-in fade-in slide-in-from-right-4 duration-500">
                   
-                  {/* CỘT DUY NHẤT (Danh sách User của Project) */}
                   <section className="flex flex-col flex-1 min-h-0 bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-200 overflow-hidden h-full">
                     
                     <div className="px-6 py-4 lg:py-5 border-b border-slate-100 shrink-0 bg-gradient-to-r from-white to-slate-50 flex items-center justify-between gap-4">
@@ -278,7 +278,6 @@ const AiBoardGeneratorPage = () => {
                         </div>
                       </div>
                       
-                      {/* 🚀 NÚT THÊM NGƯỜI MỚI VÀO PROJECT */}
                       <button 
                          onClick={() => setIsMemberModalOpen(true)}
                          className="flex items-center gap-2 bg-slate-900 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors shadow-sm"
@@ -307,7 +306,6 @@ const AiBoardGeneratorPage = () => {
                             const email = member.email || member.user?.email || '';
                             const roleId = (member.roleIds && member.roleIds[0]) || (member.role_ids && member.role_ids[0]) || '';
                             
-                            // Lấy tên Role từ RBAC List
                             const roleObj = systemRoles.find(r => r.id === roleId);
                             const roleName = roleObj ? roleObj.name : 'MEMBER';
 
@@ -338,7 +336,6 @@ const AiBoardGeneratorPage = () => {
                                     </div>
 
                                     <div className="flex items-center gap-2 shrink-0">
-                                        {/* Nút Sửa Quyền (Mở lại Modal) */}
                                         <button 
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -350,7 +347,6 @@ const AiBoardGeneratorPage = () => {
                                             <ShieldCheck size={16} />
                                         </button>
 
-                                        {/* Checkbox ảo */}
                                         <div onClick={() => toggleMember(safeUserId, roleId)} className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer ${isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300 bg-white'}`}>
                                             {isSelected && <CheckCircle2 size={12} className="text-white shrink-0" strokeWidth={4} />}
                                         </div>

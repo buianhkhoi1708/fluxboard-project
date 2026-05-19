@@ -1,7 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { NuqsAdapter } from "nuqs/adapters/react-router";
-
 import MainLayout from "./layouts/MainLayout";
 import BoardPage from "./pages/BoardPage";
 import { SocketProvider } from "./context/SocketContext";
