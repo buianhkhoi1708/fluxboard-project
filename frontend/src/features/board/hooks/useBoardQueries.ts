@@ -156,3 +156,25 @@ export const useDeleteColumn = () => {
     },
   });
 };
+
+export const getPresignedUrl = async (fileName: string, contentType: string) => {
+  // 🚀 Gọi qua boardApi cho chuẩn kiến trúc
+  const res: any = await boardApi.getPresignedUrl(fileName, contentType);
+  return res.data || res; // Lấy ra { uploadUrl, publicUrl }
+};
+
+// 2. Hook lưu link file vào Task
+export const useAddAttachmentToTask = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ taskId, boardId, payload }: { taskId: string, boardId: string, payload: any }) => {
+      // 🚀 Gọi qua boardApi
+      const res: any = await boardApi.addAttachmentToTask(taskId, payload);
+      return res.data || res;
+    },
+    onSuccess: (_, variables) => {
+      // Làm mới UI ngay lập tức
+      queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(variables.boardId) }); 
+    }
+  });
+};

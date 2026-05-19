@@ -3,7 +3,7 @@ package com.fluxboard.board.task.entity;
 import com.fluxboard.board.task.enums.TaskPriority;
 import com.fluxboard.common.entity.BaseDocument;
 import java.time.Instant;
-import java.util.List;
+import java.util.*;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -73,6 +73,9 @@ public class TaskEntity extends BaseDocument {
 
     @Field("author_user_id")
     private String authorUserId;
+
+    @Field("attachments")
+    private List<Map<String, Object>> attachments;
 
     public String getTitle() {
         return title;
@@ -200,5 +203,13 @@ public class TaskEntity extends BaseDocument {
 
     public void setAuthorUserId(String authorUserId) {
         this.authorUserId = authorUserId;
+    }
+
+    public List<Map<String, Object>> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(List<Map<String, Object>> attachments) {
+        this.attachments = attachments;
     }
 }

@@ -82,4 +82,17 @@ export const boardApi = {
   getProjectMembers: (projectId: string) => {
     return axiosClient.get(`/projects/${projectId}/members`);
   },
+
+  // --- MEDIA & ATTACHMENT ---
+  getPresignedUrl: async (fileName: string, contentType: string): Promise<any> => {
+    const response: any = await axiosClient.get(`/media/presigned-url`, {
+      params: { fileName, contentType }
+    });
+    return response.data || response; 
+  },
+
+  addAttachmentToTask: async (taskId: string, payload: any): Promise<any> => {
+    const response: any = await axiosClient.post(`/tasks/${taskId}/attachments`, payload);
+    return response.data || response;
+  },
 };

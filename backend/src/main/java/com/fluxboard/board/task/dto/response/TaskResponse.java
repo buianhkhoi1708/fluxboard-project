@@ -2,7 +2,7 @@ package com.fluxboard.board.task.dto.response;
 
 import com.fluxboard.board.task.enums.TaskPriority;
 import java.time.Instant;
-import java.util.List;
+import java.util.*;
 
 public record TaskResponse(
         String id,
@@ -22,6 +22,7 @@ public record TaskResponse(
         TaskUserSummaryResponse author,
         Instant createdAt,
         Instant updatedAt,
-        String boardId
+        String boardId,
+        List<Map<String, Object>> attachments
 ) {
 }

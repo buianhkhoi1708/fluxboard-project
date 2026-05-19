@@ -280,7 +280,10 @@ public class BoardService implements CrudService<BoardResponse, String, CreateBo
                 task.getAiSuggestedPoint(),
                 task.getAiEstimatedReason(),
                 task.getStatus(),
-                subtasks);
+                subtasks,
+                task.getAttachments() == null ? List.of() : task.getAttachments()
+            );
+
     }
 
     private String formatPriority(TaskPriority priority) {

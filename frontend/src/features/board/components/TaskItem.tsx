@@ -1,5 +1,5 @@
-import React, { useState, memo } from 'react';
-import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock } from 'lucide-react';
+import React, { useState, memo, useMemo } from 'react';
+import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -8,20 +8,18 @@ import { useUserStore } from '../../user/store/useUserStore';
 import { useDeleteTask, useUpdateTask, useGetBoardDetail } from '../hooks/useBoardQueries';
 
 import DeleteConfirmModal from './DeleteConfirmModal'; 
-// 🚀 ĐÃ BỎ IMPORT TaskDetailModal: Vì giờ BoardView đã "thầu" việc hiển thị Modal rồi!
 
 import { TaskItemProps as BaseTaskItemProps, Task } from '../types/index';
 
-// 🚀 MỞ RỘNG PROPS ĐỂ NHẬN HÀM TỪ COLUMN TRUYỀN XUỐNG
 interface TaskItemProps extends BaseTaskItemProps {
   onOpenTaskDetail?: (taskId: string) => void;
 }
 
 const priorityColors: Record<string, string> = { 
-  Low: 'bg-blue-100 text-blue-700',  
-  Medium: 'bg-yellow-100 text-yellow-700', 
-  High: 'bg-orange-100 text-orange-700', 
-  Critical: 'bg-red-100 text-red-700' 
+  LOW: 'bg-blue-100 text-blue-700',  
+  MEDIUM: 'bg-yellow-100 text-yellow-700', 
+  HIGH: 'bg-orange-100 text-orange-700', 
+  CRITICAL: 'bg-red-100 text-red-700' 
 };
 
 const formatDateForInput = (dateString?: string | null) => {
@@ -29,7 +27,6 @@ const formatDateForInput = (dateString?: string | null) => {
   return dateString.split('T')[0];
 };
 
-// 🚀 HỨNG PROPS onOpenTaskDetail TẠI ĐÂY
 const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpenTaskDetail }) => {
   const { activeBoardId } = useBoardStore();
   
@@ -44,6 +41,9 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
   const safeTaskId = String(task.id || task._id);
+
+  // 🚀 XÁC ĐỊNH TRẠNG THÁI TASK ĐÃ XONG HAY CHƯA
+  const isTaskDone = task.status === 'DONE' || task.is_done;
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: safeTaskId, 
@@ -62,6 +62,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
     }
   };
 
+  // Tìm hàm này trong TaskItem.tsx
   const handleToggleSubtask = async (e: React.MouseEvent, subtaskId: string) => {
     e.stopPropagation(); 
     if (!activeBoardId) return;
@@ -70,6 +71,13 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
     if (!subtask) return;
 
     const newStatus = (subtask.status === 'DONE' || subtask.is_done) ? 'TODO' : 'DONE';
+
+    // 🚀 BÍ KÍP FIX LỖI: Làm sạch mảng Assignees (chỉ bóc lấy chuỗi ID, vứt bỏ Object)
+    const rawAssignees = subtask.assignees_user_id || subtask.assigneesUserId || subtask.assignees || [];
+    const cleanAssignees = rawAssignees
+      .map((item: any) => typeof item === 'object' ? (item.user_id || item.id || item._id) : item)
+      .filter((id: any) => id && String(id) !== "undefined" && !String(id).startsWith('temp-'))
+      .map((id: any) => String(id));
 
     try {
       await updateApiTask({
@@ -80,7 +88,15 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
           description: subtask.description || "",
           column_id: listId,
           parent_task_id: safeTaskId,
-          status: newStatus
+          status: newStatus,
+          
+          // 🚀 BÍ KÍP FIX LỖI ENUM: Ép chuỗi thành in hoa toàn bộ (toUpperCase)
+          priority: subtask.priority ? String(subtask.priority).toUpperCase() : "MEDIUM",
+          
+          story_point: Number(subtask.story_point || subtask.story_points) || 0,
+          assignees_user_id: cleanAssignees, 
+          start_date: subtask.start_date || null, 
+          due_date: subtask.due_date || null
         }
       });
     } catch (error) {
@@ -95,20 +111,36 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
         style={style} 
         {...attributes} 
         {...listeners} 
-        // 🚀 KÍCH HOẠT HÀM ĐỂ BẬT MODAL Ở BOARDVIEW
         onClick={() => {
           if (!isOverlay && onOpenTaskDetail) {
             onOpenTaskDetail(safeTaskId);
           }
         }}
-        className={`group relative flex flex-col bg-white p-3.5 sm:p-4 rounded-xl shadow-sm border border-slate-200 cursor-grab active:cursor-grabbing hover:border-indigo-300 hover:shadow-md transition-all ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
+        // 🚀 ĐỔI STYLE NỀN, VIỀN VÀ ĐỘ MỜ THEO TRẠNG THÁI DONE
+        className={`group relative flex flex-col p-3.5 sm:p-4 rounded-xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all 
+          ${isTaskDone 
+            ? 'bg-slate-50/80 border-slate-200/60 opacity-85 hover:border-slate-300' 
+            : 'bg-white border-slate-200 hover:border-indigo-300'} 
+          ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
       >
-        <h4 className="text-sm font-semibold text-slate-800 break-words pr-14 leading-snug">{task.title}</h4>
+        {/* 🚀 KHỐI TIÊU ĐỀ: TỰ ĐỘNG GẠCH NGANG VÀ THÊM ICON HOÀN THÀNH BIẾN ĐỘNG */}
+        <div className="flex justify-between items-start gap-2 pr-14">
+          <h4 className={`text-sm font-semibold break-words leading-snug transition-all 
+            ${isTaskDone ? 'line-through text-slate-400 font-medium' : 'text-slate-800'}`}
+          >
+            {task.title}
+          </h4>
+          {isTaskDone && (
+            <span className="shrink-0 text-emerald-600 bg-emerald-50 p-0.5 rounded-full border border-emerald-200 shadow-sm animate-in fade-in zoom-in-50 duration-300">
+              <Check size={10} strokeWidth={3} />
+            </span>
+          )}
+        </div>
         
         {task.description && (
           <div className="mt-2 flex items-start gap-1.5 text-slate-500">
             <AlignLeft size={12} className="shrink-0 mt-0.5 text-slate-400" />
-            <p className="text-xs line-clamp-2 leading-relaxed">{task.description}</p>
+            <p className={`text-xs line-clamp-2 leading-relaxed ${isTaskDone ? 'text-slate-400/70' : ''}`}>{task.description}</p>
           </div>
         )}
 
@@ -149,7 +181,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-medium border-t border-slate-100 pt-2.5">
           <div className="flex items-center gap-2">
             {task.priority && (
-              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${priorityColors[task.priority] || priorityColors.Medium}`}>
+              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${isTaskDone ? 'bg-slate-100 text-slate-400 border border-slate-200/60' : (priorityColors[String(task.priority).toUpperCase()] || priorityColors.MEDIUM)}`}>
                 <Flag size={10} /> 
                 <span className="text-[10px] font-bold uppercase">{task.priority}</span>
               </span>
@@ -175,16 +207,16 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
                         <span
                           key={userId || idx}
                           title={displayName} 
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold transition-all hover:bg-indigo-100 shadow-sm"
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all shadow-sm ${isTaskDone ? 'bg-slate-100 text-slate-400 border-slate-200/60' : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'}`}
                         >
                           {avatarUrl ? (
                             <img 
                               src={avatarUrl} 
                               alt={displayName} 
-                              className="w-4 h-4 rounded-full object-cover border border-indigo-200 shrink-0"
+                              className={`w-4 h-4 rounded-full object-cover border shrink-0 ${isTaskDone ? 'border-slate-200/80 grayscale' : 'border-indigo-200'}`}
                             />
                           ) : (
-                            <div className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-[8px] text-white shrink-0">
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shrink-0 ${isTaskDone ? 'bg-slate-300' : 'bg-indigo-600'}`}>
                               {initial}
                             </div>
                           )}
@@ -204,7 +236,6 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
 
         <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm rounded-lg p-0.5 shadow-sm border border-slate-100">
           <button 
-            // 🚀 KÍCH HOẠT HÀM Ở NÚT EDIT LUÔN
             onClick={(e) => { 
               e.stopPropagation(); 
               if (onOpenTaskDetail) onOpenTaskDetail(safeTaskId);

@@ -34,10 +34,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.fluxboard.board.task.event.TaskCreatedEvent;
 import com.fluxboard.board.task.event.TaskUpdatedEvent;
 import com.fluxboard.board.task.event.TaskDeletedEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.mongodb.core.query.*;
+
+import com.fluxboard.board.task.dto.request.TaskAttachmentRequest; // Sếp nhớ tạo DTO này nhé
+import org.springframework.data.mongodb.core.MongoTemplate;
+import com.fluxboard.board.task.event.TaskCreatedEvent;
 
 import java.time.Instant;
 import java.util.*;
@@ -57,6 +61,7 @@ private final TaskRepository taskRepository;
     private final NotificationDispatcher notificationDispatcher;
     private final ActivityService activityService;
     private final ApplicationEventPublisher eventPublisher;
+    private final MongoTemplate mongoTemplate;
 
     // ========================================================================
     // 1. PUBLIC CRUD & BUSINESS METHODS
@@ -728,7 +733,9 @@ private final TaskRepository taskRepository;
                 entity.getStatus(), entity.getStoryPoint(), entity.getEstimatedDate(), entity.getOrder(),
                 entity.getAiSuggestedPoint(), entity.getAiEstimatedReason(), author, entity.getCreatedAt(), 
                 entity.getUpdatedAt(),
-                boardId // 🚀 TRẢ VỀ THÊM BOARD_ID TRONG PHẢN HỒI API
+                boardId,
+                entity.getAttachments()
+
         );
     }
 
@@ -741,5 +748,45 @@ private final TaskRepository taskRepository;
                 .sorted(Comparator.comparing(TaskEntity::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(entity -> toResponse(entity, users)) 
                 .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> addAttachmentToTask(String taskId, TaskAttachmentRequest request, String actorUserId) {
+        String normalizedActorId = requireAuthenticatedUserId(actorUserId);
+        
+        // 1. Kiểm tra task có tồn tại không
+        TaskEntity task = findTaskById(taskId);
+        String columnId = task.getColumnId();
+        BoardColumnEntity columnForBoardId = findBoardColumnById(columnId);
+        String boardId = columnForBoardId.getBoardId();
+        String projectId = findBoardById(boardId).getProjectId();
+
+        // 2. Tạo Object File đính kèm
+        Map<String, Object> newAttachment = new HashMap<>();
+        String attachmentId = UUID.randomUUID().toString();
+        newAttachment.put("attachment_id", attachmentId);
+        newAttachment.put("file_name", request.getFileName());
+        newAttachment.put("file_url", request.getFileUrl());
+        newAttachment.put("content_type", request.getContentType());
+        newAttachment.put("file_size", request.getFileSize());
+        newAttachment.put("uploaded_by", normalizedActorId);
+        newAttachment.put("uploaded_at", Instant.now().toString());
+
+        // 3. Push thẳng vào mảng attachments trong MongoDB (Tối ưu hiệu năng)
+        Query query = new Query(Criteria.where("_id").is(taskId).and("is_deleted").is(false));
+        Update update = new Update().push("attachments", newAttachment);
+        mongoTemplate.updateFirst(query, update, "tasks");
+
+        // 4. Bắn tín hiệu Realtime qua WebSocket để Frontend cập nhật ngay lập tức
+        broadcastBoardChange(boardId, "TASK_UPDATED", taskId);
+
+        // 5. Ghi Log lịch sử hoạt động (Activity Log)
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.TASK, taskId, projectId, boardId, taskId,
+                normalizedActorId, ActivityAction.UPDATE, "attachments", null, request.getFileName(),
+                "Đã đính kèm file: " + request.getFileName()
+        ));
+
+        return newAttachment;
     }
 }

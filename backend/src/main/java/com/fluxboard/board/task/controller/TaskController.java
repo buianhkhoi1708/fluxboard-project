@@ -3,6 +3,7 @@ package com.fluxboard.board.task.controller;
 import com.fluxboard.auth.model.AuthRequestContext;
 import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
+import com.fluxboard.board.task.dto.request.TaskAttachmentRequest;
 import com.fluxboard.board.task.dto.request.TaskMoveRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
@@ -11,7 +12,7 @@ import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import jakarta.validation.Valid;
-import java.util.List;
+import java.util.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -135,5 +136,18 @@ public class TaskController {
     ) {
         List<TaskResponse> myTasks = taskService.getMyTasks(authUser.userId());
         return ResponseFactory.ok("Fetched My Tasks successfully.", myTasks);
+    }
+
+    @PostMapping("/{taskId}/attachments")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> attachFileToTask(
+            @PathVariable String taskId,
+            @Valid @RequestBody TaskAttachmentRequest request,
+            // 🚀 ĐÃ ĐỒNG BỘ: Sử dụng chuẩn Auth của project sếp
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        
+        // Truyền ID của user đang đăng nhập vào Service
+        Map<String, Object> attachment = taskService.addAttachmentToTask(taskId, request, authUser.userId());
+        
+        return ResponseFactory.ok("Đính kèm tài liệu thành công!", attachment);
     }
 }

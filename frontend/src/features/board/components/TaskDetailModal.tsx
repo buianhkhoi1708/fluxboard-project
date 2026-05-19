@@ -1,14 +1,15 @@
-import React, { useState, useEffect, forwardRef, useMemo } from "react";
+import React, { useState, useEffect, forwardRef, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X, AlignLeft, CheckSquare, Clock, Calendar, Flag,
   Target, Sparkles, Plus, Square, Save, Trash2, User, ChevronDown,
-  KanbanSquare, Check
+  KanbanSquare, Check, Paperclip, File, Download, Loader2
 } from "lucide-react";
+import axios from 'axios';
 
 import { useBoardStore } from "../stores/useBoardStore";
 import { useUserStore } from "../../user/store/useUserStore"; 
-import { useGetBoardDetail, useUpdateTask, useDeleteTask, useCreateTask, useGetProjectMembers } from '../hooks/useBoardQueries';
+import { useGetBoardDetail, useUpdateTask, useDeleteTask, useCreateTask, useGetProjectMembers, getPresignedUrl, useAddAttachmentToTask } from '../hooks/useBoardQueries';
 
 import { TaskDetailModalProps, Task } from '../types/index';
 
@@ -76,9 +77,57 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const [editDueDate, setEditDueDate] = useState<Date | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   
+  const [isDone, setIsDone] = useState(false);
+  
   const [editAssignees, setEditAssignees] = useState<string[]>([]);
   const [isAssigneePopupOpen, setIsAssigneePopupOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // LOGIC UPLOAD FILE
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const { mutateAsync: addAttachment } = useAddAttachmentToTask();
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !activeBoardId) return;
+
+    setIsUploading(true);
+    try {
+      const urls = await getPresignedUrl(file.name, file.type);
+      
+      // 1. Lấy uploadUrl từ API trả về (tùy key backend sếp viết)
+      const uploadUrl = urls.uploadUrl || urls.upload_url || urls.url;
+
+      // 🚀 2. BÍ KÍP: Tự động chế ra Public URL bằng cách cắt bỏ phần token sau dấu '?'
+      const finalPublicUrl = urls.publicUrl || urls.public_url || uploadUrl.split('?')[0];
+
+      // Đẩy file lên Cloud
+      await axios.put(uploadUrl, file, {
+        headers: { 'Content-Type': file.type }
+      });
+
+      // Gọi API nộp link vào Task
+      await addAttachment({
+        taskId: String(task.id || task._id),
+        boardId: activeBoardId,
+        payload: {
+          file_name: file.name,
+          file_url: finalPublicUrl, // Đã có link chuẩn, không bao giờ bị null nữa!
+          content_type: file.type,
+          file_size: file.size
+        }
+      });
+
+      if (fileInputRef.current) fileInputRef.current.value = ''; 
+
+    } catch (error) {
+      console.error("Lỗi upload:", error);
+      alert("Tải lên thất bại. Vui lòng thử lại!");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && task) {
@@ -91,6 +140,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       setEditStoryPoints(task.story_points || task.story_point || 0);
       setEditStartDate(task.start_date ? new Date(task.start_date) : null);
       setEditDueDate(task.due_date ? new Date(task.due_date) : null);
+      
+      setIsDone(task.status === "DONE");
       
       const assigneesList = task.assignees_user_id || task.assigneesUserId || task.assignees || [];
       const normalizedIds = assigneesList
@@ -156,7 +207,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           title: editTitle.trim() || "Task không tên",
           description: editDesc,
           priority: finalPriority, 
-          status: task.status || "TODO", 
+          status: isDone ? "DONE" : (task.status === "DONE" ? "TODO" : task.status || "TODO"), 
           story_point: Number(editStoryPoints) || 0, 
           start_date: editStartDate ? editStartDate.toISOString() : null,
           due_date: editDueDate ? editDueDate.toISOString() : null,
@@ -274,17 +325,33 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               </span>
             </p>
           </div>
-          <button onClick={onClose} className="p-2.5 bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all shrink-0 mt-1">
-            <X size={20} />
-          </button>
+          
+          <div className="flex items-center gap-3 shrink-0 mt-1">
+            <button
+              onClick={() => setIsDone(!isDone)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+                isDone 
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm ring-2 ring-emerald-100 ring-offset-1' 
+                  : 'bg-white text-slate-400 border-slate-200 hover:border-emerald-300 hover:text-emerald-500'
+              }`}
+            >
+              <CheckSquare size={18} className={isDone ? "text-emerald-500" : "text-slate-300"} />
+              {isDone ? 'Đã hoàn thành' : 'Đánh dấu xong'}
+            </button>
+
+            <button onClick={onClose} className="p-2.5 bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Nội dung cuộn */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8">
           <div className="flex flex-col md:flex-row gap-8 lg:gap-10">
             
-            {/* CỘT TRÁI */}
+            {/* 🚀 CỘT TRÁI */}
             <div className="flex-1 flex flex-col gap-8">
+              
               {/* Mô tả */}
               <div>
                 <div className="flex items-center gap-2.5 text-slate-800 mb-4 font-bold text-lg">
@@ -297,6 +364,65 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                   placeholder="Thêm mô tả chi tiết hơn cho công việc này..."
                   className="w-full min-h-[140px] p-5 bg-white border border-slate-200/80 rounded-2xl text-[15px] leading-relaxed text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all resize-y custom-scrollbar shadow-sm"
                 />
+              </div>
+
+              {/* 🚀 KHU VỰC TÀI LIỆU ĐÍNH KÈM Ở ĐÂY */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5 text-slate-800 font-bold text-lg">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Paperclip size={18} /></div>
+                    <h3>Tài liệu đính kèm</h3>
+                    <span className="ml-1.5 text-xs font-black bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full">
+                      {(task.attachments || []).length}
+                    </span>
+                  </div>
+                  
+                  {/* Nút Upload Trực Tiếp */}
+                  <div>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-sm font-bold transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {isUploading ? <Loader2 size={16} className="animate-spin text-indigo-500" /> : <Plus size={16} />}
+                      {isUploading ? "Đang tải..." : "Thêm file"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Danh sách File đã up */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(task.attachments || []).length === 0 ? (
+                    <div className="col-span-full p-6 border-2 border-dashed border-slate-200 rounded-[1.5rem] text-center text-sm font-medium text-slate-400 bg-slate-50/30">
+                      Chưa có file nào. Hãy nhấn "Thêm file" để nộp tài liệu!
+                    </div>
+                  ) : (
+                    (task.attachments || []).map((file: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md transition-all group cursor-pointer" onClick={() => window.open(file.file_url || file.fileUrl, '_blank')}>
+                        <div className="w-11 h-11 shrink-0 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 shadow-sm">
+                          <File size={22} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-bold text-slate-700 truncate group-hover:text-indigo-600 transition-colors" title={file.file_name || file.fileName}>
+                            {file.file_name || file.fileName}
+                          </p>
+                          <p className="text-[11px] font-medium text-slate-400 mt-0.5 uppercase tracking-tighter">
+                            {file.content_type?.split('/')[1] || 'FILE'} • {((file.file_size || file.fileSize || 0) / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <div className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-all">
+                          <Download size={16} />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               {/* Checklist Việc Con */}
@@ -363,7 +489,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               )}
             </div>
 
-            {/* CỘT PHẢI */}
+            {/* 🚀 CỘT PHẢI */}
             <div className="w-full md:w-[280px] flex flex-col gap-6 shrink-0">
               <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-5">
                 <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
