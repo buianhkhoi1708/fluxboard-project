@@ -1,20 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore } from '../../auth/store/useAuthStore';
+import { useQueryClient } from '@tanstack/react-query'; // 🚀 Import thêm useQueryClient
+import { useAuthUser, AUTH_KEYS } from '../../auth/hooks/useAuthQueries'; // 🚀 Nhúng hook Auth mới của sếp vào đây
 import { useUpdateProfile } from '../hooks/useSettingQueries';
 import { useSettingUiStore } from '../store/useSettingUIStore';
 import { useRolesDictionary } from '../../rbac/hooks/useRbacQueries';
 import { Loader2, AlertTriangle, CheckCircle2, Camera } from 'lucide-react';
 
 export const ProfileTab: React.FC = () => {
-  const { user } = useAuthStore();
+  const queryClient = useQueryClient(); // 🚀 Khởi tạo queryClient để điều khiển cache
+  
+  // 🚀 BƯỚC 1: Thay thế useAuthStore của Zustand bằng hookuseAuthUser của TanStack
+  const { data: user, isLoading: isLoadingUser } = useAuthUser(); 
+  
   const { message, setMessage, clearMessage } = useSettingUiStore();
-
   const { mutate: updateProfile, isPending } = useUpdateProfile();
   const { data: roles = [], isLoading: isLoadingRoles } = useRolesDictionary();
 
-  const [name, setName] = useState(user?.full_name || '');
+  // Local State cho form input và preview ảnh
+  const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState(user?.avatar_url || '');
+  const [preview, setPreview] = useState('');
+
+  // 🚀 BƯỚC 2: Đồng bộ dữ liệu từ Query Cache vào Form khi user tải xong
+  useEffect(() => {
+    if (user) {
+      setName(user.full_name || '');
+      setPreview(user.avatar_url || '');
+    }
+  }, [user]);
 
   useEffect(() => {
     clearMessage();
@@ -29,21 +42,51 @@ export const ProfileTab: React.FC = () => {
   };
 
   const handleSave = () => {
+    // Hỗ trợ linh hoạt cả id lẫn user_id từ cache
     const userId = user?.id || user?.user_id;
     if (!userId) return;
 
     updateProfile(
       { userId, name, file },
       {
-        onSuccess: () => setMessage('success', 'Cập nhật hồ sơ thành công!'),
+        onSuccess: (data: any) => {
+          setMessage('success', 'Cập nhật hồ sơ thành công!');
+          
+          // 🚀 BƯỚC 3: ĐẬP BẢO TÀNG CACHE CŨ - Ghi đè dữ liệu mới thẳng vào TanStack Cache
+          queryClient.setQueryData(AUTH_KEYS.me, (old: any) => {
+            if (!old) return old;
+            
+            const updatedUser = {
+              ...old,
+              full_name: data.name,
+              avatar_url: data.avatarUrl 
+                ? `${data.avatarUrl}?t=${Date.now()}` // Chống trình duyệt giữ cache ảnh cũ
+                : old.avatar_url
+            };
+
+            // Đồng bộ luôn xuống localStorage để lần sau F5 không bị mất
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            return updatedUser;
+          });
+        },
         onError: (err: any) =>
           setMessage('error', err.response?.data?.message || 'Có lỗi xảy ra!'),
       }
     );
   };
 
+  // Màn hình chờ nếu bốc dữ liệu User lúc đầu chưa kịp xong
+  if (isLoadingUser) {
+    return (
+      <div className="w-full h-48 flex items-center justify-center gap-2 text-slate-400">
+        <Loader2 size={24} className="animate-spin text-indigo-600" />
+        <span className="text-sm font-medium">Đang tải thông tin tài khoản...</span>
+      </div>
+    );
+  }
+
   const matchedRole = roles.find(
-    (r) => r.id === user?.role_id || r.name === user?.system_role
+    (r: any) => r.id === user?.role_id || r.name === user?.system_role
   );
   const displayRoleName = isLoadingRoles
     ? 'Đang tải...'
@@ -51,7 +94,7 @@ export const ProfileTab: React.FC = () => {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Message */}
+      {/* Message báo lỗi / thành công */}
       {message.text && (
         <div
           className={`p-3 mb-6 rounded-xl text-sm font-medium border flex items-center gap-2 ${
@@ -98,7 +141,7 @@ export const ProfileTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Form */}
+      {/* Form chỉnh sửa */}
       <div className="space-y-5 max-w-lg">
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">

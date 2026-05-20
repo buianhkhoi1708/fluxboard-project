@@ -112,7 +112,7 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
               <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
                 <Building2 className="text-indigo-600" size={24} />
               </div>
-              Organization
+              Tổ chức
             </h1>
             <p className="text-sm font-medium text-slate-500 pl-12">
               Thiết lập và quản lý cấu trúc phòng ban, đội ngũ.
@@ -255,7 +255,7 @@ const OrganizationPage: React.FC<OrganizationPageProps> = () => {
                                   )}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-[11px] text-slate-400 font-medium">Team Lead:</span>
+                                  <span className="text-[11px] text-slate-400 font-medium">Trưởng nhóm:</span>
                                   <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">{displayLeadName}</span>
                                 </div>
                               </div>

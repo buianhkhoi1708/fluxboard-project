@@ -12,16 +12,17 @@ const TopNavbar = () => {
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const userName = user?.full_name || user?.fullName || "Guest User";
+  const userName = user?.full_name || user?.fullName || "Khách";
   const userInitial = userName.charAt(0).toUpperCase();
   const avatarUrl = user?.avatar_url || user?.avatarUrl;
 
   const handleUserProfile = () => {
-    navigation.navigate('/settings')
-  }
+    // Điều hướng đến trang cài đặt/hồ sơ
+    window.location.href = '/settings'; // hoặc dùng useNavigate nếu có router context
+  };
 
   return (
-    <nav className="flex justify-between items-center px-4 md:px-6 h-[60px] border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
+    <nav className="flex justify-between items-center px-4 md:px-6 h-[64px] border-b border-slate-200/80 bg-gradient-to-r from-white/90 via-white/80 to-indigo-50/50 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       
       {/* LEFT SECTION: Logo & Workspace */}
       <div className="flex items-center gap-6 md:gap-8">
@@ -35,11 +36,11 @@ const TopNavbar = () => {
         </div>
         
         {/* Workspace Selector */}
-        <div className="hidden md:flex items-center gap-2.5 border border-slate-200 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all group">
+        <div className="hidden md:flex items-center gap-2.5 border border-slate-200/80 px-3 py-2 rounded-xl cursor-pointer hover:bg-white hover:border-indigo-300 hover:shadow-sm transition-all group bg-white/60">
           <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white w-6 h-6 flex items-center justify-center rounded-md text-xs font-bold shadow-sm">
             F
           </div>
-          <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Flux Workspace</span>
+          <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Không gian làm việc</span>
           <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
         </div>
       </div>
@@ -52,11 +53,11 @@ const TopNavbar = () => {
           </div>
           <input 
             type="text" 
-            placeholder="Search cards, boards, members..." 
-            className="w-full bg-slate-100/70 border border-transparent text-sm text-slate-800 rounded-xl pl-10 pr-4 py-2 outline-none focus:bg-white focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
+            placeholder="Tìm kiếm thẻ, bảng, thành viên..." 
+            className="w-full bg-slate-100/70 border border-transparent text-sm text-slate-800 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all placeholder:text-slate-400"
           />
           <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-            <span className="text-[10px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 bg-white shadow-sm">⌘K</span>
+            <span className="text-[10px] font-bold text-slate-400 border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white shadow-sm">⌘K</span>
           </div>
         </div>
       </div>
@@ -64,7 +65,6 @@ const TopNavbar = () => {
       {/* RIGHT SECTION: Notifications & Profile */}
       <div className="flex items-center gap-4 md:gap-5">
         
-        {/* 🚀 ĐÃ THAY THẾ NÚT BELL TĨNH BẰNG COMPONENT NOTIFICATION ĐỘNG */}
         <NotificationDropdown />
         
         {/* Vertical Divider */}
@@ -91,22 +91,25 @@ const TopNavbar = () => {
 
           {/* Profile Dropdown */}
           {isProfileOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-lg border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-              <div className="px-4 py-2 border-b border-slate-100 mb-1">
+            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 backdrop-blur-sm">
+              <div className="px-4 py-3 border-b border-slate-100 mb-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{userName}</p>
-                <p className="text-[11px] font-medium text-slate-400 truncate">{user?.email || "No email"}</p>
-                <span className="inline-block mt-1.5 px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase rounded border border-indigo-100">
-                  {currentRoleName}
+                <p className="text-[11px] font-medium text-slate-400 truncate">{user?.email || "Chưa có email"}</p>
+                <span className="inline-block mt-1.5 px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase rounded-md border border-indigo-100">
+                  {currentRoleName || "Thành viên"}
                 </span>
               </div>
               
-              <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2" onClick={handleUserProfile}>
+              <button 
+                onClick={handleUserProfile} 
+                className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2 rounded-lg mx-1"
+              >
                 <User size={16} /> Hồ sơ cá nhân
               </button>
               
               <button 
                 onClick={logout}
-                className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2"
+                className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2 rounded-lg mx-1"
               >
                 Đăng xuất
               </button>

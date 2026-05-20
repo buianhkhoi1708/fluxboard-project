@@ -9,7 +9,7 @@ import {
   Search, LayoutGrid, Loader2
 } from 'lucide-react';
 
-// ------- Skeleton Loading Component -------
+// ------- Component Skeleton khi tải -------
 const WorkspaceSkeleton = () => (
   <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg p-5 md:p-6 animate-pulse">
     <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
@@ -33,7 +33,7 @@ const WorkspaceSkeleton = () => (
   </div>
 );
 
-// ------- Main Component -------
+// ------- Component Chính -------
 const WorkspacesPage = () => {
   const getUser = useUserStore((state) => state.getUser);
 
@@ -124,7 +124,7 @@ const WorkspacesPage = () => {
           </div>
         </div>
 
-        {/* LOADING SKELETON */}
+        {/* KHUNG TẢI (SKELETON) */}
         {isLoading && (
           <div className="space-y-6">
             {[...Array(2)].map((_, i) => (
@@ -133,7 +133,7 @@ const WorkspacesPage = () => {
           </div>
         )}
 
-        {/* EMPTY STATE */}
+        {/* TRẠNG THÁI TRỐNG */}
         {!isLoading && filteredProjects.length === 0 && (
           <div className="bg-white/80 backdrop-blur-sm border border-dashed border-indigo-200 rounded-2xl p-16 flex flex-col items-center justify-center text-center shadow-sm transition-all">
             <div className="p-5 bg-indigo-50 rounded-full mb-5 animate-bounce-slow">
@@ -160,7 +160,7 @@ const WorkspacesPage = () => {
           </div>
         )}
 
-        {/* WORKSPACES LIST */}
+        {/* DANH SÁCH KHÔNG GIAN LÀM VIỆC */}
         {!isLoading && filteredProjects.length > 0 && (
           <div className="space-y-8">
             {filteredProjects.map((item, index) => {
@@ -178,7 +178,7 @@ const WorkspacesPage = () => {
                   key={workspace.id || workspace._id}
                   className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 md:p-6 transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/20 hover:border-indigo-200/60 hover:-translate-y-0.5"
                 >
-                  {/* Workspace Header */}
+                  {/* Đầu mục không gian làm việc */}
                   <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-200/50 shrink-0 transition-transform duration-200 group-hover:scale-105">
@@ -200,7 +200,7 @@ const WorkspacesPage = () => {
                             <LayoutGrid size={12} /> {boardsData.length} bảng
                           </span>
 
-                          {/* Members Preview */}
+                          {/* Xem trước thành viên */}
                           <Link
                             to={`/projects/${workspace.id || workspace._id}?tab=members`}
                             title="Quản lý thành viên"
@@ -250,7 +250,7 @@ const WorkspacesPage = () => {
                     </button>
                   </div>
 
-                  {/* Boards Grid */}
+                  {/* Lưới bảng */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {boardsData.map((boardItem) => {
                       const b = boardItem.board || boardItem;
@@ -279,7 +279,7 @@ const WorkspacesPage = () => {
                       );
                     })}
 
-                    {/* Add Board Button */}
+                    {/* Nút thêm bảng */}
                     <button
                       onClick={() => {
                         setSelectedProjectId(workspace.id || workspace._id);
@@ -297,7 +297,7 @@ const WorkspacesPage = () => {
               );
             })}
 
-            {/* Loading indicator for next page */}
+            {/* Chỉ báo tải trang tiếp theo */}
             {isFetchingNextPage && (
               <div className="flex justify-center py-4">
                 <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border border-slate-200 text-sm text-slate-500 animate-pulse">
@@ -309,7 +309,7 @@ const WorkspacesPage = () => {
           </div>
         )}
 
-        {/* Modals */}
+        {/* Các Modal */}
         <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
         <CreateBoardModal
           isOpen={isBoardModalOpen}

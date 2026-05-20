@@ -52,6 +52,8 @@ function App() {
                 <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
                 <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} /> {/* Thường settings cá nhân ai cũng có */}
+                <Route path="/mytasks" element={<MyTasksPage />} /> {/* Thường settings cá nhân ai cũng có */}
+                <Route path="/notifications" element={<NotificationsPage />} /> {/* Thường settings cá nhân ai cũng có */}
 
 
                 {/* ========================================== */}

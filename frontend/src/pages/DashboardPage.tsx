@@ -68,7 +68,7 @@ const DashboardPage = () => {
               <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
                 <LayoutDashboard className="text-indigo-600" size={24} />
               </div>
-              Dashboard
+              Bảng điều khiển
             </h1>
             <p className="text-sm font-medium text-slate-500 pl-12">
               Chào mừng trở lại, <span className="text-indigo-600 font-bold">{user?.full_name || 'Khách'}</span>.
@@ -87,7 +87,7 @@ const DashboardPage = () => {
             </div>
             <h3 className="text-xl font-bold text-slate-800 mb-2">Hệ thống đang bận</h3>
             <p className="text-slate-500 text-sm mb-6 max-w-md">
-              {(error as any)?.response?.data?.message || (error as Error)?.message || "Không thể lấy dữ liệu Dashboard."}
+              {(error as any)?.response?.data?.message || (error as Error)?.message || "Không thể lấy dữ liệu Bảng điều khiển."}
             </p>
             <button
               onClick={() => refetch()}
