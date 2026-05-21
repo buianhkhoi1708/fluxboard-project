@@ -1,14 +1,13 @@
 import axiosClient from '../../../lib/axiosClient';
 
-// Interface lấy dữ liệu trả về từ GET /project-members
-    export interface ProjectMemberDetail {
+export interface ProjectMemberDetail {
     id: string;
     projectId: string;
     userId: string;
     user: {
-    id: string;
-    full_name: string;
-    avatar_url: string | null;
+        id: string;
+        full_name: string;
+        avatar_url: string | null;
     };
     roleIds: string[];
     active: boolean;
@@ -17,60 +16,53 @@ import axiosClient from '../../../lib/axiosClient';
 }
 
 export const projectApi = {
-    // Lấy danh sách chi tiết
+    // 🚀 LẤY DANH SÁCH & BÓC VỎ DỮ LIỆU
     getProjectMembersDetail: async (projectId: string): Promise<ProjectMemberDetail[]> => {
-        const response: any = await axiosClient.get(`/projects/${projectId}/project-members`);
-        return response.data || response;
+        const response: any = await axiosClient.get(`/projects/${projectId}/members`);
+        return response.data?.data || response.data?.content || response.data || [];
     },
 
-  //Thêm member vào project
+    // THÊM MEMBER
     addProjectMember: async (projectId: string, userId: string, roleIds: string[]) => {
         const payload = {
             user_id: userId,
             role_ids: roleIds
         };
-
         const response: any = await axiosClient.post(`/projects/${projectId}/members`, payload);
-        return response.data || response;
+        return response.data?.data || response.data;
     },
 
-    // Sửa quyền hoặc trạng thái
-    updateProjectMember: async (projectId: string, memberId: string, roleIds: string[], isActive: boolean) => {
+    // SỬA MEMBER (Quyền/Trạng thái)
+    updateProjectMember: async (projectId: string, userId: string, roleIds: string[], isActive: boolean) => {
+        // 🚀 ĐÃ FIX: Chỉ gửi role_ids chuẩn snake_case, gọt bỏ field active để Backend khỏi báo lỗi Unknown Field
         const payload = {
-            role_ids: roleIds,
-            active: isActive
+            role_ids: roleIds
         };
-
-        const response: any = await axiosClient.put(`/projects/${projectId}/project-members/${memberId}`, payload);
-        return response.data || response;
+        const response: any = await axiosClient.put(`/projects/${projectId}/members/${userId}`, payload);
+        return response.data?.data || response.data;
     },
 
-    // Xóa member
-    removeProjectMember: async (projectId: string, memberId: string) => {
-        const response: any = await axiosClient.delete(`/projects/${projectId}/project-members/${memberId}`);
-        return response.data || response;
+    // XÓA MEMBER
+    removeProjectMember: async (projectId: string, userId: string) => {
+        const response: any = await axiosClient.delete(`/projects/${projectId}/members/${userId}`);
+        return response.data?.data || response.data;
     },
 
-    getProjectById: async (projectId: string) => {
-        const response: any = await axiosClient.get(`/projects/${projectId}`);
-        return response.data || response;
-    },
-
-    // Lấy thông tin tổng quan (Gồm Project Info và danh sách Boards)
+    // LẤY TỔNG QUAN
     getProjectOverview: async (projectId: string) => {
         const response: any = await axiosClient.get(`/projects/${projectId}/overview`);
-        return response.data || response;
+        return response.data?.data || response.data;
     },
 
-    // Cập nhật thông tin dự án
+    // SỬA DỰ ÁN
     updateProjectInfo: async (projectId: string, payload: any) => {
         const response: any = await axiosClient.put(`/projects/${projectId}`, payload);
-        return response.data || response;
+        return response.data?.data || response.data;
     },
 
-    // Xóa dự án
+    // XÓA DỰ ÁN
     deleteProject: async (projectId: string) => {
         const response: any = await axiosClient.delete(`/projects/${projectId}`);
-        return response.data || response;
+        return response.data?.data || response.data;
     }
 };

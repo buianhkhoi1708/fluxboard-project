@@ -46,6 +46,16 @@ public class BoardController {
                 "Board created successfully.",
                 boardService.create(request, authUser.userId()));
     }
+    @PostMapping("/ai") // Đường dẫn sẽ là POST /boards/ai
+    public ResponseEntity<ApiResponse<BoardResponse>> createAiBoard(
+            @Valid @RequestBody CreateBoardRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        // Gọi thẳng vào hàm createAiBoard (Tắt 3 cột mặc định)
+        return ResponseFactory.created(
+                "AI Board template created successfully.",
+                boardService.createAiBoard(request, authUser.userId()));
+    }
 
     @RequirePermission("BOARD_VIEW")
     @GetMapping

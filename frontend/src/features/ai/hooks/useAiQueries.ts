@@ -51,7 +51,7 @@ export const useGenerateAiBoard = () => {
       }
 
       // 🚀 BƯỚC 2: Tạo Board rỗng trước (Dùng project_id chuẩn snake_case)
-      const boardRes: any = await axiosClient.post('/boards', { 
+      const boardRes: any = await axiosClient.post('/boards/ai', { 
         project_id: project_id, 
         name: `AI Board: ${prompt.substring(0, 15)}...` 
       });

@@ -1,19 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore } from '../../auth/store/useAuthStore';
+import { useQueryClient } from '@tanstack/react-query'; // 🚀 Import thêm useQueryClient
+import { useAuthUser, AUTH_KEYS } from '../../auth/hooks/useAuthQueries'; // 🚀 Nhúng hook Auth mới của sếp vào đây
 import { useUpdateProfile } from '../hooks/useSettingQueries';
 import { useSettingUiStore } from '../store/useSettingUIStore';
 import { useRolesDictionary } from '../../rbac/hooks/useRbacQueries';
+import { Loader2, AlertTriangle, CheckCircle2, Camera } from 'lucide-react';
 
 export const ProfileTab: React.FC = () => {
-  const { user } = useAuthStore();
-  const { message, setMessage, clearMessage } = useSettingUiStore();
+  const queryClient = useQueryClient(); // 🚀 Khởi tạo queryClient để điều khiển cache
   
+  // 🚀 BƯỚC 1: Thay thế useAuthStore của Zustand bằng hookuseAuthUser của TanStack
+  const { data: user, isLoading: isLoadingUser } = useAuthUser(); 
+  
+  const { message, setMessage, clearMessage } = useSettingUiStore();
   const { mutate: updateProfile, isPending } = useUpdateProfile();
   const { data: roles = [], isLoading: isLoadingRoles } = useRolesDictionary();
 
-  const [name, setName] = useState(user?.full_name || '');
+  // Local State cho form input và preview ảnh
+  const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState(user?.avatar_url || '');
+  const [preview, setPreview] = useState('');
+
+  // 🚀 BƯỚC 2: Đồng bộ dữ liệu từ Query Cache vào Form khi user tải xong
+  useEffect(() => {
+    if (user) {
+      setName(user.full_name || '');
+      setPreview(user.avatar_url || '');
+    }
+  }, [user]);
 
   useEffect(() => {
     clearMessage();
@@ -28,103 +42,176 @@ export const ProfileTab: React.FC = () => {
   };
 
   const handleSave = () => {
+    // Hỗ trợ linh hoạt cả id lẫn user_id từ cache
     const userId = user?.id || user?.user_id;
     if (!userId) return;
 
     updateProfile(
       { userId, name, file },
       {
-        onSuccess: () => setMessage('success', 'Cập nhật hồ sơ thành công!'),
-        onError: (err: any) => setMessage('error', err.response?.data?.message || 'Có lỗi xảy ra!')
+        onSuccess: (data: any) => {
+          setMessage('success', 'Cập nhật hồ sơ thành công!');
+          
+          // 🚀 BƯỚC 3: ĐẬP BẢO TÀNG CACHE CŨ - Ghi đè dữ liệu mới thẳng vào TanStack Cache
+          queryClient.setQueryData(AUTH_KEYS.me, (old: any) => {
+            if (!old) return old;
+            
+            const updatedUser = {
+              ...old,
+              full_name: data.name,
+              avatar_url: data.avatarUrl 
+                ? `${data.avatarUrl}?t=${Date.now()}` // Chống trình duyệt giữ cache ảnh cũ
+                : old.avatar_url
+            };
+
+            // Đồng bộ luôn xuống localStorage để lần sau F5 không bị mất
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            return updatedUser;
+          });
+        },
+        onError: (err: any) =>
+          setMessage('error', err.response?.data?.message || 'Có lỗi xảy ra!'),
       }
     );
   };
 
-  // 🚀 Map Role ID sang Role Name
-  const matchedRole = roles.find((r) => r.id === user?.role_id || r.name === user?.system_role);
-  const displayRoleName = isLoadingRoles 
-    ? 'Đang tải...' 
-    : (matchedRole?.name || user?.system_role || 'Chưa xác định');
+  // Màn hình chờ nếu bốc dữ liệu User lúc đầu chưa kịp xong
+  if (isLoadingUser) {
+    return (
+      <div className="w-full h-48 flex items-center justify-center gap-2 text-slate-400">
+        <Loader2 size={24} className="animate-spin text-indigo-600" />
+        <span className="text-sm font-medium">Đang tải thông tin tài khoản...</span>
+      </div>
+    );
+  }
+
+  const matchedRole = roles.find(
+    (r: any) => r.id === user?.role_id || r.name === user?.system_role
+  );
+  const displayRoleName = isLoadingRoles
+    ? 'Đang tải...'
+    : matchedRole?.name || user?.system_role || 'Chưa xác định';
 
   return (
-    <div className="max-w-2xl animate-in fade-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-8">Hồ sơ cá nhân</h2>
-      
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Message báo lỗi / thành công */}
       {message.text && (
-        <div className={`p-3 mb-6 rounded-xl text-sm font-medium border ${
-          message.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
-        }`}>
+        <div
+          className={`p-3 mb-6 rounded-xl text-sm font-medium border flex items-center gap-2 ${
+            message.type === 'error'
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          }`}
+        >
+          {message.type === 'error' ? (
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          )}
           {message.text}
         </div>
       )}
 
-      <div className="flex items-center gap-6 mb-10">
-        <img 
-          src={preview || `https://ui-avatars.com/api/?name=${name}`} 
-          className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm bg-white" 
-          alt="Avatar Preview" 
-        />
-        <label className="cursor-pointer bg-white text-slate-700 px-5 py-2.5 rounded-xl font-semibold border border-slate-200 shadow-sm hover:bg-slate-50 transition-colors">
-          Đổi ảnh đại diện
-          <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
-        </label>
+      {/* Avatar section */}
+      <div className="flex items-center gap-5 mb-10">
+        <div className="relative">
+          <img
+            src={
+              preview ||
+              `https://ui-avatars.com/api/?name=${name}&background=6366f1&color=fff&bold=true`
+            }
+            className="w-20 h-20 rounded-full object-cover ring-2 ring-white shadow-sm border border-slate-200 bg-white"
+            alt="Avatar Preview"
+          />
+          <label className="absolute -bottom-1 -right-1 p-1.5 bg-indigo-600 text-white rounded-full cursor-pointer shadow-sm hover:bg-indigo-700 transition-colors">
+            <Camera size={14} strokeWidth={2.5} />
+            <input
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handleFileChange}
+            />
+          </label>
+        </div>
+        <div>
+          <p className="font-semibold text-slate-800">{name}</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {file ? file.name : 'PNG, JPG hoặc GIF (tối đa 2MB)'}
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-6">
+      {/* Form chỉnh sửa */}
+      <div className="space-y-5 max-w-lg">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Họ và tên</label>
-          <input 
-            type="text" 
-            value={name} 
-            onChange={(e) => setName(e.target.value)} 
-            className="w-full px-4 py-2.5 border border-slate-300 text-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all" 
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Họ và tên
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            placeholder="Nhập họ tên"
           />
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
-            <input 
-              type="email" 
-              value={user?.email || ''} 
-              readOnly 
-              className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" 
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Email
+            </label>
+            <input
+              type="email"
+              value={user?.email || ''}
+              readOnly
+              className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phòng ban</label>
-            <input 
-              type="text" 
-              value={user?.department || 'Chưa xác định'} 
-              readOnly 
-              className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" 
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Phòng ban
+            </label>
+            <input
+              type="text"
+              value={user?.department || 'Chưa xác định'}
+              readOnly
+              className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
             />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Vai trò hệ thống</label>
-            <input 
-              type="text" 
-              value={displayRoleName} 
-              readOnly 
-              className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none" 
-            />
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Vai trò hệ thống
+            </label>
+            {isLoadingRoles ? (
+              <div className="flex items-center gap-2 w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl">
+                <Loader2 size={16} className="animate-spin text-slate-400" />
+                <span className="text-sm text-slate-400 font-medium">Đang tải vai trò...</span>
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={displayRoleName}
+                readOnly
+                className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
+              />
+            )}
           </div>
         </div>
-        
-        <button 
-          onClick={handleSave} 
-          disabled={isPending} 
-          className="mt-8 bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-70 transition-all flex items-center justify-center gap-2"
+
+        <button
+          onClick={handleSave}
+          disabled={isPending}
+          className="mt-8 w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-2.5 rounded-xl font-bold hover:from-indigo-700 hover:to-indigo-800 active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200/50"
         >
           {isPending ? (
             <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <Loader2 size={18} className="animate-spin" />
               Đang lưu...
             </>
-          ) : 'Lưu thay đổi'}
+          ) : (
+            'Lưu thay đổi'
+          )}
         </button>
       </div>
     </div>

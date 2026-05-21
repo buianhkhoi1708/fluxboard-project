@@ -1,9 +1,8 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import { useAuthStore } from '../features/auth/store/useAuthStore';
 
 // Khởi tạo Instance với Base URL
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL as string, // Ép kiểu string cho Env
+  baseURL: import.meta.env.VITE_API_BASE_URL as string, 
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
@@ -13,8 +12,8 @@ const axiosClient = axios.create({
 // Request Interceptor
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Đọc token từ RAM (Zustand state)
-    const token = useAuthStore.getState().token;
+    // 🚀 SỬA TẠI ĐÂY: Đọc token trực tiếp từ ổ cứng (localStorage) thay vì Zustand
+    const token = localStorage.getItem('token');
     
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -28,14 +27,13 @@ axiosClient.interceptors.request.use(
 // Response Interceptor
 axiosClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // 🚀 BƯỚC NÀY CHÍNH LÀ INTERCEPTOR "BÓC VỎ" AXIOS MÀ ANH EM CHỐT Ở BÀI TRƯỚC!
+    // Interceptor "bóc vỏ" Axios 
     return response.data;
   },
   (error: AxiosError) => {
     if (error.response) {
       const status = error.response.status;
       
-      // Định nghĩa tạm kiểu cho data để tránh TS chửi
       const errorData = error.response.data as any;
       console.error(`[API Error ${status}]:`, errorData || 'Đã có lỗi xảy ra từ máy chủ');
       
@@ -45,7 +43,11 @@ axiosClient.interceptors.response.use(
         }
 
         console.warn("🔴 Token không hợp lệ hoặc đã hết hạn. Đang đăng xuất...");
-        useAuthStore.getState().logout();
+        
+        // 🚀 SỬA TẠI ĐÂY: Tự xử lý đăng xuất không cần mượn tay Zustand nữa
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
       }
       
     } else if (error.request) {
@@ -57,6 +59,5 @@ axiosClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
 
 export default axiosClient;

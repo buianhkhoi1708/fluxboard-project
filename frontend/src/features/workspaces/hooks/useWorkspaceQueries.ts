@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workspaceApi } from '../api/wokspaceApi';
+import { workspaceApi } from '../api/workspaceApi'; 
 import { WorkspaceOverview } from '../types/workspaceTypes';
 import { useUserStore } from '../../user/store/useUserStore';
 
@@ -12,30 +12,50 @@ export const useWorkspaces = () => {
     queryKey: WORKSPACE_KEYS.all,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      // 🚀 Luôn lấy đúng 2 project mỗi lần tải
+      // 1. Kéo danh sách Overview các dự án
       const response: any = await workspaceApi.getProjectOverviews(pageParam as number, 2);
-      
       const rawData = response.content || response.data?.content || response.data || [];
       
+      // Lọc bỏ dự án đã xóa
       const activeProjects = rawData.filter((item: WorkspaceOverview) => {
         const p = item.project;
         return p && (p.is_deleted === false || p.is_deleted === undefined);
       }) as WorkspaceOverview[];
 
-      // Lưu User vào Cache toàn cục
-      activeProjects.forEach(item => {
+      // 🚀 2. GỌI THÊM API LẤY MEMBER CHO TỪNG DỰ ÁN (Chạy song song bằng Promise.all)
+      const projectsWithMembers = await Promise.all(
+        activeProjects.map(async (item) => {
+          const pid = item.project?.id || item.project?._id;
+          if (!pid) return { ...item, members: [] };
+
+          try {
+            // Gọi API lấy members mà sếp vừa nhắc
+            const membersRes: any = await workspaceApi.getProjectMembers(String(pid));
+            const membersData = membersRes.data?.data || membersRes.data?.content || membersRes.data || membersRes || [];
+            
+            // Gộp members vào trong object project để UI có cái xài
+            return { ...item, members: membersData };
+          } catch (error) {
+            console.error(`Lỗi khi lấy member cho project ${pid}:`, error);
+            return { ...item, members: [] }; // Lỗi thì trả về mảng rỗng để không crash app
+          }
+        })
+      );
+
+      // 3. Lưu User vào Cache toàn cục để các modal khác bốc ra nhanh
+      projectsWithMembers.forEach(item => {
         const pid = item.project?.id || item.project?._id;
-        if (pid && item.members?.length > 0) {
-          useUserStore.getState().saveUsersToCache(item.members, pid);
+        if (pid && item.members && item.members.length > 0) {
+          useUserStore.getState().saveUsersToCache(item.members, String(pid));
         }
       });
 
-      // Nếu API trả về đủ 2 phần tử, chứng tỏ vẫn còn trang tiếp theo
-      const hasNext = rawData.length === 2;
-
+      // 4. Check xem còn trang không
+      const isLastPage = response.last !== undefined ? response.last : rawData.length < 2;
+      
       return {
-        data: activeProjects,
-        nextPage: hasNext ? (pageParam as number) + 1 : undefined,
+        data: projectsWithMembers, // 🚀 Trả về danh sách ĐÃ CÓ MEMBERS
+        nextPage: !isLastPage ? (pageParam as number) + 1 : undefined,
       };
     },
     getNextPageParam: (lastPage) => lastPage.nextPage,

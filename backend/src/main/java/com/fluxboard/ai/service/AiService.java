@@ -19,8 +19,11 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.web.client.HttpClientErrorException;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -45,10 +48,9 @@ public class AiService {
                      AiContextRepository aiContextRepo, TaskRepository taskRepository,
                      BoardColumnRepository columnRepository) {
         
-        // 🚀 Cấu hình Timeout lên 3 phút để đợi AI suy nghĩ
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);  // 5 giây kết nối
-        factory.setReadTimeout(180000);   // 3 phút đọc dữ liệu (Quan trọng!)
+        factory.setConnectTimeout(5000);  
+        factory.setReadTimeout(180000);   
 
         this.restClient = RestClient.builder()
                 .requestFactory(factory)
@@ -64,7 +66,20 @@ public class AiService {
     public AiTaskResponse generateSmartTasks(String boardId, String projectId, String userPrompt, List<String> memberIds, String generationMode, String startDate) {
         
         // ==========================================
-        // 1. ALIAS MAPPING (ĐÁNH TRÁO ID CHỐNG ẢO GIÁC)
+        // 0. ĐỌC HIỆN TRẠNG BOARD (ĐỂ NHÉT VÀO NÃO AI)
+        // Đây là điểm then chốt giúp AI "phát triển tiếp" thay vì tạo mới hoàn toàn
+        // ==========================================
+        List<BoardColumnEntity> existingColumns = columnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
+        List<String> existingColIds = existingColumns.stream().map(BoardColumnEntity::getId).toList();
+        List<TaskEntity> existingTasks = existingColIds.isEmpty() ? List.of() : taskRepository.findByColumnIdInAndDeletedFalse(existingColIds);
+
+        String currentColsStr = existingColumns.isEmpty() ? "Chưa có cột nào" : 
+                existingColumns.stream().map(BoardColumnEntity::getName).collect(Collectors.joining(", "));
+        String currentTasksStr = existingTasks.isEmpty() ? "Chưa có task nào" : 
+                existingTasks.stream().map(TaskEntity::getTitle).collect(Collectors.joining(" | "));
+
+        // ==========================================
+        // 1. ALIAS MAPPING (CHỐNG ẢO GIÁC ID)
         // ==========================================
         Map<String, String> aliasToRealId = new HashMap<>();
         StringBuilder personnelContextBuilder = new StringBuilder();
@@ -95,35 +110,43 @@ public class AiService {
                 });
 
         // ==========================================
-        // 2. PROMPT "KỶ LUẬT THÉP" (CÓ MODE VÀ DEADLINE)
+        // 2. PROMPT TIẾN HÓA: CÓ NGỮ CẢNH HIỆN TẠI
         // ==========================================
+        String modeInstruction = "SIMPLE".equalsIgnoreCase(generationMode) 
+            ? "MÔ HÌNH: KANBAN ĐƠN GIẢN. Cố gắng sử dụng lại các cột đã có. Nếu chưa có cột nào, hãy đề xuất 3 cột: [\"TO DO\", \"IN PROGRESS\", \"DONE\"]."
+            : "MÔ HÌNH: ĐA GIAI ĐOẠN (MULTI-PHASE). Bạn có thể tái sử dụng cột cũ hoặc đề xuất thêm cột Giai đoạn mới nếu cần thiết.";
+
         String systemInstruction = String.format("""
-            Bạn là một Chuyên gia Quản trị Dự án (Master Project Manager) đa ngành hàng đầu thế giới.
-            DANH SÁCH NHÂN SỰ BẮT BUỘC DÙNG (BÍ DANH):
+            Bạn là một Chuyên gia Quản trị Dự án (Master Project Manager).
+            
+            HIỆN TRẠNG DỰ ÁN ĐANG CÓ (RẤT QUAN TRỌNG):
+            - Các cột hiện tại: %s
+            - Các task ĐÃ TỒN TẠI: %s
+            => NHIỆM VỤ CỦA BẠN: Dựa vào yêu cầu mới của người dùng, HÃY ĐỀ XUẤT THÊM CÁC TASK MỚI (TUYỆT ĐỐI KHÔNG TẠO LẠI CÁC TASK ĐÃ TỒN TẠI BÊN TRÊN).
+            
+            DANH SÁCH NHÂN SỰ ĐỂ GÁN (BÍ DANH):
             %s
             
-            CHẾ ĐỘ KHỞI TẠO KIẾN TRÚC BẢNG: %s
-            - NẾU LÀ 'SIMPLE': Trả về mảng suggested_columns gồm ["TO DO", "IN PROGRESS", "DONE"]. Gán tất cả task mới vào cột "TO DO".
-            - NẾU LÀ 'ADVANCED': Tự động phân rã dự án thành 4-7 Giai đoạn (Phases). Ví dụ: ["Phase 1: Planning", "Phase 2: UI/UX", ...]. Gán task vào đúng tên cột giai đoạn của nó.
+            CHẾ ĐỘ SINH TASK:
+            %s
             
-            QUY ĐỊNH VỀ THỜI GIAN VÀ DEADLINE:
-            - Ngày khởi động dự án là: %s.
-            - Dựa vào ngày này và 'story_point' (1 point = 1 ngày làm việc), hãy tính toán 'start_date' và 'due_date' (Định dạng YYYY-MM-DD) cho từng Task. Các task có thể làm song song hoặc nối tiếp tùy logic.
+            QUY ĐỊNH THỜI GIAN:
+            - Ngày bắt đầu cho đợt task mới này: %s (Định dạng YYYY-MM-DD).
             
-            LUẬT GÁN NHÂN SỰ (CRITICAL RULES):
-            1. 'assignee_user_id' TUYỆT ĐỐI CHỈ ĐƯỢC CHỌN 1 TRONG CÁC BÍ DANH TỪ DANH SÁCH TRÊN. Nếu không có ai phù hợp hoặc CHƯA_CHỌN_NHÂN_SỰ, hãy để null.
-            2. Phân bổ khối lượng công việc hợp lý theo kỹ năng.
+            QUY ĐỊNH NGHIÊM NGẶT:
+            1. 'assignee_user_id': TUYỆT ĐỐI CHỈ ĐƯỢC CHỌN TỪ DANH SÁCH BÍ DANH Ở TRÊN (Ví dụ: MEMBER_1).
+            2. Trả về DUY NHẤT JSON, không kèm văn bản giải thích.
             
             MẪU JSON TRẢ VỀ:
             {
-              "suggested_columns": ["Cột 1", "Cột 2"],
+              "suggested_columns": ["Tên cột 1", "Tên cột 2"],
               "tasks": [
                 {
-                  "title": "[Giai đoạn 1] - Tên task lớn",
-                  "description": "Mô tả chi tiết",
-                  "column_name": "Cột 1", 
+                  "title": "Tên task mới",
+                  "description": "Mô tả",
+                  "column_name": "Tên cột 1", 
                   "assignee_user_id": "MEMBER_1",
-                  "story_point": 8,
+                  "story_point": 5,
                   "ai_estimation_reason": "Lý do",
                   "priority": "HIGH",
                   "start_date": "2026-05-15",
@@ -140,20 +163,20 @@ public class AiService {
                 }
               ]
             }
-            """, personnelContextBuilder.toString(), generationMode, startDate);
+            """, currentColsStr, currentTasksStr, personnelContextBuilder.toString(), modeInstruction, startDate);
 
         // ==========================================
         // 3. VÒNG LẶP RETRY BẮT LỖI JSON
         // ==========================================
         int MAX_RETRIES = 3;
         AiTaskResponse finalResponse = null;
-        String lastError = "";
         String finalCleanedJson = "";
+        String lastError = "";
 
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             log.info("▶️ Đang gọi AI (Lần thử {}/{})...", attempt, MAX_RETRIES);
             String promptToUse = attempt == 1 ? userPrompt : 
-                userPrompt + "\n\n(LỖI JSON LẦN TRƯỚC: " + lastError + " -> HÃY KIỂM TRA LẠI VÀ CHỈ TRẢ VỀ JSON HỢP LỆ!)";
+                userPrompt + "\n\n(LỖI JSON LẦN TRƯỚC: " + lastError + " -> CHỈ TRẢ VỀ JSON HỢP LỆ!)";
 
             String rawResponse = callGeminiWithHistory(systemInstruction, promptToUse, context.getMessages());
 
@@ -162,8 +185,9 @@ public class AiService {
                 if (!cleanedJson.startsWith("{")) cleanedJson = cleanedJson.substring(cleanedJson.indexOf("{"));
                 
                 finalResponse = objectMapper.readValue(cleanedJson, AiTaskResponse.class);
-                if (finalResponse.tasks() == null || finalResponse.tasks().isEmpty()) throw new RuntimeException("List Task trống!");
-
+                if (finalResponse.tasks() == null || finalResponse.tasks().isEmpty()) {
+                     throw new RuntimeException("List Task trống!");
+                }
                 finalCleanedJson = cleanedJson;
                 break; 
             } catch (Exception e) {
@@ -174,27 +198,38 @@ public class AiService {
         }
 
         // ==========================================
-        // 4. GIẢI MÃ, TẠO CỘT VÀ LƯU DATABASE
+        // 4. LƯU DATABASE (CỘT & TASK - CÓ CƠ CHẾ GỘP/MERGE)
         // ==========================================
         if (finalResponse != null && finalResponse.tasks() != null) {
             
-            // 4.1 TẠO CỘT (PHASES) TỰ ĐỘNG THEO AI
             Map<String, String> columnNameToIdMap = new HashMap<>();
-            AtomicInteger colOrder = new AtomicInteger(0);
+            int maxOrder = 0;
             
+            // 4.1 Đưa các cột ĐÃ CÓ vào Map để tái sử dụng
+            for (BoardColumnEntity col : existingColumns) {
+                columnNameToIdMap.put(col.getName().trim().toLowerCase(), col.getId());
+                if (col.getOrder() > maxOrder) maxOrder = col.getOrder();
+            }
+            
+            AtomicInteger colOrder = new AtomicInteger(maxOrder + 1);
+            
+            // 4.2 Xử lý các cột AI đề xuất (Chỉ tạo mới nếu chưa tồn tại)
             if (finalResponse.suggestedColumns() != null) {
                 for (String colName : finalResponse.suggestedColumns()) {
-                    BoardColumnEntity newCol = new BoardColumnEntity();
-                    newCol.setId(new ObjectId().toString());
-                    newCol.setBoardId(boardId);
-                    newCol.setName(colName);
-                    newCol.setOrder(colOrder.getAndIncrement());
-                    columnRepository.save(newCol);
-                    columnNameToIdMap.put(colName, newCol.getId());
+                    String colKey = colName.trim().toLowerCase();
+                    if (!columnNameToIdMap.containsKey(colKey)) {
+                        BoardColumnEntity newCol = new BoardColumnEntity();
+                        newCol.setId(new ObjectId().toString());
+                        newCol.setBoardId(boardId);
+                        newCol.setName(colName);
+                        newCol.setOrder(colOrder.getAndIncrement());
+                        columnRepository.save(newCol);
+                        columnNameToIdMap.put(colKey, newCol.getId());
+                    }
                 }
             }
 
-            // Fallback nếu AI ngáo không trả về cột
+            // Fallback cột TO DO nếu trống không
             String fallbackColumnId = columnNameToIdMap.values().stream().findFirst()
                     .orElseGet(() -> {
                         BoardColumnEntity fb = new BoardColumnEntity();
@@ -206,18 +241,18 @@ public class AiService {
                         return fb.getId();
                     });
 
-            AtomicInteger taskOrder = new AtomicInteger(0);
+            AtomicInteger taskOrder = new AtomicInteger(existingTasks.size()); // Đẩy task mới xuống cuối
             List<TaskEntity> tasksToSave = new ArrayList<>();
 
-            // 4.2 LƯU TASK CHA VÀ CON
+            // 4.3 Lưu Task Mới
             for (var dto : finalResponse.tasks()) {
                 TaskEntity parentTask = new TaskEntity();
                 String parentId = new ObjectId().toString(); 
                 parentTask.setId(parentId);
                 parentTask.setProjectId(projectId);
                 
-                // MAPPING CỘT TỪ AI
-                String colId = columnNameToIdMap.getOrDefault(dto.columnName(), fallbackColumnId);
+                String expectedColName = dto.columnName() != null ? dto.columnName().trim().toLowerCase() : "";
+                String colId = columnNameToIdMap.getOrDefault(expectedColName, fallbackColumnId);
                 parentTask.setColumnId(colId);
                 
                 String title = dto.title() != null ? dto.title() : (dto.name() != null ? dto.name() : "Untitled Task");
@@ -227,45 +262,19 @@ public class AiService {
                 parentTask.setAiSuggestedPoint(dto.storyPoint());
                 parentTask.setAiEstimatedReason(dto.aiEstimatedReason());
                 
-              
-                if (dto.startDate() != null && !dto.startDate().isBlank()) {
-                    try {
-                        // Chuyển String "2026-05-15" -> LocalDate -> Instant (UTC)
-                        java.time.Instant startInstant = java.time.LocalDate.parse(dto.startDate())
-                                .atStartOfDay(java.time.ZoneOffset.UTC)
-                                .toInstant();
-                        parentTask.setStartDate(startInstant);
-                    } catch (Exception e) {
-                        log.warn("⚠️ Không thể parse startDate: {}", dto.startDate());
-                    }
-                }
-                if (dto.dueDate() != null && !dto.dueDate().isBlank()) {
-                    try {
-                        java.time.Instant dueInstant = java.time.LocalDate.parse(dto.dueDate())
-                                .atStartOfDay(java.time.ZoneOffset.UTC)
-                                .toInstant();
-                        parentTask.setDueDate(dueInstant);
-                    } catch (Exception e) {
-                        log.warn("⚠️ Không thể parse dueDate: {}", dto.dueDate());
-                    }
-                }
+                parentTask.setStartDate(parseIsoDate(dto.startDate()));
+                parentTask.setDueDate(parseIsoDate(dto.dueDate()));
                 
                 if (dto.assigneeUserId() != null) {
                     String realId = aliasToRealId.get(dto.assigneeUserId());
                     if (realId != null) parentTask.setAssigneesUserId(List.of(realId));
                 }
                 
-                try {
-                    parentTask.setPriority(com.fluxboard.board.task.enums.TaskPriority.valueOf(dto.priority().toUpperCase()));
-                } catch (Exception e) {
-                    parentTask.setPriority(com.fluxboard.board.task.enums.TaskPriority.MEDIUM);
-                }
-
+                parentTask.setPriority(parsePriority(dto.priority()));
                 parentTask.setStatus("TODO");
                 parentTask.setOrder(taskOrder.getAndIncrement());
                 tasksToSave.add(parentTask);
 
-                // TẠO SUBTASKS
                 if (dto.subtasks() != null && !dto.subtasks().isEmpty()) {
                     for (var subDto : dto.subtasks()) {
                         TaskEntity subTask = new TaskEntity();
@@ -282,21 +291,12 @@ public class AiService {
                         
                         if(subDto.assigneeUserId() != null) {
                             String realId = aliasToRealId.get(subDto.assigneeUserId());
-                            if (realId != null) {
-                                subTask.setAssigneesUserId(List.of(realId));
-                            } else if (parentTask.getAssigneesUserId() != null) {
-                                subTask.setAssigneesUserId(parentTask.getAssigneesUserId());
-                            }
-                        } else if (parentTask.getAssigneesUserId() != null) {
+                            subTask.setAssigneesUserId(realId != null ? List.of(realId) : parentTask.getAssigneesUserId());
+                        } else {
                             subTask.setAssigneesUserId(parentTask.getAssigneesUserId());
                         }
 
-                        try {
-                            subTask.setPriority(com.fluxboard.board.task.enums.TaskPriority.valueOf(subDto.priority().toUpperCase()));
-                        } catch (Exception e) {
-                            subTask.setPriority(parentTask.getPriority());
-                        }
-                        
+                        subTask.setPriority(parsePriority(subDto.priority()));
                         tasksToSave.add(subTask);
                     }
                 }
@@ -304,11 +304,11 @@ public class AiService {
             taskRepository.saveAll(tasksToSave);
         }
 
-        // 6. LƯU LỊCH SỬ
+        // 5. LƯU LỊCH SỬ CHAT
         if (finalCleanedJson != null && !finalCleanedJson.isEmpty()) {
             AiContext.Message userMsg = new AiContext.Message();
             userMsg.setRole("user");
-            userMsg.setContent(userPrompt);
+            userMsg.setContent("Phát triển tiếp bảng với Mode: " + generationMode + " - Yêu cầu: " + userPrompt);
             AiContext.Message modelMsg = new AiContext.Message();
             modelMsg.setRole("model");
             modelMsg.setContent(finalCleanedJson); 
@@ -318,6 +318,25 @@ public class AiService {
         }
 
         return finalResponse;
+    }
+
+    private Instant parseIsoDate(String dateStr) {
+        if (dateStr == null || dateStr.isBlank()) return null;
+        try {
+            return LocalDate.parse(dateStr).atStartOfDay(ZoneOffset.UTC).toInstant();
+        } catch (DateTimeParseException e) {
+            log.warn("⚠️ Không thể parse Date: {}", dateStr);
+            return null;
+        }
+    }
+
+    private com.fluxboard.board.task.enums.TaskPriority parsePriority(String priorityStr) {
+        if (priorityStr == null || priorityStr.isBlank()) return com.fluxboard.board.task.enums.TaskPriority.MEDIUM;
+        try {
+            return com.fluxboard.board.task.enums.TaskPriority.valueOf(priorityStr.toUpperCase());
+        } catch (Exception e) {
+            return com.fluxboard.board.task.enums.TaskPriority.MEDIUM;
+        }
     }
 
     private String callGeminiWithHistory(String systemInstruction, String userPrompt, List<AiContext.Message> history) {
@@ -336,33 +355,28 @@ public class AiService {
             "responseMimeType", "application/json",
             "temperature", 0.1 
         ));
+        
         try {
-    log.info("🚀 Đang gửi request tới Gemini với Key: {}...", 
-             (apiKey != null && apiKey.length() > 5) ? apiKey.substring(0, 5) + "****" : "TRỐNG!");
+            log.info("🚀 Đang gửi request tới Gemini...");
+            String response = restClient.post()
+                    .uri(GEMINI_URL + "?key=" + apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
 
-    String response = restClient.post()
-            .uri(GEMINI_URL + "?key=" + apiKey)
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
-            .retrieve()
-            .body(String.class);
+            log.info("✅ Gemini đã trả lời thành công!");
+            JsonNode root = objectMapper.readTree(response);
+            return root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
 
-    log.info("✅ Gemini đã trả lời thành công!");
-    
-    JsonNode root = objectMapper.readTree(response);
-    return root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
-
-} catch (HttpClientErrorException e) {
-    // 🚨 ĐÂY: Lấy nội dung chi tiết mà Google "chửi" mình
-    String errorBody = e.getResponseBodyAsString();
-    log.error("❌ LỖI TỪ GOOGLE (Status: {}): {}", e.getStatusCode(), errorBody);
-    throw new RuntimeException("Gemini API Error: " + errorBody);
-
-} catch (Exception e) {
-    // Lỗi kết nối, Timeout hoặc Parse JSON
-    log.error("🚨 SỰ CỐ HỆ THỐNG: ", e);
-    throw new RuntimeException("Hệ thống AI gặp sự cố: " + e.getMessage());
-}
+        } catch (HttpClientErrorException e) {
+            String errorBody = e.getResponseBodyAsString();
+            log.error("❌ LỖI TỪ GOOGLE (Status: {}): {}", e.getStatusCode(), errorBody);
+            throw new RuntimeException("Gemini API Error: " + errorBody);
+        } catch (Exception e) {
+            log.error("🚨 SỰ CỐ HỆ THỐNG: ", e);
+            throw new RuntimeException("Hệ thống AI gặp sự cố: " + e.getMessage());
+        }
     }
 
     // ==========================================

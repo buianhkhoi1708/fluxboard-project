@@ -22,7 +22,7 @@ const CreateUserTab: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   // 🚀 Tự động tải danh sách Role từ API lúc mới vào trang
-useEffect(() => {
+  useEffect(() => {
     const fetchRoles = async () => {
       try {
         const res: any = await userApi.getRoles();
@@ -97,134 +97,140 @@ useEffect(() => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
+    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
         
-        {/* Header */}
-        <div className="bg-slate-50/50 p-8 border-b border-slate-100 flex items-center gap-4">
-          <div className="w-14 h-14 bg-white border border-indigo-100 rounded-2xl flex items-center justify-center shadow-sm">
-            <UserPlus className="text-indigo-600" size={28} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Cấp tài khoản mới</h2>
-            <p className="text-sm font-medium text-slate-500 mt-1">Tạo tài khoản và phân quyền cho nhân sự mới.</p>
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="space-y-1">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-3 text-slate-800">
+              <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
+                <UserPlus className="text-indigo-600" size={24} />
+              </div>
+              Cấp tài khoản mới
+            </h1>
+            <p className="text-sm font-medium text-slate-500 pl-12">
+              Tạo tài khoản và phân quyền cho nhân sự mới.
+            </p>
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          
-          {/* Thông báo */}
-          {successMsg && (
-            <div className="flex items-center gap-2 p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl text-sm font-bold">
-              <CheckCircle2 size={18} /> {successMsg}
-            </div>
-          )}
-          {errorMsg && (
-            <div className="flex items-center gap-2 p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-sm font-bold">
-              <Shield size={18} /> {errorMsg}
-            </div>
-          )}
+        {/* FORM CARD */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg overflow-hidden">
+          <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+            
+            {/* Thông báo */}
+            {successMsg && (
+              <div className="flex items-center gap-2 p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl text-sm font-bold">
+                <CheckCircle2 size={18} /> {successMsg}
+              </div>
+            )}
+            {errorMsg && (
+              <div className="flex items-center gap-2 p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-sm font-bold">
+                <Shield size={18} /> {errorMsg}
+              </div>
+            )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Full Name */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <User size={16} className="text-slate-400" /> Họ và tên
-              </label>
-              <input 
-                required
-                type="text" 
-                name="fullName"
-                value={formData.fullName}
-                onChange={handleChange}
-                placeholder="VD: Nguyễn Văn A" 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Mail size={16} className="text-slate-400" /> Địa chỉ Email
-              </label>
-              <input 
-                required
-                type="email" 
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="email@fluxboard.com" 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
-              />
-            </div>
-
-            {/* Password */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Lock size={16} className="text-slate-400" /> Mật khẩu khởi tạo
-              </label>
-              <input 
-                required
-                type="password" 
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)" 
-                minLength={6}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
-              />
-            </div>
-
-            {/* DYNAMIC ROLE SELECTOR */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Shield size={16} className="text-slate-400" /> Quyền hạn (Role)
-              </label>
-              
-              <div className="relative">
-                <select 
-                  name="role"
-                  value={formData.role}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Full Name */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <User size={16} className="text-slate-400" /> Họ và tên
+                </label>
+                <input 
+                  required
+                  type="text" 
+                  name="fullName"
+                  value={formData.fullName}
                   onChange={handleChange}
-                  disabled={isLoadingRoles || roles.length === 0}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-slate-700 appearance-none disabled:opacity-50"
-                >
-                  {isLoadingRoles ? (
-                    <option value="">Đang tải danh sách quyền...</option>
-                  ) : roles.length > 0 ? (
-                    roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">Chưa có quyền hạn nào</option>
-                  )}
-                </select>
+                  placeholder="VD: Nguyễn Văn A" 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                />
+              </div>
+
+              {/* Email */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Mail size={16} className="text-slate-400" /> Địa chỉ Email
+                </label>
+                <input 
+                  required
+                  type="email" 
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="email@fluxboard.com" 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                />
+              </div>
+
+              {/* Password */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Lock size={16} className="text-slate-400" /> Mật khẩu khởi tạo
+                </label>
+                <input 
+                  required
+                  type="password" 
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)" 
+                  minLength={6}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                />
+              </div>
+
+              {/* DYNAMIC ROLE SELECTOR */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Shield size={16} className="text-slate-400" /> Quyền hạn (Role)
+                </label>
                 
-                {isLoadingRoles && (
-                  <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
-                )}
+                <div className="relative">
+                  <select 
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    disabled={isLoadingRoles || roles.length === 0}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-slate-700 appearance-none disabled:opacity-50"
+                  >
+                    {isLoadingRoles ? (
+                      <option value="">Đang tải danh sách quyền...</option>
+                    ) : roles.length > 0 ? (
+                      roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Chưa có quyền hạn nào</option>
+                    )}
+                  </select>
+                  
+                  {isLoadingRoles && (
+                    <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <hr className="border-slate-100" />
+            <hr className="border-slate-100" />
 
-          {/* Submit Button */}
-          <div className="flex justify-end">
-            <button 
-              type="submit" 
-              disabled={isSubmitting || isLoadingRoles || roles.length === 0}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-sm shadow-lg shadow-indigo-200 transition-all active:scale-95 disabled:opacity-70 disabled:active:scale-100"
-            >
-              {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
-              {isSubmitting ? 'Đang tạo...' : 'Xác nhận tạo tài khoản'}
-            </button>
-          </div>
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <button 
+                type="submit" 
+                disabled={isSubmitting || isLoadingRoles || roles.length === 0}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-200/50 transition-all duration-200 active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+              >
+                {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+                {isSubmitting ? 'Đang tạo...' : 'Xác nhận tạo tài khoản'}
+              </button>
+            </div>
 
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

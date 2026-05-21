@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query'; 
 import { X, Search, ChevronDown, Loader2, Building2, Users, User, Hash, Check } from 'lucide-react';
-import { useOrgStore } from '../state/useOrganizationStore';
+
+// 🚀 1. XÓA import useOrgStore cũ đi, IMPORT HOOK useGetOrgTree VÀO ĐÂY
+// (Sếp check lại đường dẫn import cho đúng thư mục của sếp nhé, tui đoán là ../hooks/useOrgQueries)
+import { useGetOrgTree } from '../hooks/useOrgQueries'; 
+
 import { orgApi } from '../api/organizationApi';
 import { OrgMember } from '../types/orgTypes';
 
@@ -32,7 +37,11 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
   targetTeam,
   targetDept
 }) => {
-  const { orgTree, fetchTree } = useOrgStore();
+  const queryClient = useQueryClient();
+
+  // 🚀 2. DÙNG TANSTACK QUERY LẤY DATA PHÒNG BAN NGAY TRONG MODAL 
+  // (Nó sẽ xài lại cache của trang ngoài rất mượt, không tốn API)
+  const { data: orgTree = [] } = useGetOrgTree();
   
   const initialForm: OrgFormData = { 
     name: '', code: '', description: '', departmentId: targetDeptId || '', leadId: '', leadName: '' 
@@ -41,18 +50,15 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
   const [formData, setFormData] = useState<OrgFormData>(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // State cho Leader Search
   const [searchLeadTerm, setSearchLeadTerm] = useState('');
   const [showLeadDropdown, setShowLeadDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState<OrgMember[]>([]);
   const [isSearchingLead, setIsSearchingLead] = useState(false);
 
-  // 🚀 THÊM MỚI: State cho Multi-select Members
   const [unassignedUsers, setUnassignedUsers] = useState<any[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
 
-  // LOGIC PRE-FILL DỮ LIỆU KHI EDIT
   useEffect(() => {
     if (!isOpen) {
       setFormData(initialForm);
@@ -82,10 +88,9 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
           leadName: targetDept.managerName || targetDept.manager_name || ''
         });
       } else {
-        setFormData(prev => ({ ...prev, departmentId: targetDeptId || '' }));
+        setFormData(prev => ({ ...initialForm, departmentId: targetDeptId || '' }));
       }
 
-      // 🚀 TẢI DANH SÁCH USER CHƯA CÓ TEAM (Để gán nhanh lúc tạo)
       if (mode === 'TEAM') {
         orgApi.getUnassignedUsers().then((res: any) => {
           const payload = res.data || res;
@@ -96,7 +101,7 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
     }
   }, [isOpen, targetDeptId, action, targetTeam, targetDept, mode]);
 
-  // Logic tìm kiếm User để làm Leader
+  // Logic tìm kiếm Lead
   useEffect(() => {
     if (searchLeadTerm.trim().length < 2) {
       setSearchResults([]);
@@ -128,7 +133,6 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
     setSearchLeadTerm('');
   };
 
-  // 🚀 THÊM MỚI: Xử lý chọn/bỏ chọn Member
   const toggleSelectMember = (user: any) => {
     const isSelected = selectedMembers.some(m => m.id === user.id);
     if (isSelected) {
@@ -150,8 +154,10 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
         } else {
           await orgApi.createDepartment(payload);
         }
-        fetchTree();
+        
+        queryClient.invalidateQueries({ queryKey: ['orgTree'] });
         onClose();
+        
       } else {
         const payload = { 
           name: formData.name, code: formData.code, department_id: formData.departmentId, lead_id: formData.leadId, description: formData.description 
@@ -162,25 +168,20 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
         if (action === 'EDIT' && targetTeam) {
           await orgApi.updateTeam(targetTeam.id, payload);
         } else {
-          // TẠO TEAM MỚI
           const res: any = await orgApi.createTeam(payload);
           const responseData = res.data?.data || res.data;
           activeTeamId = responseData?.id;
         }
 
-        // 🚀 ĐỒNG BỘ THÀNH VIÊN & LEADER VÀO TEAM MỚI TẠO
         if (activeTeamId) {
           const assignPromises = [];
           
-          // 1. Ép Leader phải là một thành viên của Team này (Fix lỗi ngầm Backend)
           if (formData.leadId) {
             assignPromises.push(orgApi.assignUserToTeam(formData.leadId, activeTeamId, formData.departmentId).catch(() => {}));
           }
 
-          // 2. Gán các thành viên được gom thêm
           if (selectedMembers.length > 0) {
             selectedMembers.forEach(member => {
-              // Tránh gọi API 2 lần nếu họ vừa là Leader vừa được chọn ở dưới
               if (member.id !== formData.leadId) {
                 assignPromises.push(orgApi.assignUserToTeam(member.id, activeTeamId, formData.departmentId));
               }
@@ -192,7 +193,7 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
           }
         }
 
-        fetchTree();
+        queryClient.invalidateQueries({ queryKey: ['orgTree'] });
         onClose();
       }
     } catch (error: any) {
@@ -246,7 +247,8 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
                   className="w-full pl-11 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none cursor-pointer"
                 >
                   <option value="" disabled>-- Chọn phòng ban --</option>
-                  {orgTree.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
+                  {/* 🚀 LIST PHÒNG BAN ĐƯỢC MAP TỪ DATA TANSTACK QUERY */}
+                  {orgTree.map((dept: any) => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
                 </select>
                 <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
@@ -329,7 +331,7 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
             )}
           </div>
 
-          {/* 🚀 MULTI-SELECT MEMBERS TẠI CHỖ (CHỈ HIỆN KHI TẠO/SỬA TEAM) */}
+          {/* 🚀 MULTI-SELECT MEMBERS */}
           {mode === 'TEAM' && (
             <div className="pt-4 border-t border-slate-100 relative">
               <div className="flex justify-between items-center mb-2">
