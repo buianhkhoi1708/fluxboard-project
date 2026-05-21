@@ -2,6 +2,7 @@ package com.fluxboard.notification.controller;
 
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.notification.dto.response.NotificationResponse;
 import com.fluxboard.notification.entity.NotificationEntity;
 import com.fluxboard.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +22,10 @@ public class NotificationController {
     private final NotificationRepository notificationRepository;
 
     /**
-     * 🔔 API lấy danh sách thông báo (Có phân trang + Bộ lọc thông minh)
-     * URL: GET /api/v1/notifications?unreadOnly=true&page=0&size=10
+     * 🔔 API lấy danh sách thông báo đã được bọc DTO + Hỗ trợ Phân trang nâng cao
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<NotificationEntity>>> getNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @RequestAttribute("userId") String userId,
             @RequestParam(required = false) Boolean unreadOnly,
             @RequestParam(defaultValue = "0") int page,
@@ -40,25 +40,23 @@ public class NotificationController {
             notifPage = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, pageable);
         }
         
-        // 🚀 ĐÃ SỬA: Dùng hàm paged kèm theo chuỗi message đúng thiết kế ResponseFactory của bạn
-        return ResponseFactory.paged("Fetch notifications successfully", notifPage);
+        // 🚀 Thực hiện ánh xạ (Mapping) từ Entity sang DTO cực kỳ an toàn
+        Page<NotificationResponse> responsePage = notifPage.map(this::convertToResponse);
+        
+        return ResponseFactory.paged("Fetch notifications successfully", responsePage);
     }
 
     /**
-     * 🔴 API đếm số lượng thông báo chưa đọc để hiển thị số nảy (Badge) trên UI
-     * URL: GET /api/v1/notifications/unread-count
+     * 🔴 API lấy số lượng tin nhắn chưa đọc
      */
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Long>> getUnreadCount(@RequestAttribute("userId") String userId) {
         long count = notificationRepository.countByRecipientIdAndIsReadFalse(userId);
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message vào tham số đầu tiên
         return ResponseFactory.success("Fetch unread count successfully", count);
     }
 
     /**
-     * ✔️ API đánh dấu một thông báo cụ thể là đã đọc khi người dùng click vào chi tiết
-     * URL: PATCH /api/v1/notifications/{id}/read
+     * ✔️ API đọc từng tin một
      */
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String id) {
@@ -66,26 +64,34 @@ public class NotificationController {
             notif.setRead(true); 
             notificationRepository.save(notif);
         });
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message thông báo hành động thành công
         return ResponseFactory.success("Notification marked as read successfully");
     }
 
     /**
-     * 🧹 API "Đọc tất cả" - Đánh dấu toàn bộ thông báo chưa đọc của user thành đã đọc
-     * URL: PATCH /api/v1/notifications/read-all
+     * 🧹 API Đọc tất cả
      */
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") String userId) {
         List<NotificationEntity> unreadNotifications = notificationRepository.findByRecipientIdAndIsReadFalse(userId);
-        
         for (NotificationEntity notif : unreadNotifications) {
             notif.setRead(true); 
         }
-        
         notificationRepository.saveAll(unreadNotifications);
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message thông báo hành động thành công
         return ResponseFactory.success("All notifications marked as read successfully");
+    }
+
+    // Hàm phụ trợ hỗ trợ việc ép kiểu dữ liệu sang DTO
+    private NotificationResponse convertToResponse(NotificationEntity entity) {
+        return NotificationResponse.builder()
+                .id(entity.getId())
+                .recipientId(entity.getRecipientId())
+                .type(entity.getType())
+                .title(entity.getTitle())
+                .message(entity.getMessage())
+                .isRead(entity.isRead())
+                .metadata(entity.getMetadata())
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .build();
     }
 }
