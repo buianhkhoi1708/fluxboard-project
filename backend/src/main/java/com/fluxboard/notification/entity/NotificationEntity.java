@@ -15,7 +15,7 @@ public class NotificationEntity extends BaseDocument {
     private String recipientId;
 
     @Field("type")
-    private String type; 
+    private String type;
 
     @Field("title")
     private String title;
@@ -29,16 +29,25 @@ public class NotificationEntity extends BaseDocument {
     @Field("metadata")
     private Map<String, Object> metadata;
 
+    // =========================================================================
+    // KHỞI TẠO CÁC HÀM GETTER/SETTER TƯỜNG MINH ĐỂ ĐẢM BẢO KHÔNG LỖI BIÊN DỊCH
+    // =========================================================================
+    
     public String getRecipientId() { return recipientId; }
     public void setRecipientId(String recipientId) { this.recipientId = recipientId; }
+
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
+
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
+
     public boolean isRead() { return isRead; }
-    public void setRead(boolean read) { isRead = read; }
+    public void setRead(boolean read) { this.isRead = read; }
+
     public Map<String, Object> getMetadata() { return metadata; }
     public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
 }
