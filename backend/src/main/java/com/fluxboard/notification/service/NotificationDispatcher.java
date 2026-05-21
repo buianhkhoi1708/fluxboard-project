@@ -29,63 +29,61 @@ import lombok.extern.slf4j.Slf4j;
 public class NotificationDispatcher {
 
     private final EmailService emailService;
-    private final NotificationDebounceService debounceService;
-    private final NotificationRepository notificationRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserNotificationPrefService prefService;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
-    
-
-    /**
-     * Kích hoạt thông báo khi Task bị thay đổi (Kéo thả, cập nhật)
-     * Sẽ delay 1 phút để chống Spam.
-     */
-    public void dispatchTaskMovedNotification(String recipientId, String taskId, String taskName, String boardId) {
-        
-        // 1. Tạo một cái Key duy nhất cho sự kiện này
-        String debounceKey = "TASK_MOVED_" + taskId + "_" + recipientId;
-
-        // 2. Truyền lệnh vào Cỗ máy thời gian, setup delay 60000 ms (1 phút)
-        debounceService.debounce(debounceKey, () -> {
-            
-            // --- ĐOẠN CODE NÀY CHỈ CHẠY SAU 1 PHÚT NẾU KHÔNG AI ĐỤNG TỚI TASK ĐÓ NỮA ---
-
-            // A. Lưu vào Database
-            NotificationEntity notif = new NotificationEntity();
-            notif.setRecipientId(recipientId);
-            notif.setType("TASK_MOVED");
-            notif.setTitle("Task update");
-            notif.setMessage("Task '" + taskName + "' Location/status has been updated.");
-            notif.setMetadata(Map.of("taskId", taskId, "boardId", boardId));
-            
-            NotificationEntity savedNotif = notificationRepository.save(notif);
-
-            // B. Bắn Real-time qua WebSocket thẳng tới cá nhân người nhận
-            // Kênh gửi: /topic/user/{recipientId}/notifications
-            messagingTemplate.convertAndSend(
-                    "/topic/user/" + recipientId + "/notifications",
-                    savedNotif
-            );
-
-        }, 60000); // Đếm ngược 60 giây
-    }
-
-
-    // Khai báo TaskScheduler và bộ nhớ đệm phục vụ cơ chế Debounce
+    private final NotificationRepository notificationRepository;
+    private final NotificationDebounceService debounceService;
     private final TaskScheduler taskScheduler;
+    
+    // Bộ nhớ đệm phục vụ cơ chế hoãn 10 phút cũ cho Deadline Config để tránh mất logic nguyên bản
     private final Map<String, ScheduledFuture<?>> pendingNotifications = new ConcurrentHashMap<>();
 
-    // ================== EVENT 1: ASSIGN TASK ==================
+    /**
+     * 🔥 TÍNH NĂNG MỚI: Kích hoạt thông báo khi Task bị thay đổi vị trí/trạng thái.
+     * Sẽ delay đúng 1 phút để chống Spam dồn dập dữ liệu.
+     */
+    public void dispatchTaskMovedNotification(String recipientId, String taskId, String taskName, String boardId) {
+        String debounceKey = "TASK_MOVED_" + taskId + "_" + recipientId;
+
+        debounceService.debounce(debounceKey, () -> {
+            log.info("Chốt hạ hành động: Thực thi gửi thông báo TASK_MOVED tới người dùng: {}", recipientId);
+
+            NotificationEntity notif = createNotificationRecord(recipientId, "TASK_MOVED", 
+                    "Cập nhật công việc", 
+                    "Thẻ '" + taskName + "' đã được cập nhật vị trí hoặc trạng thái trên bảng.", 
+                    Map.of("taskId", taskId, "boardId", boardId));
+
+            // Đẩy realtime qua kênh WebSocket dùng chung của dự án
+            messagingTemplate.convertAndSend("/topic/notifications/" + recipientId, notif);
+
+            try {
+                User user = userRepository.findByIdAndDeletedFalse(recipientId).orElse(null);
+                if (user != null && user.getEmail() != null) {
+                    String emailHtml = buildHtmlEmail("#3182ce", "Task Position Changed", taskName, "N/A", 
+                            "The position or status of this task has been rearranged on the Kanban Board.");
+                    emailService.sendHtmlEmail(user.getEmail(), "[Fluxboard] Task Updated: " + taskName, emailHtml);
+                }
+            } catch (Exception e) {
+                log.error("Lỗi luồng gửi mail phụ trợ TASK_MOVED: ", e);
+            }
+        }, 60000);
+    }
+
+    // ================== EVENT 1: ASSIGN TASK (Khôi phục nguyên bản) ==================
     public void notifyTaskAssigned(String userId, TaskEntity task) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return;
 
         UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+        String msgContent = "Bạn đã được gán vào công việc mới: '" + task.getTitle() + "'.";
         
+        // Đồng bộ lưu vết thông báo vào MongoDB Database
+        NotificationEntity notif = createNotificationRecord(userId, "TASK_ASSIGNED", "Giao việc mới", msgContent, Map.of("taskId", task.getId()));
+
         if (pref.inAppNotificationsEnabled()) { 
-            String inAppMsg = "You have been assigned a new task: " + task.getTitle();
-            messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
         }
 
         if (pref.emailNotificationsEnabled()) {
@@ -101,23 +99,24 @@ public class NotificationDispatcher {
 
     // ================== EVENT 2: DEADLINE APPROACHING ==================
     public void notifyTaskDeadline(String taskId) {
-        dispatchUpcomingAlert(taskId); // Backward compatibility
+        dispatchUpcomingAlert(taskId); // Giữ tính tương thích ngược
     }
 
     public void dispatchUpcomingAlert(String taskId) {
         TaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null || task.getAssigneesUserId() == null) return;
 
-        List<String> assignees = task.getAssigneesUserId();
-        for (String userId : assignees) {
+        for (String userId : task.getAssigneesUserId()) {
             User user = userRepository.findById(userId).orElse(null);
             if (user == null) continue;
 
             UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+            String msgContent = "Cảnh báo: Công việc '" + task.getTitle() + "' đang sắp đến hạn chót!";
+            
+            NotificationEntity notif = createNotificationRecord(userId, "DEADLINE_APPROACHING", "Công việc sắp đến hạn", msgContent, Map.of("taskId", taskId));
 
             if (pref.inAppNotificationsEnabled()) {
-                String inAppMsg = "🚨 WARNING: Task '" + task.getTitle() + "' is approaching its deadline!";
-                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
             }
 
             if (pref.emailNotificationsEnabled()) {
@@ -125,28 +124,29 @@ public class NotificationDispatcher {
                 String htmlBody = buildHtmlEmail(
                         "#dd6b20", "⚠️ Your task deadline is approaching!",
                         task.getTitle(), String.valueOf(task.getPriority()),
-                        "This task is approaching its deadline. Please complete it as soon as possible!"
+                        "This task is approaching its final deadline. Please review your dashboard and complete it soon."
                 );
                 emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
             }
         }
     }
 
-    // ================== EVENT 3: OVERDUE ==================
+    // ================== EVENT 3: TASK OVERDUE ==================
     public void dispatchOverdueAlert(String taskId) {
         TaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null || task.getAssigneesUserId() == null) return;
 
-        List<String> assignees = task.getAssigneesUserId();
-        for (String userId : assignees) {
+        for (String userId : task.getAssigneesUserId()) {
             User user = userRepository.findById(userId).orElse(null);
             if (user == null) continue;
 
             UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+            String msgContent = "Trễ hạn: Công việc '" + task.getTitle() + "' đã vượt quá thời hạn quy định nhưng chưa hoàn thành!";
+            
+            NotificationEntity notif = createNotificationRecord(userId, "TASK_OVERDUE", "Cảnh báo quá hạn", msgContent, Map.of("taskId", taskId));
 
             if (pref.inAppNotificationsEnabled()) {
-                String inAppMsg = "🛑 OVERDUE: Task '" + task.getTitle() + "' has missed its deadline!";
-                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
             }
 
             if (pref.emailNotificationsEnabled()) {
@@ -154,7 +154,7 @@ public class NotificationDispatcher {
                 String htmlBody = buildHtmlEmail(
                         "#e53e3e", "🛑 Task Missed Deadline!",
                         task.getTitle(), String.valueOf(task.getPriority()),
-                        "This task has passed its due date and is now marked as OVERDUE."
+                        "CRITICAL: This task has passed its due date and is now marked as OVERDUE."
                 );
                 emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
             }
@@ -166,24 +166,18 @@ public class NotificationDispatcher {
         ScheduledFuture<?> existingTimer = pendingNotifications.get(taskId);
         if (existingTimer != null && !existingTimer.isDone()) {
             existingTimer.cancel(false);
-            log.info("Canceled previous notification timer for Task: {}", taskId);
         }
 
-        // 10 phút = 600 giây
-        Instant scheduledTime = Instant.now().plusSeconds(10 * 60); 
-
         ScheduledFuture<?> newTimer = taskScheduler.schedule(
-            () -> executeDeadlineUpdatedNotification(taskId), 
-            scheduledTime
+                () -> executeDeadlineUpdatedNotification(taskId),
+                Instant.now().plusSeconds(600) // Hoãn đúng 10 phút như logic gốc của bạn
         );
-
         pendingNotifications.put(taskId, newTimer);
-        log.info("Scheduled new notification timer for Task: {} at {}", taskId, scheduledTime);
+        log.info("Scheduled deadline updated notification timer for Task: {}", taskId);
     }
 
     private void executeDeadlineUpdatedNotification(String taskId) {
         pendingNotifications.remove(taskId);
-
         TaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null || task.getAssigneesUserId() == null) return;
 
@@ -192,135 +186,124 @@ public class NotificationDispatcher {
             if (user == null) continue;
 
             UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+            String msgContent = "Cấu hình thời gian công việc '" + task.getTitle() + "' vừa được cập nhật thay đổi.";
+            
+            NotificationEntity notif = createNotificationRecord(userId, "DEADLINE_UPDATED", "Thay đổi cấu hình thời gian", msgContent, Map.of("taskId", taskId));
 
             if (pref.inAppNotificationsEnabled()) {
-                String inAppMsg = "The deadline configuration for task '" + task.getTitle() + "' has been finalized and updated.";
-                messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+                messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
             }
 
             if (pref.emailNotificationsEnabled()) {
-                String subject = "📅 [Fluxboard] Task Deadline Updated";
+                String subject = "📅 [Fluxboard] Deadline Configuration Updated";
                 String htmlBody = buildHtmlEmail(
-                        "#3182ce", "📅 Task Deadline Updated",
+                        "#4a5568", "📅 Task Deadline Updated",
                         task.getTitle(), String.valueOf(task.getPriority()),
-                        "The deadline configuration for this task has been modified by the manager."
+                        "The timing configuration for this task has been adjusted by your team leader."
                 );
                 emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
             }
         }
     }
 
-    // ================== EVENT 5: EXTENSION APPROVED ==================
+    // ================== EVENT 5: EXTENSION APPROVED (Khớp nối Listener) ==================
     public void notifyExtensionApproved(String userId, String taskTitle, String newDueDate) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return;
 
         UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+        String msgContent = "Yêu cầu xin lùi hạn chót công việc '" + taskTitle + "' đã được phê duyệt đến ngày " + newDueDate;
+        
+        NotificationEntity notif = createNotificationRecord(userId, "EXTENSION_APPROVED", "Yêu cầu gia hạn được chấp nhận", msgContent, Map.of("taskTitle", taskTitle));
 
         if (pref.inAppNotificationsEnabled()) {
-            String inAppMsg = "✅ APPROVED: Your request to extend the deadline for task '" + taskTitle + "' has been approved.";
-            messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
         }
 
         if (pref.emailNotificationsEnabled()) {
-            String subject = "✅ [Fluxboard] Deadline Extension Approved";
-            String htmlBody = "<div style=\"font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6;\">" +
-                   "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; border-top: 5px solid #38a169; box-shadow: 0 4px 6px rgba(0,0,0,0.1);\">" +
-                   "    <h2 style=\"color: #2f855a; margin-top: 0;\">✅ Deadline Extension Approved</h2>" +
-                   "    <p style=\"font-size: 16px; color: #333;\">Hello,</p>" +
-                   "    <p style=\"font-size: 16px; color: #333;\">The project manager has approved your request to extend the deadline for this task.</p>" +
-                   "    <div style=\"background-color: #f0fff4; padding: 15px; border-left: 4px solid #38a169; margin: 20px 0; border-radius: 4px;\">" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Task Name:</strong> <span style=\"color: #2d3748;\">" + taskTitle + "</span></p>" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>New Due Date:</strong> <span style=\"color: #e53e3e; font-weight: bold;\">" + newDueDate + "</span></p>" +
-                   "    </div>" +
-                   "    <p style=\"font-size: 15px; color: #4a5568;\">Please arrange your time to complete the work according to the new schedule.</p>" +
-                   "    <br/>" +
-                   "    <p style=\"font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 15px;\">Please do not reply to this automated email.</p>" +
-                   "  </div>" +
-                   "</div>";
+            String subject = "✅ [Fluxboard] Extension Request Approved!";
+            String htmlBody = buildHtmlEmail(
+                    "#38a169", "✅ Extension Request Approved!",
+                    taskTitle, "N/A",
+                    "Great news! Your manager has approved your request to extend the deadline for this task to: " + newDueDate
+            );
             emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
         }
     }
 
-    // ================== EVENT 6: EXTENSION REJECTED ==================
+    // ================== EVENT 6: EXTENSION REJECTED (Khớp nối Listener) ==================
     public void notifyExtensionRejected(String userId, String taskTitle, String currentDueDate, String managerReason) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return;
 
         UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(userId);
+        String msgContent = "Yêu cầu lùi hạn công việc '" + taskTitle + "' đã bị từ chối. Lý do: " + managerReason;
+        
+        NotificationEntity notif = createNotificationRecord(userId, "EXTENSION_REJECTED", "Yêu cầu gia hạn bị từ chối", msgContent, Map.of("taskTitle", taskTitle));
 
         if (pref.inAppNotificationsEnabled()) {
-            String inAppMsg = "❌ REJECTED: Your request to extend the deadline for task '" + taskTitle + "' was denied.";
-            messagingTemplate.convertAndSend("/topic/notifications/" + userId, inAppMsg);
+            messagingTemplate.convertAndSend("/topic/notifications/" + userId, notif);
         }
 
         if (pref.emailNotificationsEnabled()) {
-            String subject = "❌ [Fluxboard] Deadline Extension Rejected";
-            String htmlBody = "<div style=\"font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6;\">" +
-                   "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; border-top: 5px solid #e53e3e; box-shadow: 0 4px 6px rgba(0,0,0,0.1);\">" +
-                   "    <h2 style=\"color: #c53030; margin-top: 0;\">❌ Deadline Extension Rejected</h2>" +
-                   "    <p style=\"font-size: 16px; color: #333;\">Hello,</p>" +
-                   "    <p style=\"font-size: 16px; color: #333;\">The project manager did not approve your request to extend the deadline for this task.</p>" +
-                   "    <div style=\"background-color: #fff5f5; padding: 15px; border-left: 4px solid #e53e3e; margin: 20px 0; border-radius: 4px;\">" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Task Name:</strong> <span style=\"color: #2d3748;\">" + taskTitle + "</span></p>" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Current Due Date:</strong> <span style=\"color: #e53e3e; font-weight: bold;\">" + currentDueDate + "</span></p>" +
-                   "      <p style=\"margin: 10px 0 5px 0; font-size: 15px;\"><strong>Manager's Feedback:</strong> <i style=\"color: #4a5568;\">\"" + managerReason + "\"</i></p>" +
-                   "    </div>" +
-                   "    <p style=\"font-size: 15px; color: #4a5568;\">The execution time remains unchanged. Please ensure the original delivery schedule.</p>" +
-                   "    <br/>" +
-                   "    <p style=\"font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 15px;\">Please do not reply to this automated email.</p>" +
-                   "  </div>" +
-                   "</div>";
+            String subject = "❌ [Fluxboard] Extension Request Rejected";
+            String htmlBody = buildHtmlEmail(
+                    "#e53e3e", "❌ Extension Request Rejected",
+                    taskTitle, "N/A",
+                    "Your request for extending deadline has been rejected by manager. Reason: " + managerReason
+            );
             emailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
         }
     }
 
-    // ================== EVENT 7: EXTENSION REQUESTED ==================
+    // ================== EVENT 7: EXTENSION REQUESTED (Khớp nối Listener) ==================
     public void notifyExtensionRequested(String managerId, String requesterName, String taskTitle, String requestedDueDate, String reason) {
         User manager = userRepository.findById(managerId).orElse(null);
         if (manager == null) return;
 
         UserNotificationPrefResponse pref = prefService.getPreferencesByUserId(managerId);
+        String msgContent = "Thành viên " + requesterName + " vừa gửi yêu cầu xin dời hạn cho công việc '" + taskTitle + "' đến ngày " + requestedDueDate;
+        
+        NotificationEntity notif = createNotificationRecord(managerId, "EXTENSION_REQUESTED", "Yêu cầu xin gia hạn mới", msgContent, Map.of("taskTitle", taskTitle));
 
         if (pref.inAppNotificationsEnabled()) {
-            String inAppMsg = "⏳ EXTENSION REQUEST: " + requesterName + " has requested a deadline extension for task '" + taskTitle + "'.";
-            messagingTemplate.convertAndSend("/topic/notifications/" + managerId, inAppMsg);
+            messagingTemplate.convertAndSend("/topic/notifications/" + managerId, notif);
         }
 
         if (pref.emailNotificationsEnabled()) {
-            String subject = "⏳ [Fluxboard] Deadline Extension Request Pending Approval";
-            String htmlBody = "<div style=\"font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6;\">" +
-                   "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; border-top: 5px solid #d69e2e; box-shadow: 0 4px 6px rgba(0,0,0,0.1);\">" +
-                   "    <h2 style=\"color: #b7791f; margin-top: 0;\">⏳ New Deadline Extension Request</h2>" +
-                   "    <p style=\"font-size: 16px; color: #333;\">A team member has submitted a request to extend the deadline for a task.</p>" +
-                   "    <div style=\"background-color: #fffff0; padding: 15px; border-left: 4px solid #d69e2e; margin: 20px 0; border-radius: 4px;\">" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Requester:</strong> <span style=\"color: #2d3748;\">" + requesterName + "</span></p>" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Task Name:</strong> <span style=\"color: #2d3748;\">" + taskTitle + "</span></p>" +
-                   "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Requested Due Date:</strong> <span style=\"color: #e53e3e; font-weight: bold;\">" + requestedDueDate + "</span></p>" +
-                   "      <p style=\"margin: 10px 0 5px 0; font-size: 15px;\"><strong>Reason:</strong> <i style=\"color: #4a5568;\">\"" + reason + "\"</i></p>" +
-                   "    </div>" +
-                   "    <p style=\"font-size: 15px; color: #4a5568;\">Please log in to the system to review and approve or reject this request.</p>" +
-                   "    <br/>" +
-                   "    <p style=\"font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 15px;\">Please do not reply to this automated email.</p>" +
-                   "  </div>" +
-                   "</div>";
+            String subject = "⏳ [Fluxboard] New Extension Request Pending";
+            String htmlBody = buildHtmlEmail(
+                    "#dd6b20", "⏳ Extension Requested",
+                    taskTitle, "N/A",
+                    requesterName + " has submitted an extension request to " + requestedDueDate + ". Reason: " + reason
+            );
             emailService.sendHtmlEmail(manager.getEmail(), subject, htmlBody);
         }
     }
 
-    private String buildHtmlEmail(String themeColor, String header, String taskTitle, String priority, String footerMsg) {
+    // ================== PRIVATE HELPER METHODS ==================
+    private NotificationEntity createNotificationRecord(String recipientId, String type, String title, String message, Map<String, Object> metadata) {
+        NotificationEntity notif = new NotificationEntity();
+        notif.setRecipientId(recipientId);
+        notif.setType(type);
+        notif.setTitle(title);
+        notif.setMessage(message);
+        notif.setMetadata(metadata);
+        notif.setRead(false);
+        return notificationRepository.save(notif);
+    }
+
+    private String buildHtmlEmail(String themeColor, String title, String taskTitle, String priority, String description) {
         return "<div style=\"font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6;\">" +
-               "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);\">" +
-               "    <h2 style=\"color: " + themeColor + "; border-bottom: 2px solid #edf2f7; padding-bottom: 10px;\">" + header + "</h2>" +
+               "  <div style=\"max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-top: 5px solid " + themeColor + ";\">" +
+               "    <h2 style=\"color: " + themeColor + "; margin-top: 0;\">" + title + "</h2>" +
                "    <p style=\"font-size: 16px; color: #333;\">Hello,</p>" +
-               "    <p style=\"font-size: 16px; color: #333;\">This is an automated notification from Fluxboard:</p>" +
                "    <div style=\"background-color: #f8fafc; padding: 15px; border-left: 5px solid " + themeColor + "; margin: 20px 0; border-radius: 4px;\">" +
-               "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Task Name:</strong> <span style=\"color: #2d3748;\">" + taskTitle + "</span></p>" +
-               "      <p style=\"margin: 5px 0; font-size: 15px;\"><strong>Priority:</strong> <span style=\"color: #2d3748;\">" + priority + "</span></p>" +
+               "      <p style=\"margin: 5px 0;\"><strong>Task Name:</strong> " + taskTitle + "</p>" +
+               "      <p style=\"margin: 5px 0;\"><strong>Priority:</strong> " + priority + "</p>" +
+               "      <p style=\"margin: 10px 0 0 0; color: #4a5568; line-height: 1.5;\">" + description + "</p>" +
                "    </div>" +
-               "    <p style=\"font-size: 15px; color: #4a5568;\">" + footerMsg + "</p>" +
-               "    <br/>" +
-               "    <p style=\"font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 15px;\">Please do not reply to this automated email.</p>" +
+               "    <p style=\"font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 15px;\">This is an automated message from Fluxboard. Please do not reply to this email.</p>" +
                "  </div>" +
                "</div>";
     }

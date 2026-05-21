@@ -12,7 +12,7 @@ import java.util.concurrent.ScheduledFuture;
 public class NotificationDebounceService {
 
     private final TaskScheduler taskScheduler;
-    // Map lưu trữ các Job đang đếm ngược. Key = "LoạiThôngBáo_IDTask_IDNgườiNhận"
+    // Map luân chuyển các luồng hẹn giờ chạy ngầm. Key dạng: "LoạiSựKiện_IDTask_IDNgườiNhận"
     private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
     public NotificationDebounceService(TaskScheduler taskScheduler) {
@@ -20,29 +20,27 @@ public class NotificationDebounceService {
     }
 
     /**
-     * Hàm giữ chân (Debounce) lệnh thực thi
-     * @param key Mã định danh duy nhất của sự kiện
-     * @param action Hành động sẽ thực thi (Lưu DB, gửi WebSocket)
-     * @param delayMillis Thời gian chờ (mili-giây)
+     * Hàm giữ chân tác vụ (Debounce) chống spam dồn dập dữ liệu.
+     * @param key Mã định danh duy nhất của chuỗi thao tác liên tục
+     * @param action Logic xử lý thực tế (Lưu Database và bắn qua ống WebSocket)
+     * @param delayMillis Thời gian chờ kích hoạt (mili-giây)
      */
     public void debounce(String key, Runnable action, long delayMillis) {
-        // 1. Kiểm tra xem có Job nào trùng Key đang chạy đếm ngược không?
+        // 1. Nếu tìm thấy một lệnh hẹn giờ trùng Key đang chạy đếm ngược, HỦY NGAY LẬP TỨC
         ScheduledFuture<?> existingTask = scheduledTasks.get(key);
         if (existingTask != null && !existingTask.isDone()) {
-            // Có thì HỦY NGAY (Chống Spam)
             existingTask.cancel(false);
         }
 
-        // 2. Lên lịch cho một Job mới tinh, bắt đầu đếm lại
+        // 2. Thiết lập một lệnh đếm ngược mới tinh từ thời điểm hiện tại
         ScheduledFuture<?> newTask = taskScheduler.schedule(() -> {
             try {
-                action.run(); // Chạy lệnh lưu DB và bắn WebSocket
+                action.run(); // Chỉ chạy khi thời gian delay kết thúc hoàn toàn và không bị ngắt quãng
             } finally {
-                scheduledTasks.remove(key); // Chạy xong thì tự dọn rác trong Map
+                scheduledTasks.remove(key); // Dọn rác trong Map bộ nhớ đệm sau khi hoàn thành
             }
         }, Instant.now().plusMillis(delayMillis));
 
-        // 3. Cất vào Map để lần sau còn biết đường tìm mà Hủy
         scheduledTasks.put(key, newTask);
     }
 }
