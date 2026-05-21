@@ -6,7 +6,6 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -73,7 +72,7 @@ public class TaskEntity extends BaseDocument {
     private String authorUserId;
 
     // =========================================================================
-    // GETTERS & SETTERS (Đã bổ sung getColumnId)
+    // GETTERS & SETTERS
     // =========================================================================
 
     public String getTitle() { return title; }
@@ -82,7 +81,7 @@ public class TaskEntity extends BaseDocument {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    // 🚀 ĐÃ BỔ SUNG: Phương thức này giải quyết lỗi biên dịch cho NotificationListener
+    // 🚀 Bổ sung getter này để NotificationListener hoạt động
     public String getColumnId() { return columnId; }
     public void setColumnId(String columnId) { this.columnId = columnId; }
 
