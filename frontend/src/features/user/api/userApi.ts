@@ -29,6 +29,7 @@ export const userApi = {
   },
 
   // 🚀 Upload avatar (S3 safe)
+  // 🚀 Upload avatar (S3 safe)
   uploadAvatar: async (userId: string | number, file: File) => {
     // 1. Lấy presigned URL từ Backend
     const presignRes: any = await axiosClient.get(
@@ -62,9 +63,14 @@ export const userApi = {
       throw new Error(`Upload S3 thất bại: ${uploadRes.status} - ${uploadRes.statusText}`);
     }
 
-    // 3. Trả về URL ảnh
+    // 3. 🚀 BÍ KÍP ĐÂY: Gọi API báo cho Backend lưu link vào Database
+    await axiosClient.put(`/users/${userId}/avatar`, {
+      avatarUrl: fileUrl
+    });
+
+    // 4. 🚀 ĐỔI TÊN BIẾN TRẢ VỀ: Trả đúng field 'url' để Hook useUpdateProfile hứng được
     return {
-      data: fileUrl
+      url: fileUrl 
     };
   }
 };

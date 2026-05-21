@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, AlertTriangle, Trash2, CheckCircle, XCircle, X } from 'lucide-react';
-// 🚀 ĐỔI SANG DÙNG HOOKS TANSTACK QUERY
+import { Save, AlertTriangle, Trash2, CheckCircle, XCircle, X, AlertOctagon } from 'lucide-react';
 import { 
     useProjectOverview, 
     useUpdateProjectInfo, 
@@ -32,7 +31,11 @@ const ProjectSettingsTab = ({ projectId }) => {
         type: 'success'
     });
 
-    const showNotification = (message: string, type = 'success') => {
+    // 🚀 STATE CHO MODAL XÓA DỰ ÁN
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+    const showNotification = (message, type = 'success') => {
         setNotification({ isOpen: true, message, type });
     };
 
@@ -68,22 +71,23 @@ const ProjectSettingsTab = ({ projectId }) => {
         }
     };
 
-    const handleDelete = async () => {
-        if (!currentProject) return;
-
-        const confirmName = prompt(`CẢNH BÁO: Hành động này sẽ xóa vĩnh viễn dự án và toàn bộ Task bên trong!\n\nGõ "${currentProject.name}" để xác nhận xóa:`);
-        
-        if (confirmName === currentProject.name) {
-            try {
-                await deleteProject();
-                navigate('/workspaces');
-            } catch (error) {
-                console.error("Lỗi xóa dự án:", error);
-                showNotification("Xóa thất bại! Vui lòng kiểm tra lại.", "error");
-            }
-        } else if (confirmName !== null) {
-            showNotification("Tên xác nhận không khớp, đã hủy lệnh xóa.", "error");
+    // 🚀 HÀM THỰC THI XÓA (GỌI API)
+    const executeDelete = async () => {
+        try {
+            await deleteProject();
+            setIsDeleteModalOpen(false); // Đóng modal
+            navigate('/workspaces');      // Đá về trang danh sách
+        } catch (error) {
+            console.error("Lỗi xóa dự án:", error);
+            setIsDeleteModalOpen(false);
+            showNotification(error.response?.data?.message || "Xóa thất bại! Vui lòng kiểm tra lại.", "error");
         }
+    };
+
+    // Đóng modal xóa và reset text
+    const closeDeleteModal = () => {
+        setIsDeleteModalOpen(false);
+        setDeleteConfirmText('');
     };
 
     return (
@@ -141,19 +145,74 @@ const ProjectSettingsTab = ({ projectId }) => {
                             Hành động này KHÔNG THỂ hoàn tác!
                         </p>
                         <button 
-                            onClick={handleDelete}
-                            disabled={isActionLoading}
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            disabled={isActionLoading || !currentProject}
                             className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-xl mt-2 font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-50"
                         >
-                            <Trash2 size={16} /> {isDeleting ? 'Đang xóa...' : 'Xóa vĩnh viễn Dự án'}
+                            <Trash2 size={16} /> Xóa vĩnh viễn Dự án
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* KHUNG THÔNG BÁO CUSTOM */}
-            {notification.isOpen && (
+            {/* 🚀 MODAL XÁC NHẬN XÓA DỰ ÁN (XỊN XÒ) */}
+            {isDeleteModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div 
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" 
+                        onClick={closeDeleteModal}
+                    ></div>
+                    
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4 text-rose-600">
+                            <div className="p-3 bg-rose-100 rounded-full">
+                                <AlertOctagon size={28} />
+                            </div>
+                            <h3 className="text-xl font-black">Xác nhận xóa dự án</h3>
+                        </div>
+
+                        <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl mb-5">
+                            <p className="text-sm text-rose-800 font-medium">
+                                Bạn chuẩn bị xóa vĩnh viễn dự án <span className="font-bold">"{currentProject?.name}"</span>. 
+                                Toàn bộ dữ liệu bao gồm bảng, thẻ công việc, và bình luận sẽ bị hủy và không thể khôi phục.
+                            </p>
+                        </div>
+
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            Vui lòng nhập <span className="text-rose-600 select-none">"{currentProject?.name}"</span> để xác nhận:
+                        </label>
+                        <input 
+                            type="text" 
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-rose-200 focus:border-rose-500 outline-none transition-all font-semibold text-slate-800 mb-6"
+                            placeholder="Nhập tên dự án..."
+                            autoFocus
+                        />
+
+                        <div className="flex gap-3 mt-auto">
+                            <button 
+                                onClick={closeDeleteModal}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                Hủy bỏ
+                            </button>
+                            <button 
+                                onClick={executeDelete}
+                                disabled={deleteConfirmText !== currentProject?.name || isDeleting}
+                                className="flex-1 px-4 py-3 rounded-xl font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-200 transition-all active:scale-95 disabled:opacity-50 disabled:bg-rose-300 disabled:shadow-none flex justify-center items-center gap-2"
+                            >
+                                {isDeleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* KHUNG THÔNG BÁO CUSTOM (Giữ nguyên) */}
+            {notification.isOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
                     <div 
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in" 
                         onClick={() => setNotification({ ...notification, isOpen: false })}

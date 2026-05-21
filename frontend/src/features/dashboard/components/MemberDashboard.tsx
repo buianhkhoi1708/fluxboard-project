@@ -9,8 +9,43 @@ interface MemberDashboardProps {
   data: MemberDashboardData | null;
 }
 
+
+export const MemberDashboardSkeleton = () => (
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 pb-12 animate-pulse">
+    {/* Cột trái */}
+    <div className="lg:col-span-1 flex flex-col gap-6 lg:gap-8">
+      {/* Contribution skeleton */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-6 space-y-4">
+        <div className="h-5 w-40 bg-slate-200 rounded-md" />
+        <div className="h-12 w-24 bg-slate-200 rounded-md" />
+        <div className="h-3 bg-slate-200 rounded-full" />
+        <div className="h-3 w-16 bg-slate-200 rounded-md ml-auto" />
+      </div>
+      {/* Focus list skeleton */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-6 flex-1 space-y-4">
+        <div className="h-5 w-36 bg-slate-200 rounded-md" />
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="p-4 rounded-xl bg-slate-100 space-y-2">
+            <div className="h-4 w-3/4 bg-slate-200 rounded-md" />
+            <div className="flex gap-2">
+              <div className="h-3 w-14 bg-slate-200 rounded-md" />
+              <div className="h-3 w-10 bg-slate-200 rounded-md" />
+              <div className="h-3 w-10 bg-slate-200 rounded-md" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+    {/* Cột phải: Bar chart skeleton */}
+    <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-6 space-y-4">
+      <div className="h-5 w-48 bg-slate-200 rounded-md" />
+      <div className="h-64 bg-slate-100 rounded-2xl" />
+    </div>
+  </div>
+);
+
 const MemberDashboard = ({ data }: MemberDashboardProps) => {
-  if (!data) return null;
+  if (!data) return <MemberDashboardSkeleton />;
 
   // ==========================================
   // 🧠 RÚT TRÍCH DATA TỪ BACKEND DTO

@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useGetMyTasks } from "../features/tasks/hooks/useTaskQueries"; // Nhớ check lại đường dẫn import hook này
+import { useGetMyTasks } from "../features/tasks/hooks/useTaskQueries";
 import {
   Calendar,
   Clock,
@@ -8,43 +8,52 @@ import {
   Sparkles,
   CheckCircle2,
   User,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 
+// ------- Task Card Skeleton -------
+const TaskCardSkeleton = () => (
+  <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200/80 shadow-sm p-5 flex flex-col animate-pulse">
+    <div className="flex justify-between items-start mb-3">
+      <div className="h-5 w-16 bg-slate-200 rounded-full" />
+      <div className="h-5 w-16 bg-slate-200 rounded-md" />
+    </div>
+    <div className="space-y-2 mb-4">
+      <div className="h-5 w-3/4 bg-slate-200 rounded-md" />
+      <div className="h-4 w-full bg-slate-200 rounded-md" />
+      <div className="h-4 w-2/3 bg-slate-200 rounded-md" />
+    </div>
+    <div className="space-y-2 mt-auto pt-4 border-t border-slate-100">
+      <div className="h-4 w-28 bg-slate-200 rounded-md" />
+      <div className="h-4 w-32 bg-slate-200 rounded-md" />
+      <div className="flex items-center gap-2 pt-2">
+        <div className="w-6 h-6 bg-slate-200 rounded-full" />
+        <div className="h-4 w-24 bg-slate-200 rounded-md" />
+      </div>
+    </div>
+  </div>
+);
+
+// ------- Main Component -------
 const MyTasksPage = () => {
   const navigate = useNavigate();
-  const { data: myTasks, isLoading, isError } = useGetMyTasks();
+  const { data: myTasks, isLoading, isError, refetch } = useGetMyTasks();
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="text-red-500 text-center mt-10">
-        Lỗi khi tải công việc! Vui lòng thử lại.
-      </div>
-    );
-  }
-
-  // Hàm render màu cho Mức độ ưu tiên
+  // Màu priority
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "HIGH":
-        return "bg-red-100 text-red-700 border-red-200";
+        return "bg-red-100 text-red-700 border-red-200/80";
       case "MEDIUM":
-        return "bg-orange-100 text-orange-700 border-orange-200";
+        return "bg-orange-100 text-orange-700 border-orange-200/80";
       case "LOW":
-        return "bg-green-100 text-green-700 border-green-200";
+        return "bg-green-100 text-green-700 border-green-200/80";
       default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
+        return "bg-gray-100 text-gray-700 border-gray-200/80";
     }
   };
 
-  // Hàm format ngày tháng
   const formatDate = (dateString: string) => {
     if (!dateString) return "Chưa cấu hình hạn";
     return new Date(dateString).toLocaleDateString("vi-VN", {
@@ -54,124 +63,156 @@ const MyTasksPage = () => {
     });
   };
 
-  // Kiểm tra thời gian quá hạn chính xác
   const isOverdue = (dateString: string) => {
     if (!dateString) return false;
     return new Date(dateString) < new Date();
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 md:p-8">
-      {/* HEADER */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">
-            Công việc của tôi
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Hệ thống ghi nhận {myTasks?.length || 0} công việc được phân bổ cho
-            tài khoản.
-          </p>
-        </div>
-      </div>
-
-      {/* EMPTY STATE */}
-      {myTasks?.length === 0 && (
-        <div className="flex flex-col items-center justify-center bg-gray-50 rounded-2xl p-12 border border-dashed border-gray-300">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-700">Tuyệt vời!</h2>
-          <p className="text-gray-500">
-            Không còn đầu việc nào cần xử lý vào lúc này.
-          </p>
-        </div>
-      )}
-
-      {/* TASKS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {myTasks?.map((task: any) => (
-          <div
-            key={task.id}
-            // 🚀 Bấm vào sẽ nhảy sang trang chi tiết (Sếp đổi lại URL này cho hợp với Route thực tế của app nhé)
-           onClick={() => {
-              if (task.board_id) {
-                // 🚀 ĐÍNH KÈM TASK ID VÀO ĐƯỜNG DẪN
-                navigate(`/board/${task.board_id}?taskId=${task.id}`);
-              } else {
-                console.warn(`Task ${task.id} không tìm thấy thông tin board_id.`);
-              }
-            }}
-            // 🚀 Thêm hiệu ứng trỏ chuột (cursor-pointer) và viền xanh khi hover
-            className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition-all duration-200 p-5 flex flex-col"
-          >
-            {/* Thẻ trạng thái & Priority */}
-            <div className="flex justify-between items-start mb-3">
-              <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${getPriorityColor(task.priority)}`}
-              >
-                {task.priority || "MEDIUM"}
-              </span>
-              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md">
-                {task.status}
-              </span>
-            </div>
-
-            {/* Tiêu đề & Mô tả */}
-            <h3 className="text-lg font-bold text-gray-800 mb-2 line-clamp-2 leading-snug">
-              {task.title}
-            </h3>
-            {task.description && (
-              <p className="text-sm text-gray-500 line-clamp-2 mb-4 flex-grow">
-                {task.description}
-              </p>
-            )}
-
-            {/* Thông tin thêm (AI Point, Date, Author) */}
-            <div className="space-y-2 mt-auto pt-4 border-t border-gray-100">
-              {/* Điểm gợi ý từ AI */}
-              {task.ai_suggested_point && (
-                <div className="flex items-center text-sm text-indigo-600 font-medium bg-indigo-50 w-fit px-2 py-1 rounded-md">
-                  <Sparkles className="w-4 h-4 mr-1.5" />
-                  AI ước tính: {task.ai_suggested_point} Point
-                </div>
-              )}
-
-              {/* Hạn chót */}
-              <div className="flex items-center text-sm text-gray-600">
-                <Clock className="w-4 h-4 mr-2 text-gray-400" />
-                <span
-                  className={
-                    isOverdue(task.due_date) ? "text-red-500 font-semibold" : ""
-                  }
-                >
-                  Hạn chót: {formatDate(task.due_date)}
-                </span>
+    <div className="flex-1 bg-linear-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* HEADER */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-3 text-slate-800">
+              <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
+                <CheckCircle2 className="text-indigo-600" size={24} />
               </div>
+              Công việc của tôi
+            </h1>
+            <p className="text-sm font-medium text-slate-500 pl-12 mt-1">
+              {myTasks?.length
+                ? `Hệ thống ghi nhận ${myTasks.length} công việc được phân bổ cho tài khoản.`
+                : "Quản lý các nhiệm vụ cá nhân của bạn."}
+            </p>
+          </div>
+        </div>
 
-              {/* Người khởi tạo/giao việc */}
-              {task.author && (
-                <div className="flex items-center text-sm text-gray-600 pt-2">
-                  {task.author.avatar_url ? (
-                    <img
-                      src={task.author.avatar_url}
-                      alt="avatar"
-                      className="w-6 h-6 rounded-full mr-2"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mr-2">
-                      <User className="w-3 h-3 text-blue-600" />
-                    </div>
-                  )}
-                  <span className="truncate">
-                    Giao bởi:{" "}
-                    <span className="font-medium text-gray-700">
-                      {task.author.full_name}
-                    </span>
+        {/* LOADING SKELETON */}
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <TaskCardSkeleton key={i} />
+            ))}
+          </div>
+        )}
+
+        {/* ERROR STATE */}
+        {isError && !isLoading && (
+          <div className="bg-white/80 backdrop-blur-sm border border-dashed border-red-200 rounded-2xl p-16 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="p-5 bg-red-50 rounded-full mb-5">
+              <AlertCircle size={56} className="text-red-400" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Tải dữ liệu thất bại</h3>
+            <p className="text-slate-500 text-sm mb-6 max-w-md">
+              Có lỗi xảy ra khi tải công việc. Vui lòng thử lại.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-2 bg-linear-to-br from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200/50 transition-all duration-200 active:scale-95"
+            >
+              <RefreshCw size={18} strokeWidth={2.5} />
+              <span>Tải lại</span>
+            </button>
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+        {!isLoading && !isError && myTasks?.length === 0 && (
+          <div className="bg-white/80 backdrop-blur-sm border border-dashed border-indigo-200 rounded-2xl p-16 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="p-5 bg-indigo-50 rounded-full mb-5 animate-bounce-slow">
+              <CheckCircle2 size={56} className="text-emerald-500" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Tuyệt vời!</h3>
+            <p className="text-slate-500 text-sm max-w-md">
+              Không còn đầu việc nào cần xử lý vào lúc này.
+            </p>
+          </div>
+        )}
+
+        {/* TASKS GRID */}
+        {!isLoading && !isError && myTasks && myTasks.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {myTasks.map((task: any) => (
+              <div
+                key={task.id}
+                onClick={() => {
+                  if (task.board_id) {
+                    navigate(`/board/${task.board_id}?taskId=${task.id}`);
+                  } else {
+                    console.warn(`Task ${task.id} không tìm thấy board_id.`);
+                  }
+                }}
+                className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md hover:shadow-indigo-100/20 hover:border-indigo-300 hover:-translate-y-0.5 cursor-pointer transition-all duration-200 p-5 flex flex-col group"
+              >
+                {/* Priority & Status */}
+                <div className="flex justify-between items-start mb-3">
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${getPriorityColor(task.priority)}`}
+                  >
+                    {task.priority || "MEDIUM"}
+                  </span>
+                  <span className="text-xs font-medium bg-slate-100/80 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200/60">
+                    {task.status}
                   </span>
                 </div>
-              )}
-            </div>
+
+                {/* Title & Description */}
+                <h3 className="text-lg font-bold text-slate-800 mb-2 line-clamp-2 leading-snug group-hover:text-indigo-700 transition-colors">
+                  {task.title}
+                </h3>
+                {task.description && (
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-4 grow">
+                    {task.description}
+                  </p>
+                )}
+
+                {/* Footer info */}
+                <div className="space-y-2 mt-auto pt-4 border-t border-slate-100">
+                  {task.ai_suggested_point && (
+                    <div className="flex items-center text-sm text-indigo-600 font-medium bg-indigo-50 w-fit px-2 py-1 rounded-md">
+                      <Sparkles className="w-4 h-4 mr-1.5" />
+                      AI ước tính: {task.ai_suggested_point} Point
+                    </div>
+                  )}
+
+                  <div className="flex items-center text-sm text-slate-600">
+                    <Clock className="w-4 h-4 mr-2 text-slate-400" />
+                    <span
+                      className={
+                        isOverdue(task.due_date) ? "text-red-500 font-semibold" : ""
+                      }
+                    >
+                      Hạn chót: {formatDate(task.due_date)}
+                    </span>
+                  </div>
+
+                  {task.author && (
+                    <div className="flex items-center text-sm text-slate-600 pt-2">
+                      {task.author.avatar_url ? (
+                        <img
+                          src={task.author.avatar_url}
+                          alt="avatar"
+                          className="w-6 h-6 rounded-full mr-2 ring-2 ring-slate-100"
+                        />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2 ring-2 ring-slate-100">
+                          <User className="w-3 h-3 text-indigo-600" />
+                        </div>
+                      )}
+                      <span className="truncate">
+                        Giao bởi:{" "}
+                        <span className="font-medium text-slate-700">
+                          {task.author.full_name}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

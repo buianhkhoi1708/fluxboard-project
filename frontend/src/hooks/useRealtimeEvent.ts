@@ -1,20 +1,26 @@
 import { useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 
-export const useRealtimeEvent = (topic: string, onMessage: () => void, delay = 300) => {
+// 🚀 Nâng cấp type cho onMessage nhận payload
+export const useRealtimeEvent = (topic: string, onMessage: (message: any) => void, delay = 300) => {
   const { subscribe, isConnected } = useSocket();
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // 🚀 BÍ KÍP CHỐNG LỖI STALE CLOSURE
+  const latestOnMessage = useRef(onMessage);
   useEffect(() => {
-    if (!isConnected || !topic) return;
+    latestOnMessage.current = onMessage;
+  }, [onMessage]);
 
-    // Đăng ký qua module trung tâm
+  useEffect(() => {
+    if (!isConnected || !topic || !subscribe) return;
+
     const subscription = subscribe(topic, (message: any) => {
-      // Logic "Phanh ABS" dùng chung
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       
       debounceTimer.current = setTimeout(() => {
-        onMessage();
+        // 🚀 Bơm dữ liệu ra ngoài Component
+        latestOnMessage.current(message);
       }, delay);
     });
 
@@ -22,5 +28,5 @@ export const useRealtimeEvent = (topic: string, onMessage: () => void, delay = 3
       if (subscription) subscription.unsubscribe();
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [topic, isConnected]);
+  }, [topic, isConnected, subscribe]); 
 };

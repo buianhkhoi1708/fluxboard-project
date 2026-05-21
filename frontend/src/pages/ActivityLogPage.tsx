@@ -3,18 +3,16 @@ import { useActivityFilters } from "../features/activity/hooks/useActivityFilter
 import { useInfiniteAdminLogs } from "../features/activity/api/useInfiniteAdminLogs";
 import { useUserStore } from "../features/user/store/useUserStore";
 import ActivityFilterBar from "../features/activity/components/ActivityFilterBar";
-import { ClockIcon, UserCircleIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { Clock, RefreshCw, Activity, Loader2 } from "lucide-react";
 
-// Bảng màu trực quan cho Source Type (có gradient)
 const SOURCE_TYPE_STYLES: Record<string, string> = {
-  PROJECT: "bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border-emerald-200",
-  BOARD: "bg-gradient-to-r from-indigo-50 to-indigo-100 text-indigo-700 border-indigo-200",
-  TASK: "bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 border-amber-200",
-  USER: "bg-gradient-to-r from-sky-50 to-sky-100 text-sky-700 border-sky-200",
-  SYSTEM: "bg-gradient-to-r from-rose-50 to-rose-100 text-rose-700 border-rose-200",
+  PROJECT: "bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border-emerald-200/80",
+  BOARD: "bg-gradient-to-r from-indigo-50 to-indigo-100 text-indigo-700 border-indigo-200/80",
+  TASK: "bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 border-amber-200/80",
+  USER: "bg-gradient-to-r from-sky-50 to-sky-100 text-sky-700 border-sky-200/80",
+  SYSTEM: "bg-gradient-to-r from-rose-50 to-rose-100 text-rose-700 border-rose-200/80",
 };
 
-// Màu sắc cho Action
 const ACTION_STYLES: Record<string, string> = {
   CREATE: "text-emerald-600 font-semibold",
   UPDATE: "text-amber-600 font-semibold",
@@ -22,9 +20,30 @@ const ACTION_STYLES: Record<string, string> = {
   MOVE: "text-indigo-600 font-semibold",
 };
 
+const ActivityLogSkeleton = () => (
+  <div className="space-y-4 animate-pulse">
+    <div className="h-8 w-48 bg-slate-200 rounded-xl" />
+    <div className="h-12 bg-slate-200 rounded-xl" />
+    {[...Array(4)].map((_, i) => (
+      <div key={i} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 bg-slate-200 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <div className="flex gap-2">
+              <div className="h-4 w-24 bg-slate-200 rounded-md" />
+              <div className="h-4 w-16 bg-slate-200 rounded-md" />
+            </div>
+            <div className="h-4 w-3/4 bg-slate-200 rounded-md" />
+            <div className="h-3 w-1/4 bg-slate-200 rounded-md" />
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const ActivityLogPage = () => {
   const [filters] = useActivityFilters();
-
   const {
     data,
     isLoading,
@@ -32,7 +51,6 @@ const ActivityLogPage = () => {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteAdminLogs(filters);
-
   const { userDictionary, fetchAllSystemUsers } = useUserStore();
 
   useEffect(() => {
@@ -69,72 +87,43 @@ const ActivityLogPage = () => {
 
   const isEmpty = !data || data.pages?.[0]?.data?.length === 0;
 
-  // Skeleton loading cải tiến, khớp với layout card
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50/50 pb-12">
-        <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 w-48 bg-gray-200 rounded-xl" />
-            <div className="h-4 w-72 bg-gray-100 rounded-lg" />
-            <div className="h-24 bg-gray-100 rounded-2xl" />
-            {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm animate-pulse"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-1/3 bg-gray-200 rounded" />
-                    <div className="h-3 w-3/4 bg-gray-100 rounded" />
-                    <div className="h-3 w-1/4 bg-gray-100 rounded" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white pb-12">
-      <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b border-slate-200 pb-5">
-          <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent tracking-tight">
+    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header đồng bộ WorkspacesPage */}
+   
+
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="space-y-1">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-3 text-slate-800">
+              <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
+            <Activity className="text-indigo-600" size={20} />
+
+              </div>
               Nhật ký hoạt động
             </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Theo dõi và kiểm toán toàn bộ luồng thay đổi trạng thái hệ thống
+            <p className="text-sm font-medium text-slate-500 pl-12">
+              Nhật ký hoạt động theo thời gian thực.
             </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 bg-indigo-50/80 backdrop-blur-sm border border-indigo-200 px-3 py-1.5 rounded-full shadow-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
-            </span>
-            <span>Real-time tracking</span>
           </div>
         </div>
 
-        {/* Thanh lọc */}
-        <ActivityFilterBar />
+        {/* FILTER BAR */}
+        <div className="mb-6">
+          <ActivityFilterBar />
+        </div>
 
-        {/* Nội dung chính */}
-        {isEmpty ? (
-          <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-slate-100 transition-all">
-            <div className="w-20 h-20 mx-auto bg-slate-50 rounded-full flex items-center justify-center mb-4">
-              <UserCircleIcon className="w-10 h-10 text-slate-300 stroke-1" />
+        {/* CONTENT */}
+        {isLoading ? (
+          <ActivityLogSkeleton />
+        ) : isEmpty ? (
+          <div className="bg-white/80 backdrop-blur-sm border border-dashed border-indigo-200 rounded-2xl p-16 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="p-5 bg-indigo-50 rounded-full mb-5">
+              <Activity size={56} className="text-indigo-400" />
             </div>
-            <p className="text-slate-500 text-base font-medium">
-              Không tìm thấy bản ghi hoạt động nào phù hợp.
-            </p>
-            <p className="text-slate-400 text-sm mt-1">
-              Hãy thử điều chỉnh bộ lọc hoặc tải lại trang.
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Không có bản ghi nào</h3>
+            <p className="text-slate-500 text-sm max-w-md">
+              Không tìm thấy hoạt động nào phù hợp với bộ lọc.
             </p>
           </div>
         ) : (
@@ -144,18 +133,17 @@ const ActivityLogPage = () => {
                 {page?.data?.map((log: any) => {
                   const sourceStyle =
                     SOURCE_TYPE_STYLES[log?.source_type] ||
-                    "bg-slate-100 text-slate-700 border-slate-200";
+                    "bg-slate-100 text-slate-700 border-slate-200/80";
                   const actionStyle =
                     ACTION_STYLES[log?.action] || "text-slate-600 font-medium";
 
                   return (
                     <div
                       key={log?.id || Math.random()}
-                      className="group bg-white rounded-xl shadow-sm border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+                      className="group bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:shadow-indigo-100/20 hover:border-indigo-300 transition-all duration-200 hover:-translate-y-0.5"
                     >
                       <div className="p-5">
                         <div className="flex items-start gap-4">
-                          {/* Avatar */}
                           <div className="relative flex-shrink-0">
                             {log?.actor?.avatar_url ? (
                               <img
@@ -173,18 +161,13 @@ const ActivityLogPage = () => {
                             <div
                               className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shadow-sm"
                               style={{
-                                display: log?.actor?.avatar_url
-                                  ? "none"
-                                  : "flex",
+                                display: log?.actor?.avatar_url ? "none" : "flex",
                               }}
                             >
-                              {(log?.actor?.full_name || "S")
-                                .charAt(0)
-                                .toUpperCase()}
+                              {(log?.actor?.full_name || "S").charAt(0).toUpperCase()}
                             </div>
                           </div>
 
-                          {/* Nội dung */}
                           <div className="flex-1 min-w-0 space-y-1.5">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="font-semibold text-slate-800 text-sm">
@@ -196,30 +179,25 @@ const ActivityLogPage = () => {
                                 {log?.source_type || "UNKNOWN"}
                               </span>
                               <span className="text-xs text-slate-400 flex items-center gap-1 ml-auto">
-                                <ClockIcon className="w-3.5 h-3.5 stroke-[1.5]" />
+                                <Clock className="w-3.5 h-3.5 stroke-[1.5]" />
                                 {getRelativeTime(log?.created_at)}
                               </span>
                             </div>
 
-                            <p className="text-slate-700 text-sm leading-relaxed break-words bg-slate-50/50 p-2 rounded-lg -mx-2">
-                              <span
-                                className={`text-xs uppercase mr-1 tracking-wider ${actionStyle}`}
-                              >
+                            <p className="text-slate-700 text-sm leading-relaxed break-words bg-slate-50/80 p-2 rounded-lg">
+                              <span className={`text-xs uppercase mr-1 tracking-wider ${actionStyle}`}>
                                 [{log?.action || "LOG"}]
                               </span>{" "}
                               {formatMessage(log?.message)}
                             </p>
 
                             <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                              <ClockIcon className="w-3 h-3" />
+                              <Clock className="w-3 h-3" />
                               {log?.created_at
-                                ? new Date(log.created_at).toLocaleString(
-                                    "vi-VN",
-                                    {
-                                      dateStyle: "medium",
-                                      timeStyle: "short",
-                                    }
-                                  )
+                                ? new Date(log.created_at).toLocaleString("vi-VN", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })
                                 : ""}
                             </div>
                           </div>
@@ -231,23 +209,22 @@ const ActivityLogPage = () => {
               </React.Fragment>
             ))}
 
-            {/* Nút tải thêm */}
             {hasNextPage && (
-              <div className="flex justify-center mt-10 pt-2">
+              <div className="flex justify-center mt-8 pt-2">
                 <button
                   onClick={() => fetchNextPage()}
                   disabled={isFetchingNextPage}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 disabled:text-slate-400 text-sm font-semibold border border-slate-200 hover:border-indigo-300 rounded-full shadow-sm transition-all duration-200 hover:shadow-md active:scale-95 disabled:pointer-events-none"
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white disabled:from-slate-400 disabled:to-slate-500 text-sm font-bold rounded-xl shadow-lg shadow-indigo-200/50 transition-all duration-200 active:scale-95 disabled:pointer-events-none disabled:shadow-none"
                 >
                   {isFetchingNextPage ? (
                     <>
-                      <ArrowPathIcon className="w-4 h-4 text-indigo-500 animate-spin" />
-                      <span>Đang tải lịch sử cũ...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang tải thêm...</span>
                     </>
                   ) : (
                     <>
                       <span>Xem thêm hoạt động cũ</span>
-                      <ArrowPathIcon className="w-4 h-4 opacity-50 group-hover:rotate-180 transition-transform" />
+                      <RefreshCw className="w-4 h-4" />
                     </>
                   )}
                 </button>
