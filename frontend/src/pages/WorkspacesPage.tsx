@@ -245,8 +245,14 @@ const WorkspacesPage = () => {
                         </div>
                       </div>
                     </div>
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200 active:scale-90">
+                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200 active:scale-90"> 
+                       <Link
+                            to={`/projects/${workspace.id || workspace._id}?tab=members`}
+                            title="Quản lý thành viên"
+                            className="flex items-center gap-2 bg-slate-100/80 hover:bg-indigo-50 px-2.5 py-1 rounded-full cursor-pointer transition-all group"
+                          >
                       <MoreVertical size={18} />
+                      </Link>
                     </button>
                   </div>
 

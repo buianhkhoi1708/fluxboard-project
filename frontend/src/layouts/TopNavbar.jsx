@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import Logo from '../../src/assets/icon.svg'; 
 import { ChevronDown, Search, User } from 'lucide-react';
-import { useAuthStore } from '../features/auth/store/useAuthStore'; 
+import { useAuthUser, useLogout } from '../features/auth/hooks/useAuthQueries'; 
 import { useRoleAccess } from '../features/rbac/hooks/useRoleAccess'; 
 
 import NotificationDropdown from '../features/notification/components/NotificationDropdown';
 
 const TopNavbar = () => {
-  const { user, logout } = useAuthStore();
+const { data: user } = useAuthUser(); // Lấy dữ liệu user từ Cache
+const { mutate: logout } = useLogout(); // Lấy hàm kích hoạt đăng xuất
   const { currentRoleName } = useRoleAccess(); 
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -33,15 +34,6 @@ const TopNavbar = () => {
             className="h-8 w-auto object-contain" 
           />
           <span className="font-extrabold text-xl tracking-tight text-slate-900">Fluxboard</span>
-        </div>
-        
-        {/* Workspace Selector */}
-        <div className="hidden md:flex items-center gap-2.5 border border-slate-200/80 px-3 py-2 rounded-xl cursor-pointer hover:bg-white hover:border-indigo-300 hover:shadow-sm transition-all group bg-white/60">
-          <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white w-6 h-6 flex items-center justify-center rounded-md text-xs font-bold shadow-sm">
-            F
-          </div>
-          <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Không gian làm việc</span>
-          <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
         </div>
       </div>
 

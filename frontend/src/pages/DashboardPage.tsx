@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useDashboardMetrics } from '../features/dashboard/hooks/useDashBoardQueries';
-import { useAuthStore } from '../features/auth/store/useAuthStore';
+import { useAuthUser } from '../features/auth/hooks/useAuthQueries';
 import { useRolesDictionary } from '../features/rbac/hooks/useRbacQueries';
 
 import AdminDashboard from '../features/dashboard/components/AdminDashboard';
@@ -23,7 +23,7 @@ const RoleLoadingScreen = () => (
 );
 
 const DashboardPage = () => {
-  const { user } = useAuthStore();
+  const { data: user } = useAuthUser(); // Lấy dữ liệu user từ Cache
   const { data, isLoading: isDashboardLoading, isError, error, refetch } = useDashboardMetrics();
   const { data: rolesList, isLoading: isRolesLoading } = useRolesDictionary();
 

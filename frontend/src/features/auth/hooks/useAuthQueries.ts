@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../../../lib/axiosClient';
 
-
+// ===============================
+// 1. USER INTERFACE
+// ===============================
 export interface UserProfile {
   id: string | number;
   email: string;
@@ -12,26 +14,22 @@ export interface UserProfile {
   role_id?: string;
 }
 
-// Định nghĩa Key tập trung cho Auth
 export const AUTH_KEYS = {
   me: ['auth', 'me'] as const,
 };
 
 // ===============================
-// 2. HOOK QUẢN LÝ USER HIỆN TẠI
+// 2. QUERY: QUẢN LÝ USER STATE TRONG CACHE
 // ===============================
 export const useAuthUser = () => {
   return useQuery({
     queryKey: AUTH_KEYS.me,
     queryFn: (): UserProfile | null => {
-      // Đọc user từ localStorage (hoặc gọi API /me nếu sếp có endpoint này)
       const storedUser = localStorage.getItem('user');
-      if (!storedUser) return null;
-
       const token = localStorage.getItem('token');
-      if (!token) return null;
+      
+      if (!storedUser || !token) return null;
 
-      // Kiểm tra JWT hết hạn
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         if (payload.exp * 1000 < Date.now()) {
@@ -39,81 +37,73 @@ export const useAuthUser = () => {
           localStorage.removeItem('user');
           return null;
         }
+        return JSON.parse(storedUser);
       } catch {
         return null;
       }
-
-      return JSON.parse(storedUser);
     },
-    // Giữ data liên tục, không tự động gọi lại trừ khi mình ra lệnh
-    staleTime: Infinity, 
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 };
 
 // ===============================
-// 3. HOOK ĐĂNG NHẬP (LOGIN)
+// 3. MUTATIONS: LOGIC TRẢ VỀ { SUCCESS } GIỮ NGUYÊN BẢN CŨ
 // ===============================
+
 export const useLogin = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ email, password }: Record<string, string>) => {
-      const res: any = await axiosClient.post('/auth/login', { email, password });
-      
-      const payload = res.data || res;
-      const finalAccessToken = payload.accessToken || payload.access_token;
-      const finalUser = payload.user || payload;
+    // 🚀 CHÌA KHÓA: Nhận 1 Object thay vì mảng, chuẩn với style của TanStack
+    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+      try {
+        const res: any = await axiosClient.post('/auth/login', { email, password });
+        
+        const payload = res.data || res;
+        const finalAccessToken = payload.accessToken || payload.access_token;
+        const finalUser = payload.user || payload;
 
-      if (!finalAccessToken) {
-        throw new Error("Không tìm thấy Access Token từ server trả về.");
+        if (!finalAccessToken) {
+          console.error("🔴 CẢNH BÁO: Không tìm thấy Access Token!");
+        }
+
+        const normalizedUser: UserProfile = {
+          ...finalUser,
+          id: finalUser.id || finalUser.user_id
+        };
+
+        localStorage.setItem('token', finalAccessToken);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+
+        queryClient.setQueryData(AUTH_KEYS.me, normalizedUser);
+
+        // Trả về đúng object success: true để UI chạy tiếp mạch logic
+        return { success: true };
+
+      } catch (error: any) {
+        // Tự bắt lỗi và trả về success: false, ngăn TanStack ném lỗi làm sập UI
+        return {
+          success: false,
+          message: error.response?.data?.message || 'Đăng nhập thất bại!'
+        };
       }
-
-      const normalizedUser: UserProfile = {
-        ...finalUser,
-        id: finalUser.id || finalUser.user_id
-      };
-
-      // Ghi vào LocalStorage
-      localStorage.setItem('token', finalAccessToken);
-      localStorage.setItem('user', JSON.stringify(normalizedUser));
-
-      return normalizedUser;
-    },
-    onSuccess: (normalizedUser) => {
-      // 🚀 Bơm ngay data user vào Query Cache thay vì dùng Zustand
-      queryClient.setQueryData(AUTH_KEYS.me, normalizedUser);
-    },
-    onError: (error: any) => {
-      console.error("Lỗi đăng nhập:", error.response?.data?.message || error.message);
     }
   });
 };
 
-// ===============================
-// 4. HOOK ĐĂNG XUẤT (LOGOUT)
-// ===============================
-export const useLogout = () => {
-  const queryClient = useQueryClient();
-
-  return () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    // Xóa sạch toàn bộ Cache liên quan đến user
-    queryClient.removeQueries(); 
-    
-    window.location.href = '/login';
-  };
-};
-
-// ===============================
-// 5. CÁC HOOK QUÊN MẬT KHẨU
-// ===============================
 export const useForgotPassword = () => {
   return useMutation({
     mutationFn: async (email: string) => {
-      const res: any = await axiosClient.post('/auth/forgot-password', { email });
-      return res;
+      try {
+        const res: any = await axiosClient.post('/auth/forgot-password', { email });
+        return { success: true, message: res.message || 'Đã gửi yêu cầu.' };
+      } catch (error: any) {
+        return {
+          success: false,
+          message: error.response?.data?.message || 'Lỗi hệ thống.'
+        };
+      }
     }
   });
 };
@@ -121,37 +111,67 @@ export const useForgotPassword = () => {
 export const useVerifyResetToken = () => {
   return useMutation({
     mutationFn: async (token: string) => {
-      const res: any = await axiosClient.get(`/auth/verify-reset-token?token=${token}`);
-      return res;
+      try {
+        await axiosClient.get(`/auth/verify-reset-token?token=${token}`);
+        return { success: true };
+      } catch (error: any) {
+        return {
+          success: false,
+          message: error.response?.data?.message || 'Token không hợp lệ.'
+        };
+      }
     }
   });
 };
 
 export const useResetPassword = () => {
   return useMutation({
-    mutationFn: async ({ token, newPassword }: { token: string, newPassword: string }) => {
-      const res: any = await axiosClient.post('/auth/reset-password', {
-        token,
-        new_password: newPassword
-      });
-      return res;
+    mutationFn: async ({ token, newPassword }: { token: string; newPassword: string }) => {
+      try {
+        const res: any = await axiosClient.post('/auth/reset-password', {
+          token,
+          new_password: newPassword
+        });
+        return { success: true, message: res.message || 'Đổi mật khẩu thành công!' };
+      } catch (error: any) {
+        return {
+          success: false,
+          message: error.response?.data?.message || 'Có lỗi xảy ra.'
+        };
+      }
     }
   });
 };
 
-// ===============================
-// 6. HOOK UPDATE PROFILE TRỰC TIẾP
-// ===============================
+export const useLogout = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    },
+    onSuccess: () => {
+      queryClient.removeQueries();
+      window.location.href = '/login';
+    }
+  });
+};
+
 export const useUpdateLocalProfile = () => {
   const queryClient = useQueryClient();
 
   return (updatedData: Partial<UserProfile>) => {
-    queryClient.setQueryData(AUTH_KEYS.me, (oldData: UserProfile | undefined) => {
-      if (!oldData) return oldData;
+    queryClient.setQueryData(AUTH_KEYS.me, (oldUser: UserProfile | undefined) => {
+      const stored = localStorage.getItem('user');
+      const currentUser = oldUser || (stored ? JSON.parse(stored) : null);
       
-      const newUser = { ...oldData, ...updatedData };
-      localStorage.setItem('user', JSON.stringify(newUser));
-      return newUser;
+      if (currentUser) {
+        const newUser = { ...currentUser, ...updatedData };
+        localStorage.setItem('user', JSON.stringify(newUser));
+        return newUser;
+      }
+      return oldUser;
     });
   };
 };

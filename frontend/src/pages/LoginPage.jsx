@@ -65,13 +65,13 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex w-full bg-white relative">
       <div className="hidden lg:flex lg:w-[45%] relative bg-indigo-600 overflow-hidden items-center justify-center p-16">
-        <div className="absolute -bottom-[10%] -left-[10%] w-[500px] h-[500px] bg-indigo-800 rounded-full shadow-2xl animate-blob"></div>
+        <div className="absolute -bottom-[10%] -left-[10%] w-125 h-125 bg-indigo-800 rounded-full shadow-2xl animate-blob"></div>
         <div className="absolute bottom-[5%] left-[20%] w-[350px] h-[350px] bg-indigo-700 rounded-full shadow-xl animate-blob animation-delay-2000"></div>
         <div className="absolute -top-[20%] -left-[10%] w-[600px] h-[600px] bg-indigo-500/30 rounded-full animate-blob animation-delay-4000"></div>
         <div className="absolute top-[10%] -right-[10%] w-[300px] h-[300px] bg-indigo-500/20 rounded-full animate-blob animation-delay-6000"></div>
 
         <div className="relative z-10 max-w-md w-full pointer-events-none">
-          <h1 className="text-6xl font-black !text-indigo-100/90 mb-3 tracking-widest uppercase drop-shadow-md">
+          <h1 className="text-6xl font-black text-indigo-100/90! mb-3 tracking-widest uppercase drop-shadow-md">
             Welcome to FLUXBOARD
           </h1>
           <div className="w-12 h-1 bg-indigo-400 mb-6 rounded-full"></div>

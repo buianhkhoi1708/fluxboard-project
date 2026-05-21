@@ -1,14 +1,15 @@
 import React, { useMemo } from "react";
 import { NavLink } from "react-router-dom";
-import { useAuthStore } from "../features/auth/store/useAuthStore";
+import { useLogout } from "../features/auth/hooks/useAuthQueries"; 
 import { useRoleAccess } from "../features/rbac/hooks/useRoleAccess";
 import {
   LayoutDashboard, Briefcase, KanbanSquare, ListTodo,
   Building2, ShieldCheck, Activity, Settings, LogOut,
+  Bell,
 } from "lucide-react";
 
 const Sidebar = () => {
-  const { logout } = useAuthStore();
+  const { mutate: logout } = useLogout();
   const { hasAccess } = useRoleAccess();
 
   // ==========================================
@@ -19,6 +20,8 @@ const Sidebar = () => {
     { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
     { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "Tạo Board AI", roles: ["LEAD", "MANAGER", "ADMIN"] }, 
     { path: "/mytasks", icon: <ListTodo size={20} />, label: "Công việc của tôi", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
+    { path: "/notifications", icon: <Bell size={20} />, label: "Thông báo", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
+
   ];
 
   const managementItems = [

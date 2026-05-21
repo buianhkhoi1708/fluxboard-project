@@ -4,6 +4,9 @@ import { NuqsAdapter } from "nuqs/adapters/react-router";
 import MainLayout from "./layouts/MainLayout";
 import BoardPage from "./pages/BoardPage";
 import { SocketProvider } from "./context/SocketContext";
+// 🚀 1. IMPORT TRẠM THU SÓNG NGẦM VÀO ĐÂY
+import { GlobalSocketListener } from "./pages/GlobalSocketListener"; 
+
 import AdminRBACPage from "./pages/AdminRBACPage";
 import WorkspacesPage from "./pages/WorkspacesPage";
 import BoardView from "./features/board/components/BoardView";
@@ -25,6 +28,9 @@ import NotificationsPage from "./pages/NotificationsPage";
 function App() {
   return (
     <SocketProvider>
+      {/* 🚀 2. THẢ NÓ VÀO ĐÂY: Nằm trong SocketProvider để có kết nối, và chạy ngầm toàn App */}
+      <GlobalSocketListener />
+
       <BrowserRouter>
         <NuqsAdapter>
           <Routes>
@@ -51,9 +57,9 @@ function App() {
                 <Route path="/workspaces" element={<WorkspacesPage />} />
                 <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
                 <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-                <Route path="/settings" element={<SettingsPage />} /> {/* Thường settings cá nhân ai cũng có */}
-                <Route path="/mytasks" element={<MyTasksPage />} /> {/* Thường settings cá nhân ai cũng có */}
-                <Route path="/notifications" element={<NotificationsPage />} /> {/* Thường settings cá nhân ai cũng có */}
+                <Route path="/settings" element={<SettingsPage />} /> 
+                <Route path="/mytasks" element={<MyTasksPage />} /> 
+                <Route path="/notifications" element={<NotificationsPage />} /> 
 
 
                 {/* ========================================== */}
