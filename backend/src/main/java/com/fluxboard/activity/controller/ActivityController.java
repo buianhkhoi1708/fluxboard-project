@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/activities")
@@ -39,8 +40,9 @@ public class ActivityController {
     @RequirePermission("ACTIVITY_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivities(
-            @RequestParam(name = "source_type", required = false) List<ActivitySource> sourceTypes,
-            @RequestParam(name = "action", required = false) List<ActivityAction> actions,
+            // 🚀 BỌC THÉP: Nhận vào List<String> thay vì Enum để tự xử lý hoa/thường
+            @RequestParam(name = "source_type", required = false) List<String> sourceTypesStr,
+            @RequestParam(name = "action", required = false) List<String> actionsStr,
             @RequestParam(name = "actor_user_id", required = false) List<String> actorUserIds,
             @RequestParam(name = "source_id", required = false) String sourceId,
             @RequestParam(name = "project_id", required = false) String projectId,
@@ -50,6 +52,15 @@ public class ActivityController {
             @RequestParam(name = "to", required = false) java.time.Instant to,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         
+        // 🚀 TỰ ĐỘNG CHUYỂN ĐỔI: Map từ String sang Enum in hoa (Chống lỗi 400 Bad Request)
+        List<ActivitySource> sourceTypes = sourceTypesStr == null ? null : sourceTypesStr.stream()
+                .map(s -> ActivitySource.valueOf(s.toUpperCase()))
+                .collect(Collectors.toList());
+
+        List<ActivityAction> actions = actionsStr == null ? null : actionsStr.stream()
+                .map(a -> ActivityAction.valueOf(a.toUpperCase()))
+                .collect(Collectors.toList());
+
         ActivityFilterRequest filter = new ActivityFilterRequest(
                 sourceTypes, actions, actorUserIds, sourceId, projectId, boardId, taskId, from, to
         );
@@ -86,11 +97,14 @@ public class ActivityController {
     @RequirePermission("ACTIVITY_VIEW")
     @GetMapping("/sources/{sourceType}/{sourceId}")
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivitiesBySource(
-            @PathVariable ActivitySource sourceType,
+            // 🚀 BỌC THÉP TƯƠNG TỰ: Đổi thành String để bắt lỗi luôn cho PathVariable
+            @PathVariable String sourceType,
             @PathVariable String sourceId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         
-        Page<ActivityResponse> page = activityService.getPageBySource(sourceType, sourceId, pageable);
+        // Tự động IN HOA
+        ActivitySource parsedSourceType = ActivitySource.valueOf(sourceType.toUpperCase());
+        Page<ActivityResponse> page = activityService.getPageBySource(parsedSourceType, sourceId, pageable);
         return ResponseFactory.paged("Source activities retrieved successfully.", page);
     }
 }
