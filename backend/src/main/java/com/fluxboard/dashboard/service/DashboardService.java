@@ -4,6 +4,7 @@ import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.rbac.entity.RoleEntity;
+import com.fluxboard.rbac.enums.Role;
 import com.fluxboard.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,7 @@ public class DashboardService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Không tìm thấy quyền hạn người dùng."));
         String roleName = role.getName().name().toUpperCase();
 
-        if (roleName.contains("ADMIN")) return getAdminMetrics(timeRange, departmentId);
+        if ("SYSTEM_ADMIN".equals(roleName) || "ADMIN".equals(roleName)) return getAdminMetrics(timeRange, departmentId);
         if (roleName.contains("MANAGER") || roleName.contains("LEAD") || roleName.contains("PM") || roleName.contains("PROJECT_ADMIN")) {
             String managedDeptId = trimToNull(departmentId);
             if (managedDeptId == null) managedDeptId = findManagedDepartmentId(currentUser.userId());
@@ -81,17 +82,24 @@ public class DashboardService {
         List<Map> departments = findActive("departments", null);
         List<Map> tasks = findActive("tasks", from);
         Map<String, Map> usersById = indexById(users);
-        Map<String, String> deptNames = departments.stream().collect(Collectors.toMap(this::idOf, d -> firstNonBlank(str(d.get("name")), "Chưa phân bổ"), (a, b) -> a, LinkedHashMap::new));
+        Map<String, String> deptNames = departments.stream()
+                .filter(d -> idOf(d) != null)
+                .collect(Collectors.toMap(this::idOf, d -> firstNonBlank(str(d.get("name")), "Chưa phân bổ"), (a, b) -> a, LinkedHashMap::new));
 
         Map<String, DepartmentAgg> deptAgg = new LinkedHashMap<>();
         for (Map task : tasks) {
             if (task.get("story_point") == null) continue;
+
             Set<String> taskDeptIds = assignees(task).stream()
-                    .map(usersById::get).filter(Objects::nonNull)
-                    .map(u -> str(u.get("department_id"))).filter(Objects::nonNull)
+                    .map(usersById::get)
+                    .filter(Objects::nonNull)
+                    .map(u -> str(u.get("department_id")))
+                    .filter(Objects::nonNull)
                     .filter(id -> trimToNull(departmentId) == null || id.equals(departmentId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
+
             if (taskDeptIds.isEmpty()) taskDeptIds.add("Unassigned");
+
             for (String deptId : taskDeptIds) {
                 DepartmentAgg agg = deptAgg.computeIfAbsent(deptId, id -> new DepartmentAgg(id, deptNames.getOrDefault(id, "Chưa phân bổ")));
                 long point = longVal(task.get("story_point"));
@@ -124,28 +132,49 @@ public class DashboardService {
     private Map<String, Object> getManagerMetrics(String timeRange, String managedDeptId, String teamId, String managerId) {
         Instant from = resolveFrom(timeRange);
         Map<String, Object> result = new LinkedHashMap<>();
+
         List<Map> users = findActive("users", null);
-        List<Map> tasks = findActive("tasks", from);
+        List<Map> allTasks = findActive("tasks", from);
         List<Map> deadlines = findActive("task_deadlines", null);
         Map<String, Map> usersById = indexById(users);
-        Map<String, Map> deadlineByTaskId = deadlines.stream().collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
+        Map<String, Map> deadlineByTaskId = deadlines.stream()
+                .filter(d -> str(d.get("task_id")) != null)
+                .collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
 
-        Set<String> scopedUserIds = users.stream()
-                .filter(u -> managedDeptId == null || managedDeptId.equals(str(u.get("department_id"))))
-                .filter(u -> trimToNull(teamId) == null || teamId.equals(str(u.get("team_id"))))
-                .map(this::idOf).filter(Objects::nonNull)
+        Set<String> managedProjectIds = resolveManagedProjectIds(managerId, managedDeptId);
+        if (managedProjectIds.isEmpty()) {
+            result.put("team_workload_capacity", List.of());
+            result.put("team_deadline_status", Map.of("on_track", 0, "at_risk", 0, "overdue", 0, "late", 0));
+            result.put("at_risk_tasks", List.of());
+            result.put("ai_efficiency", List.of());
+            return result;
+        }
+
+        List<Map> projectTasks = allTasks.stream()
+                .filter(task -> managedProjectIds.contains(str(task.get("project_id"))))
+                .toList();
+
+        Set<String> scopedUserIds = projectTasks.stream()
+                .flatMap(task -> assignees(task).stream())
+                .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (scopedUserIds.isEmpty()) {
-            scopedUserIds.add(managerId);
-            for (Map task : tasks) {
-                assignees(task).forEach(scopedUserIds::add);
-            }
-        }
+        scopedUserIds.removeIf(userId -> {
+            Map user = usersById.get(userId);
+            if (user == null) return true;
+            if (isSystemAccount(user)) return true;
+            if (managedDeptId != null && !managedDeptId.equals(str(user.get("department_id")))) return true;
+            return trimToNull(teamId) != null && !teamId.equals(str(user.get("team_id")));
+        });
+
+        List<Map> scopedTasks = projectTasks.stream()
+                .filter(task -> assignees(task).stream().anyMatch(scopedUserIds::contains))
+                .toList();
 
         Map<String, Long> pointByUser = new LinkedHashMap<>();
         for (String uid : scopedUserIds) pointByUser.put(uid, 0L);
-        for (Map task : tasks) {
+
+        for (Map task : scopedTasks) {
             if ("DONE".equals(str(task.get("status")))) continue;
             long point = longVal(task.get("story_point"));
             for (String uid : assignees(task)) {
@@ -153,27 +182,30 @@ public class DashboardService {
             }
         }
 
-        List<Map<String, Object>> workload = pointByUser.entrySet().stream().map(e -> {
-            Map user = usersById.get(e.getKey());
-            long points = e.getValue();
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("user_id", e.getKey());
-            m.put("full_name", user != null ? firstNonBlank(str(user.get("full_name")), str(user.get("name")), "Thành viên " + shortId(e.getKey())) : "Thành viên " + shortId(e.getKey()));
-            m.put("current_points", points);
-            m.put("capacity_points", DEFAULT_CAPACITY_POINTS);
-            m.put("load_percentage", percent(points, DEFAULT_CAPACITY_POINTS));
-            m.put("status", points > DEFAULT_CAPACITY_POINTS ? "OVERLOADED" : "AVAILABLE");
-            return m;
-        }).toList();
+        List<Map<String, Object>> workload = pointByUser.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .map(e -> {
+                    Map user = usersById.get(e.getKey());
+                    long points = e.getValue();
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("user_id", e.getKey());
+                    m.put("full_name", user != null ? firstNonBlank(str(user.get("full_name")), str(user.get("name")), "Thành viên " + shortId(e.getKey())) : "Thành viên " + shortId(e.getKey()));
+                    m.put("current_points", points);
+                    m.put("capacity_points", DEFAULT_CAPACITY_POINTS);
+                    m.put("load_percentage", percent(points, DEFAULT_CAPACITY_POINTS));
+                    m.put("status", points > DEFAULT_CAPACITY_POINTS ? "OVERLOADED" : "AVAILABLE");
+                    return m;
+                }).toList();
+
         result.put("team_workload_capacity", workload);
 
-        List<Map> scopedTasks = tasks.stream().filter(t -> assignees(t).stream().anyMatch(scopedUserIds::contains)).toList();
         long onTrack = 0, atRisk = 0, overdue = 0, late = 0;
         List<Map<String, Object>> atRiskTasks = new ArrayList<>();
 
         for (Map task : scopedTasks) {
             Map deadline = deadlineByTaskId.get(idOf(task));
             String status = deadline != null ? str(deadline.get("status")) : str(task.get("status"));
+
             if ("ON_TRACK".equals(status)) onTrack++;
             else if ("AT_RISK".equals(status)) atRisk++;
             else if ("OVERDUE".equals(status)) overdue++;
@@ -228,9 +260,15 @@ public class DashboardService {
     private Map<String, Object> getMemberMetrics(String userId, String timeRange) {
         Instant from = resolveFrom(timeRange);
         Map<String, Object> result = new LinkedHashMap<>();
-        List<Map> tasks = findActive("tasks", from).stream().filter(t -> assignees(t).contains(userId)).toList();
+
+        List<Map> tasks = findActive("tasks", from).stream()
+                .filter(t -> assignees(t).contains(userId))
+                .toList();
+
         List<Map> deadlines = findActive("task_deadlines", null);
-        Map<String, Map> deadlineByTaskId = deadlines.stream().collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
+        Map<String, Map> deadlineByTaskId = deadlines.stream()
+                .filter(d -> str(d.get("task_id")) != null)
+                .collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
 
         long total = tasks.size();
         long completed = tasks.stream().filter(t -> "DONE".equals(str(t.get("status")))).count();
@@ -269,10 +307,49 @@ public class DashboardService {
         return result;
     }
 
+    private Set<String> resolveManagedProjectIds(String managerId, String managedDeptId) {
+        Set<String> ids = new LinkedHashSet<>();
+
+        for (Map project : findActive("projects", null)) {
+            String projectId = idOf(project);
+            if (projectId == null) continue;
+
+            boolean ownedByManager = managerId != null && managerId.equals(str(project.get("owner_id")));
+            boolean inManagedDepartment = managedDeptId != null && managedDeptId.equals(str(project.get("department_id")));
+            if (ownedByManager || inManagedDepartment) ids.add(projectId);
+        }
+
+        Query memberQuery = new Query(Criteria.where("user_id").is(managerId)
+                .and("is_active").is(true)
+                .and("is_deleted").ne(true));
+
+        List<Map> memberships = mongoTemplate.find(memberQuery, Map.class, "project_members");
+        if (memberships.isEmpty()) memberships = mongoTemplate.find(memberQuery, Map.class, "projectmembers");
+
+        for (Map member : memberships) {
+            String projectId = str(member.get("project_id"));
+            if (projectId != null && !projectId.isBlank()) ids.add(projectId);
+        }
+
+        return ids;
+    }
+
     private String findManagedDepartmentId(String userId) {
         Query q = new Query(Criteria.where("manager_id").is(userId).and("is_deleted").ne(true)).limit(1);
         Map dept = mongoTemplate.findOne(q, Map.class, "departments");
         return dept == null ? null : idOf(dept);
+    }
+
+    private boolean isSystemAccount(Map user) {
+        if (user == null) return false;
+        String roleId = str(user.get("role_id"));
+        if (roleId == null || roleId.isBlank()) return false;
+
+        RoleEntity role = roleRepository.findById(roleId).orElse(null);
+        if (role == null || role.getName() == null) return false;
+
+        Role name = role.getName();
+        return name == Role.SYSTEM_ADMIN || name == Role.ADMIN;
     }
 
     private boolean isTaskOverdue(Map task, List<Map> deadlines) {
@@ -290,6 +367,7 @@ public class DashboardService {
         Object boardId = task.get("board_id");
         if (boardId == null && task.get("column_id") != null) {
             Map col = mongoTemplate.findOne(new Query(Criteria.where("_id").is(toId(task.get("column_id")))), Map.class, "board_column");
+            if (col == null) col = mongoTemplate.findOne(new Query(Criteria.where("_id").is(toId(task.get("column_id")))), Map.class, "board_columns");
             if (col != null) boardId = col.get("board_id");
         }
         String taskId = idOf(task);
@@ -312,7 +390,9 @@ public class DashboardService {
     }
 
     private Map<String, Map> indexById(List<Map> docs) {
-        return docs.stream().filter(d -> idOf(d) != null).collect(Collectors.toMap(this::idOf, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+        return docs.stream()
+                .filter(d -> idOf(d) != null)
+                .collect(Collectors.toMap(this::idOf, Function.identity(), (a, b) -> a, LinkedHashMap::new));
     }
 
     private Map<String, Object> chartSegment(String key, String label, long value, String color) {
@@ -329,7 +409,7 @@ public class DashboardService {
         m.put("id", idOf(log));
         m.put("source_type", log.get("source_type"));
         m.put("action", log.get("action"));
-        m.put("description", log.get("description"));
+        m.put("description", firstNonBlank(str(log.get("description")), str(log.get("message"))));
         m.put("created_at", log.get("created_at"));
         m.put("actor_user_id", log.get("actor_user_id"));
         return m;
