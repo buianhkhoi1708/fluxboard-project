@@ -4,14 +4,19 @@ import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.notification.entity.NotificationEntity;
 import com.fluxboard.notification.repository.NotificationRepository;
+import com.fluxboard.notification.service.NotificationDispatcher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.DeferredResult;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/notifications")
@@ -19,73 +24,243 @@ import java.util.List;
 public class NotificationController {
 
     private final NotificationRepository notificationRepository;
+    private final NotificationDispatcher notificationDispatcher;
 
     /**
-     * 🔔 API lấy danh sách thông báo (Có phân trang + Bộ lọc thông minh)
-     * URL: GET /api/v1/notifications?unreadOnly=true&page=0&size=10
+     * GET /notifications
+     *
+     * FE dùng cho:
+     * - Trang tất cả thông báo.
+     * - Topbar load lịch sử ban đầu.
+     *
+     * Notification trả về luôn có actionUrl + metadata để click là đi tới task.
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<NotificationEntity>>> getNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @RequestAttribute("userId") String userId,
             @RequestParam(required = false) Boolean unreadOnly,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        
-        Pageable pageable = PageRequest.of(page, size);
-        Page<NotificationEntity> notifPage;
-        
-        if (Boolean.TRUE.equals(unreadOnly)) {
-            notifPage = notificationRepository.findByRecipientIdAndIsReadOrderByCreatedAtDesc(userId, false, pageable);
-        } else {
-            notifPage = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, pageable);
-        }
-        
-        // 🚀 ĐÃ SỬA: Dùng hàm paged kèm theo chuỗi message đúng thiết kế ResponseFactory của bạn
-        return ResponseFactory.paged("Fetch notifications successfully", notifPage);
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(size, 1);
+
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        Page<NotificationEntity> notificationPage = Boolean.TRUE.equals(unreadOnly)
+                ? notificationRepository.findByRecipientIdAndIsReadOrderByCreatedAtDesc(userId, false, pageable)
+                : notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, pageable);
+
+        return ResponseFactory.paged(
+                "Fetch notifications successfully",
+                notificationPage.map(NotificationResponse::fromEntity)
+        );
     }
 
     /**
-     * 🔴 API đếm số lượng thông báo chưa đọc để hiển thị số nảy (Badge) trên UI
-     * URL: GET /api/v1/notifications/unread-count
+     * GET /notifications/unread-count
+     *
+     * Dùng cho badge icon chuông.
      */
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Long>> getUnreadCount(@RequestAttribute("userId") String userId) {
+    public ResponseEntity<ApiResponse<Long>> getUnreadCount(
+            @RequestAttribute("userId") String userId
+    ) {
         long count = notificationRepository.countByRecipientIdAndIsReadFalse(userId);
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message vào tham số đầu tiên
         return ResponseFactory.success("Fetch unread count successfully", count);
     }
 
     /**
-     * ✔️ API đánh dấu một thông báo cụ thể là đã đọc khi người dùng click vào chi tiết
-     * URL: PATCH /api/v1/notifications/{id}/read
+     * GET /notifications/long-polling
+     *
+     * Pipeline realtime giống Change_code:
+     * - FE gọi giữ request.
+     * - Nếu có notification mới thì trả về ngay.
+     * - Nếu không có gì thì hết vòng polling trả [].
      */
-    @PatchMapping("/{id}/read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String id) {
-        notificationRepository.findById(id).ifPresent(notif -> {
-            notif.setRead(true); 
-            notificationRepository.save(notif);
+    @GetMapping("/long-polling")
+    public DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> longPollingNotifications(
+            @RequestAttribute("userId") String userId
+    ) {
+        DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> result =
+                new DeferredResult<>(35_000L);
+
+        CompletableFuture<List<NotificationEntity>> future =
+                notificationDispatcher.waitForRealtimeNotifications(userId, 30_000L);
+
+        future.whenComplete((notifications, error) -> {
+            if (result.isSetOrExpired()) {
+                return;
+            }
+
+            if (error != null) {
+                result.setResult(
+                        ResponseFactory.success(
+                                "Polling cycle completed",
+                                List.of()
+                        )
+                );
+                return;
+            }
+
+            List<NotificationResponse> payload = notifications == null
+                    ? List.of()
+                    : notifications.stream()
+                            .map(NotificationResponse::fromEntity)
+                            .toList();
+
+            result.setResult(
+                    ResponseFactory.success(
+                            payload.isEmpty()
+                                    ? "Polling cycle completed"
+                                    : "New notifications retrieved successfully",
+                            payload
+                    )
+            );
         });
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message thông báo hành động thành công
-        return ResponseFactory.success("Notification marked as read successfully");
+
+        result.onTimeout(() -> {
+            if (!future.isDone()) {
+                future.complete(List.of());
+            }
+        });
+
+        result.onError(error -> {
+            if (!future.isDone()) {
+                future.complete(List.of());
+            }
+        });
+
+        return result;
     }
 
     /**
-     * 🧹 API "Đọc tất cả" - Đánh dấu toàn bộ thông báo chưa đọc của user thành đã đọc
-     * URL: PATCH /api/v1/notifications/read-all
+     * PATCH /notifications/{id}/read
+     *
+     * Đánh dấu đã đọc khi FE click notification.
+     * Chỉ owner của notification mới được mark read.
+     */
+    @PatchMapping("/{id}/read")
+    public ResponseEntity<ApiResponse<NotificationResponse>> markAsRead(
+            @RequestAttribute("userId") String userId,
+            @PathVariable String id
+    ) {
+        NotificationEntity notification = notificationRepository.findByIdAndRecipientId(id, userId)
+                .orElse(null);
+
+        if (notification == null) {
+            return ResponseFactory.success("Notification not found or already unavailable", null);
+        }
+
+        notification.setRead(true);
+        NotificationEntity saved = notificationRepository.save(notification);
+
+        return ResponseFactory.success(
+                "Notification marked as read successfully",
+                NotificationResponse.fromEntity(saved)
+        );
+    }
+
+    /**
+     * PATCH /notifications/read-all
      */
     @PatchMapping("/read-all")
-    public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") String userId) {
-        List<NotificationEntity> unreadNotifications = notificationRepository.findByRecipientIdAndIsReadFalse(userId);
-        
-        for (NotificationEntity notif : unreadNotifications) {
-            notif.setRead(true); 
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
+            @RequestAttribute("userId") String userId
+    ) {
+        List<NotificationEntity> unreadNotifications =
+                notificationRepository.findByRecipientIdAndIsReadFalse(userId);
+
+        for (NotificationEntity notification : unreadNotifications) {
+            notification.setRead(true);
         }
-        
+
         notificationRepository.saveAll(unreadNotifications);
-        
-        // 🚀 ĐÃ SỬA: Thêm chuỗi message thông báo hành động thành công
+
         return ResponseFactory.success("All notifications marked as read successfully");
+    }
+
+    public static class NotificationResponse {
+
+        private String id;
+        private String recipientId;
+        private String senderId;
+        private String title;
+        private String message;
+        private String type;
+        private String referenceId;
+        private String referenceType;
+        private String actionUrl;
+        private Map<String, Object> metadata;
+        private Instant timestamp;
+        private boolean isRead;
+
+        public static NotificationResponse fromEntity(NotificationEntity entity) {
+            if (entity == null) {
+                return null;
+            }
+
+            NotificationResponse response = new NotificationResponse();
+            response.id = entity.getId();
+            response.recipientId = entity.getRecipientId();
+            response.senderId = entity.getSenderId();
+            response.title = entity.getTitle();
+            response.message = entity.getMessage();
+            response.type = entity.getType();
+            response.referenceId = entity.getReferenceId();
+            response.referenceType = entity.getReferenceType();
+            response.actionUrl = entity.getActionUrl();
+            response.metadata = entity.getMetadata();
+            response.timestamp = entity.getCreatedAt();
+            response.isRead = entity.isRead();
+            return response;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getRecipientId() {
+            return recipientId;
+        }
+
+        public String getSenderId() {
+            return senderId;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getReferenceId() {
+            return referenceId;
+        }
+
+        public String getReferenceType() {
+            return referenceType;
+        }
+
+        public String getActionUrl() {
+            return actionUrl;
+        }
+
+        public Map<String, Object> getMetadata() {
+            return metadata;
+        }
+
+        public Instant getTimestamp() {
+            return timestamp;
+        }
+
+        public boolean isRead() {
+            return isRead;
+        }
     }
 }

@@ -16,10 +16,10 @@ import java.time.Instant;
 @Document(collection = "task_deadlines")
 @CompoundIndexes({
         @CompoundIndex(name = "status_due_date_idx", def = "{'status': 1, 'due_date': 1}"),
-        @CompoundIndex(name = "dashboard_health_idx", def = "{'is_deleted': 1, 'status': 1}")
+        @CompoundIndex(name = "dashboard_health_idx", def = "{'is_deleted': 1, 'status': 1}"),
+        @CompoundIndex(name = "extension_pending_idx", def = "{'is_extension_pending': 1, 'task_id': 1}")
 })
 public class TaskDeadlineEntity extends BaseDocument {
-
     @Indexed(unique = true)
     @Field("task_id")
     private String taskId;
@@ -27,7 +27,7 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("start_date")
     private Instant startDate;
 
-    @Indexed 
+    @Indexed
     @Field("due_date")
     private Instant dueDate;
 
@@ -37,15 +37,15 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("reminder_offset")
     private Integer reminderOffset;
 
-    @Indexed 
+    @Indexed
     @Field("status")
-    private DeadlineStatus status;
+    private DeadlineStatus status = DeadlineStatus.ON_TRACK;
 
     @Field("extension_count")
     private Integer extensionCount = 0;
 
     @Field("extension_limit")
-    private Integer extensionLimit;
+    private Integer extensionLimit = 2;
 
     @Field("is_reminder_sent")
     private Boolean isReminderSent = false;
@@ -56,10 +56,27 @@ public class TaskDeadlineEntity extends BaseDocument {
     @Field("pending_requested_date")
     private Instant pendingRequestedDate;
 
-    public enum DeadlineStatus { 
-        ON_TRACK, 
-        AT_RISK, 
-        OVERDUE, 
-        LATE 
-    }
+    @Field("extension_status")
+    private ExtensionStatus extensionStatus = ExtensionStatus.NONE;
+
+    @Field("extension_requested_by")
+    private String extensionRequestedBy;
+
+    @Field("extension_requested_at")
+    private Instant extensionRequestedAt;
+
+    @Field("extension_reason")
+    private String extensionReason;
+
+    @Field("extension_reviewed_by")
+    private String extensionReviewedBy;
+
+    @Field("extension_reviewed_at")
+    private Instant extensionReviewedAt;
+
+    @Field("extension_reject_reason")
+    private String extensionRejectReason;
+
+    public enum DeadlineStatus { ON_TRACK, AT_RISK, OVERDUE, LATE }
+    public enum ExtensionStatus { NONE, PENDING, APPROVED, REJECTED }
 }

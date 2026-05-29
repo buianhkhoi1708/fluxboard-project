@@ -10,12 +10,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class TaskDeadlineJob {
-
     private final TaskDeadlineRepository deadlineRepository;
     private final NotificationDispatcher notificationDispatcher;
 
@@ -25,20 +25,26 @@ public class TaskDeadlineJob {
     @Scheduled(cron = "0 * * * * *")
     public void scanAndNotifyApproachingDeadlines() {
         Instant now = Instant.now();
+        List<TaskDeadlineEntity> changed = new ArrayList<>();
 
         List<TaskDeadlineEntity> overdueRecords = deadlineRepository.findOverdueTasks(now);
         for (TaskDeadlineEntity record : overdueRecords) {
             record.setStatus(TaskDeadlineEntity.DeadlineStatus.OVERDUE);
-            notificationDispatcher.notifyTaskDeadline(record.getTaskId()); 
-        }
-        if (!overdueRecords.isEmpty()) {
-            deadlineRepository.saveAll(overdueRecords);
+            notificationDispatcher.dispatchOverdueAlert(record.getTaskId());
+            changed.add(record);
         }
 
         Instant reminderTarget = now.plus(Duration.ofMinutes(reminderOffset));
         List<TaskDeadlineEntity> upcomingTasks = deadlineRepository.findTasksForReminder(reminderTarget, now);
         for (TaskDeadlineEntity record : upcomingTasks) {
-            notificationDispatcher.notifyTaskDeadline(record.getTaskId());
+            record.setStatus(TaskDeadlineEntity.DeadlineStatus.AT_RISK);
+            record.setIsReminderSent(true);
+            notificationDispatcher.dispatchUpcomingAlert(record.getTaskId());
+            changed.add(record);
+        }
+
+        if (!changed.isEmpty()) {
+            deadlineRepository.saveAll(changed);
         }
     }
 }

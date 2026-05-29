@@ -17,39 +17,25 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class DeadlineReminderScheduler {
-
     private final TaskDeadlineRepository deadlineRepository;
     private final NotificationDispatcher notificationDispatcher;
 
-    /**
-     * Quét mỗi giờ một lần để tìm các Task sắp đến hạn (< 24h)
-     */
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void scanAndSendReminders() {
-        log.info("CronJob: Scanning the list of upcoming tasks...");
-        
         Instant now = Instant.now();
         Instant next24Hours = now.plus(24, ChronoUnit.HOURS);
-
-
         List<TaskDeadlineEntity> atRiskTasks = deadlineRepository.findDeadlinesToRemind(now, next24Hours);
-
-        if (atRiskTasks.isEmpty()) {
-            return;
-        }
+        if (atRiskTasks.isEmpty()) return;
 
         for (TaskDeadlineEntity deadline : atRiskTasks) {
             try {
                 deadline.setStatus(TaskDeadlineEntity.DeadlineStatus.AT_RISK);
                 deadline.setIsReminderSent(true);
                 deadlineRepository.save(deadline);
-
                 notificationDispatcher.dispatchUpcomingAlert(deadline.getTaskId());
-                
-                log.info("AT_RISK notifications for Tasks have been enabled: {}", deadline.getTaskId());
             } catch (Exception e) {
-                log.error("Error sending notifications to Task {}: {}", deadline.getTaskId(), e.getMessage());
+                log.error("Error sending deadline reminder for task {}: {}", deadline.getTaskId(), e.getMessage());
             }
         }
     }

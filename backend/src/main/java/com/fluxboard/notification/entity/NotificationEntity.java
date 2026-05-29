@@ -5,15 +5,26 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Document(collection = "notifications")
 public class NotificationEntity extends BaseDocument {
 
+    public enum NotificationStatus {
+        PENDING,
+        SENT
+    }
+
     @Indexed
     @Field("recipient_id")
     private String recipientId;
 
+    @Field("sender_id")
+    private String senderId;
+
+    @Indexed
     @Field("type")
     private String type;
 
@@ -23,31 +34,151 @@ public class NotificationEntity extends BaseDocument {
     @Field("message")
     private String message;
 
+    @Indexed
+    @Field("reference_id")
+    private String referenceId;
+
+    @Indexed
+    @Field("reference_type")
+    private String referenceType = "TASK";
+
+    /**
+     * URL nội bộ để FE click notification là đi thẳng tới đúng màn hình.
+     * Ví dụ: /board/{boardId}?taskId={taskId}
+     */
+    @Field("action_url")
+    private String actionUrl;
+
+    /**
+     * Metadata dùng cho FE dựng popup, điều hướng task, popup dời deadline.
+     *
+     * Với EXTENSION_REQUEST cần có:
+     * task_id, board_id, task_title,
+     * requester_id, requester_name,
+     * current_due_date, requested_due_date, reason
+     */
+    @Field("metadata")
+    private Map<String, Object> metadata = new LinkedHashMap<>();
+
+    @Field("email_html")
+    private String emailHtml;
+
+    @Indexed
     @Field("is_read")
     private boolean isRead = false;
 
-    @Field("metadata")
-    private Map<String, Object> metadata;
+    @Indexed
+    @Field("status")
+    private NotificationStatus status = NotificationStatus.SENT;
 
-    // =========================================================================
-    // KHỞI TẠO CÁC HÀM GETTER/SETTER TƯỜNG MINH ĐỂ ĐẢM BẢO KHÔNG LỖI BIÊN DỊCH
-    // =========================================================================
-    
-    public String getRecipientId() { return recipientId; }
-    public void setRecipientId(String recipientId) { this.recipientId = recipientId; }
+    @Indexed
+    @Field("send_at")
+    private Instant sendAt;
 
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
+    public String getRecipientId() {
+        return recipientId;
+    }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setRecipientId(String recipientId) {
+        this.recipientId = recipientId;
+    }
 
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
+    public String getSenderId() {
+        return senderId;
+    }
 
-    public boolean isRead() { return isRead; }
-    public void setRead(boolean read) { this.isRead = read; }
+    public void setSenderId(String senderId) {
+        this.senderId = senderId;
+    }
 
-    public Map<String, Object> getMetadata() { return metadata; }
-    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public String getReferenceId() {
+        return referenceId;
+    }
+
+    public void setReferenceId(String referenceId) {
+        this.referenceId = referenceId;
+    }
+
+    public String getReferenceType() {
+        return referenceType;
+    }
+
+    public void setReferenceType(String referenceType) {
+        this.referenceType = referenceType;
+    }
+
+    public String getActionUrl() {
+        return actionUrl;
+    }
+
+    public void setActionUrl(String actionUrl) {
+        this.actionUrl = actionUrl;
+    }
+
+    public Map<String, Object> getMetadata() {
+        if (metadata == null) {
+            metadata = new LinkedHashMap<>();
+        }
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata == null ? new LinkedHashMap<>() : metadata;
+    }
+
+    public String getEmailHtml() {
+        return emailHtml;
+    }
+
+    public void setEmailHtml(String emailHtml) {
+        this.emailHtml = emailHtml;
+    }
+
+    public boolean isRead() {
+        return isRead;
+    }
+
+    public void setRead(boolean read) {
+        this.isRead = read;
+    }
+
+    public NotificationStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(NotificationStatus status) {
+        this.status = status;
+    }
+
+    public Instant getSendAt() {
+        return sendAt;
+    }
+
+    public void setSendAt(Instant sendAt) {
+        this.sendAt = sendAt;
+    }
 }
