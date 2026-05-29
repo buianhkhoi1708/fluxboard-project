@@ -27,9 +27,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
 
 @Service
 public class UserService implements CrudService<UserResponse, String, CreateUserRequest, UpdateUserRequest> {
@@ -42,15 +40,16 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     private final ActivityService activityService;
 
     public UserService(UserRepository userRepository, ProjectMemberRepository projectMemberRepository,
-                       ApplicationEventPublisher eventPublisher, RoleRepository roleRepository,
-                       UserPresenceService presenceService, ActivityService activityService) {
+                       ApplicationEventPublisher eventPublisher, BCryptPasswordEncoder passwordEncoder,
+                       RoleRepository roleRepository, UserPresenceService presenceService,
+                       ActivityService activityService) {
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.eventPublisher = eventPublisher;
+        this.passwordEncoder = passwordEncoder;
         this.roleRepository = roleRepository;
         this.presenceService = presenceService;
         this.activityService = activityService;
-        this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @Override
@@ -60,14 +59,19 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
     public UserResponse create(CreateUserRequest request, String actorUserId) {
         String email = TextUtils.trim(request.email());
-        if (userRepository.existsByEmailAndDeletedFalse(email)) throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+        if (userRepository.existsByEmailAndDeletedFalse(email)) {
+            throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+        }
+
+        String roleId = TextUtils.trimToNull(request.roleId());
+        if (roleId != null) validateRoleExists(roleId);
 
         User user = new User();
         user.setEmail(email);
         user.setPassword(encodePassword(request.password()));
         user.setFullName(TextUtils.trim(request.fullName()));
         user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
-        user.setRoleId(TextUtils.trimToNull(request.roleId()));
+        user.setRoleId(roleId);
         user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
         User saved = userRepository.save(user);
@@ -109,24 +113,36 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
         if (request.email() != null) {
             String email = TextUtils.trim(request.email());
-            if (userRepository.existsByEmailAndIdNotAndDeletedFalse(email, id)) throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+            if (userRepository.existsByEmailAndIdNotAndDeletedFalse(email, id)) {
+                throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+            }
             user.setEmail(email);
         }
         if (request.password() != null) user.setPassword(encodePassword(request.password()));
         if (request.fullName() != null) user.setFullName(TextUtils.trim(request.fullName()));
         if (request.avatarUrl() != null) user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
-        if (request.roleId() != null) user.setRoleId(TextUtils.trimToNull(request.roleId()));
+        if (request.roleId() != null) {
+            String roleId = TextUtils.trimToNull(request.roleId());
+            if (roleId != null) validateRoleExists(roleId);
+            user.setRoleId(roleId);
+        }
         if (request.teamId() != null) user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
         User saved = userRepository.save(user);
         String changedField = null, oldValue = null, newValue = null;
 
         if (!sameText(previousEmail, saved.getEmail())) {
-            changedField = "email"; oldValue = previousEmail; newValue = saved.getEmail();
+            changedField = "email";
+            oldValue = previousEmail;
+            newValue = saved.getEmail();
         } else if (!sameText(previousFullName, saved.getFullName())) {
-            changedField = "fullName"; oldValue = previousFullName; newValue = saved.getFullName();
+            changedField = "fullName";
+            oldValue = previousFullName;
+            newValue = saved.getFullName();
         } else if (!sameText(previousRoleId, saved.getRoleId())) {
-            changedField = "roleId"; oldValue = previousRoleId; newValue = saved.getRoleId();
+            changedField = "roleId";
+            oldValue = previousRoleId;
+            newValue = saved.getRoleId();
         }
 
         if (changedField != null) {
@@ -140,6 +156,27 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         return toResponse(saved);
     }
 
+    public UserResponse updateAccountRole(String userId, String roleId, AuthenticatedUser currentUser) {
+        assertSystemAdmin(currentUser);
+
+        User user = findUserById(userId);
+        String normalizedRoleId = TextUtils.trimToNull(roleId);
+        if (normalizedRoleId == null) throw new AppException(ErrorCode.BAD_REQUEST, "Role ID is required.");
+
+        RoleEntity role = validateRoleExists(normalizedRoleId);
+        String oldRoleId = user.getRoleId();
+        if (sameText(oldRoleId, normalizedRoleId)) return toResponse(user);
+
+        user.setRoleId(normalizedRoleId);
+        User saved = userRepository.save(user);
+
+        String oldRoleName = resolveRoleName(oldRoleId);
+        String newRoleName = role.getName() == null ? null : role.getName().name();
+        activityService.logUserUpdated(saved.getId(), currentUser.userId(), "roleId", oldRoleName, newRoleName);
+
+        return toResponse(saved);
+    }
+
     @Override
     public void delete(String id) {
         delete(id, null);
@@ -148,6 +185,7 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     public void delete(String id, String actorUserId) {
         User user = findUserById(id);
         String deletedEmail = user.getEmail();
+
         user.markDeleted();
         userRepository.save(user);
 
@@ -157,6 +195,21 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                 "User deleted: " + deletedEmail
         ));
         activityService.logUserDeleted(user.getId(), actorUserId, deletedEmail);
+    }
+
+    public void deleteAccountFromManagement(String userId, AuthenticatedUser currentUser) {
+        assertSystemAdmin(currentUser);
+
+        if (currentUser.userId().equals(userId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "SYSTEM_ADMIN cannot delete their own account.");
+        }
+
+        User user = findUserById(userId);
+        String deletedEmail = user.getEmail();
+
+        user.markDeleted();
+        userRepository.save(user);
+        activityService.logUserDeleted(user.getId(), currentUser.userId(), deletedEmail);
     }
 
     public void updateAvatarUrl(String id, String avatarUrl) {
@@ -178,12 +231,17 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     }
 
     public void assertSystemAdmin(AuthenticatedUser currentUser) {
-        if (!isSystemAdmin(currentUser)) throw new AppException(ErrorCode.FORBIDDEN, "Only SYSTEM_ADMIN can access this resource.");
+        if (!isSystemAdmin(currentUser)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Only SYSTEM_ADMIN can access this resource.");
+        }
     }
 
     public List<String> getAiPersonnelContextByProject(String projectId) {
         List<String> userIds = projectMemberRepository.findByProjectIdAndIsActiveTrue(projectId)
-                .stream().map(ProjectMember::getUserId).toList();
+                .stream()
+                .map(ProjectMember::getUserId)
+                .toList();
+
         if (userIds.isEmpty()) return List.of();
 
         return userRepository.findByIdInAndDeletedFalse(userIds)
@@ -210,6 +268,11 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     private User findUserById(String id) {
         return userRepository.findByIdAndDeletedFalse(TextUtils.trim(id))
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found."));
+    }
+
+    private RoleEntity validateRoleExists(String roleId) {
+        return roleRepository.findById(roleId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Role not found."));
     }
 
     private String resolveAvatarUrl(String avatarUrl) {

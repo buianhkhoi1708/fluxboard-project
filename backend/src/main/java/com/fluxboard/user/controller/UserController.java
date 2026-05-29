@@ -9,6 +9,7 @@ import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.media.service.MediaService;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import com.fluxboard.user.dto.request.CreateUserRequest;
+import com.fluxboard.user.dto.request.UpdateAccountRoleRequest;
 import com.fluxboard.user.dto.request.UpdateNotificationPrefRequest;
 import com.fluxboard.user.dto.request.UpdateUserRequest;
 import com.fluxboard.user.dto.response.UnassignedUserResponse;
@@ -18,7 +19,6 @@ import com.fluxboard.user.service.UserNotificationPrefService;
 import com.fluxboard.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -57,6 +57,24 @@ public class UserController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
         return ResponseFactory.paged("Account management users retrieved successfully.", userService.getAccountManagementPage(pageable, authUser));
+    }
+
+    @RequirePermission("USER_UPDATE")
+    @PatchMapping("/accounts/{userId}/role")
+    public ResponseEntity<ApiResponse<UserResponse>> updateAccountRole(
+            @PathVariable String userId,
+            @Valid @RequestBody UpdateAccountRoleRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        return ResponseFactory.ok("Account role updated successfully.", userService.updateAccountRole(userId, request.roleId(), authUser));
+    }
+
+    @RequirePermission("USER_DELETE")
+    @DeleteMapping("/accounts/{userId}")
+    public ResponseEntity<ApiResponse<Void>> deleteAccountFromManagement(
+            @PathVariable String userId,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        userService.deleteAccountFromManagement(userId, authUser);
+        return ResponseFactory.ok("Account deleted successfully.");
     }
 
     @PostMapping("/me/presence/heartbeat")
