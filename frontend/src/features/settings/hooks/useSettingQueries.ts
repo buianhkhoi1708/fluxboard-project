@@ -1,9 +1,4 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient
-} from '@tanstack/react-query';
-
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { userApi } from '../../../features/user/api/userApi';
 import { settingApi } from '../api/settingApi';
 
@@ -15,16 +10,10 @@ export const SETTING_KEYS = {
   notifications: ['settings', 'notifications'] as const,
 };
 
-// ======================================================
-// UPDATE PROFILE
-// ======================================================
-
 export const useUpdateProfile = () => {
-
   const queryClient = useQueryClient();
 
   return useMutation({
-
     mutationFn: async ({
       userId,
       name,
@@ -34,118 +23,54 @@ export const useUpdateProfile = () => {
       name: string;
       file: File | null;
     }) => {
-
-      // ====================================
-      // STEP 1
-      // update name
-      // ====================================
-
-      await userApi.updateUser(
-        userId,
-        {
-          full_name: name
-        }
-      );
-
-      // ====================================
-      // STEP 2
-      // upload avatar
-      // ====================================
+      await userApi.updateUser(userId, { full_name: name });
 
       let avatarUrl: string | undefined;
-
       if (file) {
-
-        const uploadRes =
-          await userApi.uploadAvatar(
-            String(userId),
-            file
-          );
-
+        const uploadRes = await userApi.uploadAvatar(String(userId), file);
         avatarUrl = uploadRes.url;
       }
 
-      return {
-        name,
-        avatarUrl
-      };
+      return { name, avatarUrl };
     },
 
     onSuccess: (data) => {
+      queryClient.setQueryData(USER_KEYS.me, (old: any) => {
+        if (!old) return old;
 
-      // ====================================
-      // UPDATE CACHE NGAY LẬP TỨC
-      // ====================================
+        const updated = {
+          ...old,
+          full_name: data.name,
+          avatar_url: data.avatarUrl ? `${data.avatarUrl}?t=${Date.now()}` : old.avatar_url
+        };
 
-      queryClient.setQueryData(
-        USER_KEYS.me,
-        (old: any) => {
-
-          if (!old) {
-            return old;
-          }
-
-          return {
-            ...old,
-
-            full_name: data.name,
-
-            avatar_url:
-              data.avatarUrl
-                ? `${data.avatarUrl}?t=${Date.now()}`
-                : old.avatar_url
-          };
-        }
-      );
-
-      // ====================================
-      // BACKGROUND REFETCH
-      // ====================================
-
-      queryClient.invalidateQueries({
-        queryKey: USER_KEYS.me
+        localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
       });
+
+      queryClient.invalidateQueries({ queryKey: USER_KEYS.me });
     },
 
     onError: (error) => {
-      console.error(
-        'Update profile failed:',
-        error
-      );
+      console.error('Update profile failed:', error);
     }
   });
 };
 
-// ======================================================
-// NOTIFICATION SETTINGS
-// ======================================================
-
 export const useNotificationSettings = () => {
-
   return useQuery({
-    queryKey:
-      SETTING_KEYS.notifications,
-
-    queryFn:
-      settingApi.getNotificationSettings,
+    queryKey: SETTING_KEYS.notifications,
+    queryFn: settingApi.getNotificationSettings,
   });
 };
 
 export const useUpdateNotifications = () => {
-
   const queryClient = useQueryClient();
 
   return useMutation({
-
-    mutationFn:
-      settingApi.updateNotificationSettings,
-
+    mutationFn: settingApi.updateNotificationSettings,
     onSuccess: () => {
-
-      queryClient.invalidateQueries({
-        queryKey:
-          SETTING_KEYS.notifications
-      });
-    }
+      queryClient.invalidateQueries({ queryKey: SETTING_KEYS.notifications });
+    },
   });
 };

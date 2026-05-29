@@ -1,41 +1,60 @@
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ActivityFilters } from '../api/activityApi'; // Nhớ trỏ đúng đường dẫn
+import { ActivityFilters } from '../api/activityApi';
+
+const readList = (value: string | null) => {
+  if (!value) return undefined;
+  const items = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return items.length > 0 ? items : undefined;
+};
 
 export function useActivityFilters(): [ActivityFilters, (newFilters: ActivityFilters) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
+  const searchKey = searchParams.toString();
 
-  // 1. 🚀 ĐỌC TỪ URL: Chẻ chuỗi (string) thành mảng (string[])
-  const filters: ActivityFilters = {
-    sourceTypes: searchParams.get('sourceTypes')?.split(',') || undefined,
-    actions: searchParams.get('actions')?.split(',') || undefined,
-    actorUserIds: searchParams.get('actorUserIds')?.split(',') || undefined,
-    projectId: searchParams.get('projectId') || undefined,
-    from: searchParams.get('from') || undefined,
-    to: searchParams.get('to') || undefined,
-  };
+  const filters = useMemo<ActivityFilters>(() => {
+    return {
+      sourceTypes: readList(searchParams.get('sourceTypes')),
+      actions: readList(searchParams.get('actions')),
+      actorUserIds: readList(searchParams.get('actorUserIds')),
+      projectId: searchParams.get('projectId') || undefined,
+      from: searchParams.get('from') || undefined,
+      to: searchParams.get('to') || undefined,
+    };
+  }, [searchKey]);
 
-  // 2. 🚀 GHI XUỐNG URL: Gom mảng (string[]) thành chuỗi (string)
   const setFilters = (newFilters: ActivityFilters) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      
-      Object.entries(newFilters).forEach(([key, value]) => {
-        // Nếu giá trị rỗng, hoặc mảng rỗng -> Xóa khỏi URL cho sạch
-        if (!value || (Array.isArray(value) && value.length === 0)) {
-          params.delete(key);
-        } 
-        // Nếu là mảng -> Nối lại bằng dấu phẩy
-        else if (Array.isArray(value)) {
-          params.set(key, value.join(','));
-        } 
-        // Nếu là chuỗi bình thường
-        else {
-          params.set(key, String(value));
-        }
-      });
-      
-      return params;
-    });
+    const params = new URLSearchParams();
+
+    if (newFilters.sourceTypes?.length) {
+      params.set('sourceTypes', newFilters.sourceTypes.join(','));
+    }
+
+    if (newFilters.actions?.length) {
+      params.set('actions', newFilters.actions.join(','));
+    }
+
+    if (newFilters.actorUserIds?.length) {
+      params.set('actorUserIds', newFilters.actorUserIds.join(','));
+    }
+
+    if (newFilters.projectId) {
+      params.set('projectId', newFilters.projectId);
+    }
+
+    if (newFilters.from) {
+      params.set('from', newFilters.from);
+    }
+
+    if (newFilters.to) {
+      params.set('to', newFilters.to);
+    }
+
+    setSearchParams(params);
   };
 
   return [filters, setFilters];
