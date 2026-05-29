@@ -18,7 +18,7 @@ const Sidebar = () => {
   const executionItems = [
     { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Bảng điều khiển", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE"
     ] },
-    { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["EMPLOYEE", "LEAD", "MANAGER", "ADMIN"] },
+    { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["EMPLOYEE", "LEAD", "MANAGER", "ADMIN", "MEMBER"] },
     { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "Tạo Board AI", roles: ["LEAD", "MANAGER", "ADMIN"] }, 
     { path: "/mytasks", icon: <ListTodo size={20} />, label: "Công việc của tôi", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE"] },
     { path: "/notifications", icon: <Bell size={20} />, label: "Thông báo", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE"] },
@@ -26,7 +26,7 @@ const Sidebar = () => {
   ];
 
   const managementItems = [
-    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN"] },
+    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN", "MANAGER", "EMPLOYEE"]  },
     { path: "/createuser", icon: <Building2 size={20} />, label: "Tạo người dùng", roles: ["ADMIN"] },
     { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Phân quyền (RBAC)", roles: ["ADMIN"] },
     { path: "/activity", icon: <Activity size={20} />, label: "Hoạt động", roles: ["MANAGER", "ADMIN"] },
