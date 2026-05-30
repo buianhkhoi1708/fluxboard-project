@@ -12,7 +12,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   // Chỉ lắng nghe token để biết đã đăng nhập chưa
   const token = useAuthStore((state) => state.token);
   
-  // 🚀 Gọi hook phân quyền (Nó đã tự động xử lý vụ "dịch" role_id bằng từ điển)
   const { hasAccess, isLoadingRoles } = useRoleAccess();
 
   // 1. KIỂM TRA ĐĂNG NHẬP
@@ -32,6 +31,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
       );
     }
 
+    // Lắp camera ở đây:
+    console.log("🔥 ĐANG CHECK QUYỀN TRUY CẬP 🔥");
+    console.log("- Phân quyền yêu cầu (allowedRoles):", allowedRoles);
+    console.log("- Hook hasAccess trả về kết quả:", hasAccess(allowedRoles));
     // Dùng chính hàm hasAccess để check (Nó đã lo hết vụ compare tuyệt đối === rồi)
     if (!hasAccess(allowedRoles)) {
       return <Navigate to="/403" replace />;

@@ -11,6 +11,8 @@ import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.util.TextUtils;
+import com.fluxboard.project.projectmember.entity.ProjectMember;
+import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.rbac.entity.RoleEntity;
 import com.fluxboard.rbac.enums.Role;
 import com.fluxboard.rbac.repository.RoleRepository;
@@ -31,50 +33,160 @@ public class ActivityService {
     private final ActivityRepository activityRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final ProjectMemberRepository projectMemberRepository;
+
+    // ==========================================
+    // 🛡️ LÕI PHÂN QUYỀN (SECURITY GUARDS)
+    // ==========================================
 
     public void assertSystemAdmin(AuthenticatedUser currentUser) {
-        if (currentUser == null || currentUser.roleId() == null) throw new AppException(ErrorCode.UNAUTHORIZED, "Unauthorized.");
-        RoleEntity role = roleRepository.findById(currentUser.roleId())
-                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Role not found."));
-        if (role.getName() != Role.SYSTEM_ADMIN) throw new AppException(ErrorCode.FORBIDDEN, "Only SYSTEM_ADMIN can access activity management.");
+        if (!isSystemAdminSafe(currentUser)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Only SYSTEM_ADMIN can access global activity management.");
+        }
     }
 
+    private boolean isSystemAdminSafe(AuthenticatedUser currentUser) {
+        if (currentUser == null || currentUser.roleId() == null) return false;
+        try {
+            RoleEntity role = roleRepository.findById(currentUser.roleId()).orElse(null);
+            return role != null && role.getName() == Role.SYSTEM_ADMIN;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void assertProjectViewAccess(String projectId, AuthenticatedUser currentUser) {
+        checkProjectAccess(projectId, currentUser, false);
+    }
+
+    public void assertProjectManageAccess(String projectId, AuthenticatedUser currentUser) {
+        checkProjectAccess(projectId, currentUser, true);
+    }
+
+    private void checkProjectAccess(String projectId, AuthenticatedUser currentUser, boolean requireManagePermission) {
+        if (currentUser == null) throw new AppException(ErrorCode.UNAUTHORIZED, "Unauthorized.");
+
+        if (isSystemAdminSafe(currentUser)) return;
+
+        if (TextUtils.trimToNull(projectId) == null) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Cần cung cấp Project ID để kiểm tra quyền hạn dự án.");
+        }
+
+        List<ProjectMember> memberships = projectMemberRepository.findByUserIdAndDeletedFalse(currentUser.userId());
+        ProjectMember member = memberships.stream()
+                .filter(m -> projectId.equals(m.getProjectId()) && m.isActive())
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.FORBIDDEN, "Bạn không có quyền truy cập vào dự án này."));
+
+        if (requireManagePermission) {
+            List<String> roles = member.getRoleIds();
+            boolean canManage = roles != null && roles.stream().anyMatch(r -> 
+                    r.toUpperCase().contains("LEADER") || 
+                    r.toUpperCase().contains("MANAGER") || 
+                    r.toUpperCase().contains("ADMIN"));
+                    
+            if (!canManage) {
+                throw new AppException(ErrorCode.FORBIDDEN, "Chỉ Project Leader, Manager hoặc Admin mới có quyền thực hiện thao tác này.");
+            }
+        }
+    }
+
+    // ==========================================
+    // 📊 XỬ LÝ LẤY DỮ LIỆU
+    // ==========================================
+
     public ActivityResponse getById(String id, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
         ActivityEntity entity = findById(id);
+        
+        if (entity.getProjectId() != null) {
+            assertProjectViewAccess(entity.getProjectId(), currentUser);
+        } else {
+            assertSystemAdmin(currentUser);
+        }
+
         Map<String, ActivityActorResponse> users = resolveUserSummaries(List.of(entity));
         return toResponse(entity, users);
     }
 
+    // 🚀 ĐÂY LÀ HÀM CỐT LÕI ĐÃ ĐƯỢC CHỈNH SỬA ĐỂ BƠM NGẦM FILTER
     public Page<ActivityResponse> getPage(ActivityFilterRequest filter, Pageable pageable, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
         ActivityFilterRequest normalized = normalizeFilter(filter);
         validateFilter(normalized);
-        return toResponsePage(activityRepository.findByFilter(normalized, pageable));
+
+        // 1. Sếp Tổng -> Thấy hết, đẩy thẳng filter xuống
+        if (isSystemAdminSafe(currentUser)) {
+            return toResponsePage(activityRepository.findByFilter(normalized, pageable));
+        }
+
+        // 2. Lọc trong 1 dự án cụ thể -> Check quyền dự án rồi đẩy filter xuống
+        if (normalized.projectId() != null) {
+            assertProjectViewAccess(normalized.projectId(), currentUser);
+            return toResponsePage(activityRepository.findByFilter(normalized, pageable));
+        }
+
+        // 3. Bảng tin chung -> Lấy danh sách ID dự án đang tham gia
+        List<String> myProjectIds = projectMemberRepository.findByUserIdAndDeletedFalse(currentUser.userId())
+                .stream()
+                .filter(ProjectMember::isActive)
+                .map(ProjectMember::getProjectId)
+                .distinct()
+                .toList();
+
+        if (myProjectIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        // 🚀 BƠM NGẦM DANH SÁCH DỰ ÁN VÀO BỘ LỌC ĐỂ DÙNG CHUNG HÀM findByFilter
+        ActivityFilterRequest scopedFilter = new ActivityFilterRequest(
+                normalized.activityType(),
+                normalized.sourceTypes(),
+                normalized.actions(),
+                normalized.actorUserIds(),
+                normalized.targetUserIds(),
+                normalized.sourceId(),
+                null, 
+                myProjectIds, // 🚀 Danh sách ID dự án được tiêm vào đây!
+                normalized.boardId(),
+                normalized.taskId(),
+                normalized.from(),
+                normalized.to()
+        );
+
+        // Giờ hệ thống mới xài đến hàm lọc dưới Mongo!
+        return toResponsePage(activityRepository.findByFilter(scopedFilter, pageable));
     }
 
-    public Page<ActivityResponse> getPageByTask(String taskId, Pageable pageable, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
+    public Page<ActivityResponse> getPageByTask(String taskId, String projectId, Pageable pageable, AuthenticatedUser currentUser) {
+        assertProjectViewAccess(projectId, currentUser);
         return toResponsePage(activityRepository.findByTaskIdAndDeletedFalse(TextUtils.trim(taskId), pageable));
     }
 
     public Page<ActivityResponse> getPageByProject(String projectId, Pageable pageable, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
+        assertProjectViewAccess(projectId, currentUser);
         return toResponsePage(activityRepository.findByProjectIdAndDeletedFalse(TextUtils.trim(projectId), pageable));
     }
 
-    public Page<ActivityResponse> getPageBySource(ActivitySource sourceType, String sourceId, Pageable pageable, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
+    public Page<ActivityResponse> getPageBySource(ActivitySource sourceType, String sourceId, String projectId, Pageable pageable, AuthenticatedUser currentUser) {
+        if (projectId != null) {
+            assertProjectViewAccess(projectId, currentUser);
+        } else {
+            assertSystemAdmin(currentUser);
+        }
         return toResponsePage(activityRepository.findBySourceTypeAndSourceIdAndDeletedFalse(sourceType, TextUtils.trim(sourceId), pageable));
     }
 
     public List<ActivityResponse> getRecentActivities(String projectId, Pageable pageable, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
+        assertProjectViewAccess(projectId, currentUser);
+        
         List<ActivityEntity> activities = activityRepository.findAllByProjectIdOrderByCreatedAtDesc(projectId, pageable);
         if (activities.isEmpty()) return List.of();
         Map<String, ActivityActorResponse> users = resolveUserSummaries(activities);
         return activities.stream().map(entity -> toResponse(entity, users)).toList();
     }
+
+    // ==========================================
+    // 📝 XỬ LÝ GHI LOG
+    // ==========================================
 
     public ActivityEntity log(ActivitySource sourceType, String sourceId, String projectId, String boardId, String taskId,
                               String actorUserId, ActivityAction action, String field, String oldValue, String newValue, String message) {
@@ -183,13 +295,18 @@ public class ActivityService {
         log(ActivitySource.BOARD, boardId, projectId, boardId, null, actorUserId, ActivityAction.DELETE, null, null, null, buildMessage("Board deleted", boardName));
     }
 
+    // ==========================================
+    // ⚙️ HELPER METHODS
+    // ==========================================
+
     private ActivityEntity findById(String activityId) {
         return activityRepository.findByIdAndDeletedFalse(TextUtils.trim(activityId))
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Activity not found."));
     }
 
+    // 🚀 ĐÃ CẬP NHẬT: Thêm tham số projectIds để đồng bộ với ActivityFilterRequest
     private ActivityFilterRequest normalizeFilter(ActivityFilterRequest filter) {
-        if (filter == null) return new ActivityFilterRequest(null, null, null, null, null, null, null, null, null, null, null);
+        if (filter == null) return new ActivityFilterRequest(null, null, null, null, null, null, null, null, null, null, null, null);
 
         return new ActivityFilterRequest(
                 filter.activityType(),
@@ -199,6 +316,7 @@ public class ActivityService {
                 normalizeIds(filter.targetUserIds()),
                 TextUtils.trimToNull(filter.sourceId()),
                 TextUtils.trimToNull(filter.projectId()),
+                normalizeValues(filter.projectIds()), // Giữ nguyên danh sách projectIds nếu có
                 TextUtils.trimToNull(filter.boardId()),
                 TextUtils.trimToNull(filter.taskId()),
                 filter.from(),

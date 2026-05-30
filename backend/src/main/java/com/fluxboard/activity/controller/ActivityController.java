@@ -87,9 +87,10 @@ public class ActivityController {
     @GetMapping("/tasks/{taskId}")
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivitiesByTask(
             @PathVariable String taskId,
+            @RequestParam(name = "project_id", required = false) String projectId, 
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser currentUser) {
-        return ResponseFactory.paged("Task activities retrieved successfully.", activityService.getPageByTask(taskId, pageable, currentUser));
+        return ResponseFactory.paged("Task activities retrieved successfully.", activityService.getPageByTask(taskId, projectId, pageable, currentUser));
     }
 
     @RequirePermission("ACTIVITY_VIEW")
@@ -106,9 +107,10 @@ public class ActivityController {
     public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivitiesBySource(
             @PathVariable String sourceType,
             @PathVariable String sourceId,
+            @RequestParam(name = "project_id", required = false) String projectId, 
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser currentUser) {
-        return ResponseFactory.paged("Source activities retrieved successfully.", activityService.getPageBySource(parseSource(sourceType), sourceId, pageable, currentUser));
+        return ResponseFactory.paged("Source activities retrieved successfully.", activityService.getPageBySource(parseSource(sourceType), sourceId, projectId, pageable, currentUser));
     }
 
     private ActivityEntity.ActivityType parseActivityType(String value) {

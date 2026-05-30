@@ -33,16 +33,13 @@ export const useRoleAccess = () => {
   }, [user, roles]);
 
   const hasAccess = (allowedRoles: string[]) => {
+    
     if (!allowedRoles || allowedRoles.length === 0) return true;
     if (isLoading) return false;
 
     const allowed = allowedRoles.map(normalizeRole).filter(Boolean);
 
     if (currentRoleName === 'SYSTEM_ADMIN') return true;
-
-    if (allowed.includes('SYSTEM_ADMIN')) {
-      return currentRoleName === 'SYSTEM_ADMIN';
-    }
 
     return allowed.some((role) => currentRoleName === role || currentRoleName.includes(role));
   };

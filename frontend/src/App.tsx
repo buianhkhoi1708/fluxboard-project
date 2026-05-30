@@ -57,7 +57,7 @@ function App() {
                   <Route path="/createuser" element={<CreateUserTab />} />
                 </Route>
 
-                <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', "MANAGER", "ADMIN"]} />}>
                   <Route path="/activity" element={<ActivityLogPage />} />
                 </Route>
               </Route>
