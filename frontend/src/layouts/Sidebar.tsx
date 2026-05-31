@@ -26,7 +26,7 @@ const Sidebar = () => {
   ];
 
   const managementItems = [
-    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN", "MANAGER", "EMPLOYEE"]  },
+    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN", "MANAGER"]  },
     { path: "/createuser", icon: <Building2 size={20} />, label: "Tạo người dùng", roles: ["ADMIN"] },
     { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Phân quyền (RBAC)", roles: ["ADMIN"] },
     { path: "/activity", icon: <Activity size={20} />, label: "Hoạt động", roles: ["MANAGER", "ADMIN"] },

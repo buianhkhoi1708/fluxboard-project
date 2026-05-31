@@ -129,7 +129,8 @@ public class TaskController {
         taskService.delete(taskId, authUser.userId());
         return ResponseFactory.ok("Task deleted successfully.");
     }
-
+    
+    @RequirePermission("TASK_VIEW")
     @GetMapping("/my-tasks")
     public ResponseEntity<ApiResponse<List<TaskResponse>>> getMyTasks(
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
@@ -138,6 +139,7 @@ public class TaskController {
         return ResponseFactory.ok("Fetched My Tasks successfully.", myTasks);
     }
 
+    @RequirePermission("ATTACHMENT_UPLOAD")
     @PostMapping("/{taskId}/attachments")
     public ResponseEntity<ApiResponse<Map<String, Object>>> attachFileToTask(
             @PathVariable String taskId,

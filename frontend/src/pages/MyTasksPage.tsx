@@ -35,12 +35,24 @@ const TaskCardSkeleton = () => (
   </div>
 );
 
+// ------- Helper: xác định tình trạng hạn chót -------
+const getDueStatus = (dateString: string) => {
+  if (!dateString) return { isOverdue: false, isNearDue: false };
+  const now = new Date();
+  const due = new Date(dateString);
+  const diffMs = due.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return {
+    isOverdue: diffMs < 0,               // đã quá hạn
+    isNearDue: diffHours >= 0 && diffHours < 24, // sắp hết hạn trong 24h
+  };
+};
+
 // ------- Main Component -------
 const MyTasksPage = () => {
   const navigate = useNavigate();
   const { data: myTasks, isLoading, isError, refetch } = useGetMyTasks();
 
-  // Màu priority
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "HIGH":
@@ -61,11 +73,6 @@ const MyTasksPage = () => {
       month: "2-digit",
       year: "numeric",
     });
-  };
-
-  const isOverdue = (dateString: string) => {
-    if (!dateString) return false;
-    return new Date(dateString) < new Date();
   };
 
   return (
@@ -133,84 +140,117 @@ const MyTasksPage = () => {
         {/* TASKS GRID */}
         {!isLoading && !isError && myTasks && myTasks.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {myTasks.map((task: any) => (
-              <div
-                key={task.id}
-                onClick={() => {
-                  if (task.board_id) {
-                    navigate(`/board/${task.board_id}?taskId=${task.id}`);
-                  } else {
-                    console.warn(`Task ${task.id} không tìm thấy board_id.`);
-                  }
-                }}
-                className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md hover:shadow-indigo-100/20 hover:border-indigo-300 hover:-translate-y-0.5 cursor-pointer transition-all duration-200 p-5 flex flex-col group"
-              >
-                {/* Priority & Status */}
-                <div className="flex justify-between items-start mb-3">
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${getPriorityColor(task.priority)}`}
-                  >
-                    {task.priority || "MEDIUM"}
-                  </span>
-                  <span className="text-xs font-medium bg-slate-100/80 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200/60">
-                    {task.status}
-                  </span>
-                </div>
+            {myTasks.map((task: any) => {
+              const { isOverdue, isNearDue } = getDueStatus(task.due_date);
 
-                {/* Title & Description */}
-                <h3 className="text-lg font-bold text-slate-800 mb-2 line-clamp-2 leading-snug group-hover:text-indigo-700 transition-colors">
-                  {task.title}
-                </h3>
-                {task.description && (
-                  <p className="text-sm text-slate-500 line-clamp-2 mb-4 grow">
-                    {task.description}
-                  </p>
-                )}
-
-                {/* Footer info */}
-                <div className="space-y-2 mt-auto pt-4 border-t border-slate-100">
-                  {task.ai_suggested_point && (
-                    <div className="flex items-center text-sm text-indigo-600 font-medium bg-indigo-50 w-fit px-2 py-1 rounded-md">
-                      <Sparkles className="w-4 h-4 mr-1.5" />
-                      AI ước tính: {task.ai_suggested_point} Point
-                    </div>
-                  )}
-
-                  <div className="flex items-center text-sm text-slate-600">
-                    <Clock className="w-4 h-4 mr-2 text-slate-400" />
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => {
+                    if (task.board_id) {
+                      navigate(`/board/${task.board_id}?taskId=${task.id}`);
+                    } else {
+                      console.warn(`Task ${task.id} không tìm thấy board_id.`);
+                    }
+                  }}
+                  className={`
+                    backdrop-blur-sm rounded-xl border shadow-sm 
+                    hover:shadow-md hover:-translate-y-0.5 cursor-pointer 
+                    transition-all duration-200 p-5 flex flex-col group
+                    ${
+                      isOverdue
+                        ? "bg-red-50/80 border-red-300 shadow-red-100/50 hover:shadow-red-200/50"
+                        : isNearDue
+                        ? "bg-amber-50/80 border-amber-300 shadow-amber-100/50 hover:shadow-amber-200/50"
+                        : "bg-white/80 border-slate-200/80 hover:shadow-indigo-100/20 hover:border-indigo-300"
+                    }
+                  `}
+                >
+                  {/* Priority & Status + Cảnh báo hạn */}
+                  <div className="flex justify-between items-start mb-3">
                     <span
-                      className={
-                        isOverdue(task.due_date) ? "text-red-500 font-semibold" : ""
-                      }
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${getPriorityColor(
+                        task.priority
+                      )}`}
                     >
-                      Hạn chót: {formatDate(task.due_date)}
+                      {task.priority || "MEDIUM"}
                     </span>
+                    <div className="flex items-center gap-2">
+                      {/* Badge trạng thái */}
+                      <span className="text-xs font-medium bg-slate-100/80 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200/60">
+                        {task.status}
+                      </span>
+                      {/* Badge cảnh báo hạn */}
+                      {isOverdue && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold bg-red-500 text-white px-2 py-1 rounded-md shadow-sm animate-pulse">
+                          <AlertCircle size={12} />
+                          Quá hạn
+                        </span>
+                      )}
+                      {isNearDue && !isOverdue && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500 text-white px-2 py-1 rounded-md shadow-sm">
+                          <Clock size={12} />
+                          Sắp hết hạn
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {task.author && (
-                    <div className="flex items-center text-sm text-slate-600 pt-2">
-                      {task.author.avatar_url ? (
-                        <img
-                          src={task.author.avatar_url}
-                          alt="avatar"
-                          className="w-6 h-6 rounded-full mr-2 ring-2 ring-slate-100"
-                        />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2 ring-2 ring-slate-100">
-                          <User className="w-3 h-3 text-indigo-600" />
-                        </div>
-                      )}
-                      <span className="truncate">
-                        Giao bởi:{" "}
-                        <span className="font-medium text-slate-700">
-                          {task.author.full_name}
-                        </span>
+                  {/* Title & Description */}
+                  <h3 className="text-lg font-bold text-slate-800 mb-2 line-clamp-2 leading-snug group-hover:text-indigo-700 transition-colors">
+                    {task.title}
+                  </h3>
+                  {task.description && (
+                    <p className="text-sm text-slate-500 line-clamp-2 mb-4 grow">
+                      {task.description}
+                    </p>
+                  )}
+
+                  {/* Footer info */}
+                  <div className="space-y-2 mt-auto pt-4 border-t border-slate-100">
+                    {task.ai_suggested_point && (
+                      <div className="flex items-center text-sm text-indigo-600 font-medium bg-indigo-50 w-fit px-2 py-1 rounded-md">
+                        <Sparkles className="w-4 h-4 mr-1.5" />
+                        AI ước tính: {task.ai_suggested_point} Point
+                      </div>
+                    )}
+
+                    <div className="flex items-center text-sm text-slate-600">
+                      <Clock className="w-4 h-4 mr-2 text-slate-400" />
+                      <span
+                        className={
+                          isOverdue ? "text-red-600 font-bold" : ""
+                        }
+                      >
+                        Hạn chót: {formatDate(task.due_date)}
                       </span>
                     </div>
-                  )}
+
+                    {task.author && (
+                      <div className="flex items-center text-sm text-slate-600 pt-2">
+                        {task.author.avatar_url ? (
+                          <img
+                            src={task.author.avatar_url}
+                            alt="avatar"
+                            className="w-6 h-6 rounded-full mr-2 ring-2 ring-slate-100"
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2 ring-2 ring-slate-100">
+                            <User className="w-3 h-3 text-indigo-600" />
+                          </div>
+                        )}
+                        <span className="truncate">
+                          Giao bởi:{" "}
+                          <span className="font-medium text-slate-700">
+                            {task.author.full_name}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -22,23 +22,30 @@ const CreateUserTab: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   // 🚀 Tự động tải danh sách Role từ API lúc mới vào trang
-  useEffect(() => {
+ useEffect(() => {
     const fetchRoles = async () => {
       try {
         const res: any = await userApi.getRoles();
         
         // 🛠 FIX TRIỆT ĐỂ: Dò tìm mảng dữ liệu (Array) từ JSON Response
-        const payload = res.data || res; // Xử lý trường hợp axiosClient dùng interceptor
+        const payload = res.data || res; 
         const extractedData = payload.content || payload.data || payload; 
         
         // Đảm bảo dữ liệu cuối cùng là một mảng
-        const roleData = Array.isArray(extractedData) ? extractedData : [];
+        const rawRoleData = Array.isArray(extractedData) ? extractedData : [];
         
-        setRoles(roleData);
+        // 🚀 BỌC THÉP MỚI: Chỉ lấy 4 quyền hệ thống cốt lõi
+        const allowedRoles = ["EMPLOYEE", "MANAGER", "ADMIN", "SYSTEM_ADMIN"];
         
-        // Gán role mặc định là Role đầu tiên
-        if (roleData.length > 0) {
-          setFormData(prev => ({ ...prev, role: roleData[0].id }));
+        const filteredRoles = rawRoleData.filter((role: any) => 
+          role && role.name && allowedRoles.includes(role.name.toUpperCase())
+        );
+        
+        setRoles(filteredRoles);
+        
+        // Gán role mặc định là Role đầu tiên trong danh sách đã lọc (nếu có)
+        if (filteredRoles.length > 0) {
+          setFormData(prev => ({ ...prev, role: filteredRoles[0].id }));
         }
       } catch (error) {
         console.error("Lỗi lấy danh sách Role:", error);
