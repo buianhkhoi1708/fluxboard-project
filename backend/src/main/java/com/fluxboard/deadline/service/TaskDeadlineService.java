@@ -91,6 +91,17 @@ public class TaskDeadlineService {
         }
     }
 
+    private void validateExtensionReviewerAccess(TaskEntity task, String reviewerId) {
+        if (same(task.getAuthorUserId(), reviewerId)) return;
+
+        ProjectEntity project = projectRepository.findByIdAndDeletedFalse(task.getProjectId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Project not found."));
+
+        if (same(project.getOwnerId(), reviewerId)) return;
+
+        validateManagerAccess(task.getProjectId(), reviewerId);
+    }
+
     private TaskDeadlineEntity.DeadlineStatus calculateDynamicStatus(TaskDeadlineEntity deadline) {
         if (deadline.getActualCompletedAt() != null) {
             return deadline.getDueDate() != null && deadline.getActualCompletedAt().isAfter(deadline.getDueDate())
@@ -267,7 +278,7 @@ public class TaskDeadlineService {
         }
 
         String cleanReason = reason.trim();
-        String targetManagerId = resolveTargetManagerId(task, userId);
+        String targetReviewerId = resolveTargetReviewerId(task, userId);
         Instant requestedAt = Instant.now();
 
         deadline.setIsExtensionPending(true);
@@ -287,7 +298,7 @@ public class TaskDeadlineService {
                         taskId,
                         task.getProjectId(),
                         userId,
-                        targetManagerId,
+                        targetReviewerId,
                         deadline.getDueDate(),
                         requestedDueDate,
                         cleanReason
@@ -295,18 +306,19 @@ public class TaskDeadlineService {
         );
 
         Map<String, Object> result = toResponse(deadline);
-        result.put("target_manager_id", targetManagerId);
+        result.put("target_manager_id", targetReviewerId);
+        result.put("target_reviewer_id", targetReviewerId);
         result.put("status", "PENDING_APPROVAL");
         result.put("extension_expires_at", requestedAt.plus(EXTENSION_REVIEW_TIMEOUT));
         return result;
     }
 
     @Transactional
-    public Map<String, Object> approveExtension(String taskId, String managerId) {
+    public Map<String, Object> approveExtension(String taskId, String reviewerId) {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
 
-        validateManagerAccess(task.getProjectId(), managerId);
+        validateExtensionReviewerAccess(task, reviewerId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
@@ -325,7 +337,7 @@ public class TaskDeadlineService {
         deadline.setIsExtensionPending(false);
         deadline.setPendingRequestedDate(null);
         deadline.setExtensionStatus(TaskDeadlineEntity.ExtensionStatus.APPROVED);
-        deadline.setExtensionReviewedBy(managerId);
+        deadline.setExtensionReviewedBy(reviewerId);
         deadline.setExtensionReviewedAt(Instant.now());
         deadline.setExtensionRejectReason(null);
         deadline.setIsReminderSent(false);
@@ -340,7 +352,7 @@ public class TaskDeadlineService {
                         this,
                         taskId,
                         task.getProjectId(),
-                        managerId,
+                        reviewerId,
                         resolveTargets(requesterId, task),
                         oldDueDate,
                         newDueDate,
@@ -357,16 +369,16 @@ public class TaskDeadlineService {
     }
 
     @Transactional
-    public Map<String, Object> rejectExtension(String taskId, String managerId, String reason) {
+    public Map<String, Object> rejectExtension(String taskId, String reviewerId, String reason) {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
 
-        validateManagerAccess(task.getProjectId(), managerId);
+        validateExtensionReviewerAccess(task, reviewerId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
-        return rejectPendingExtension(task, deadline, managerId, reason, false);
+        return rejectPendingExtension(task, deadline, reviewerId, reason, false);
     }
 
     @Transactional
@@ -403,7 +415,7 @@ public class TaskDeadlineService {
     private Map<String, Object> rejectPendingExtension(
             TaskEntity task,
             TaskDeadlineEntity deadline,
-            String managerId,
+            String reviewerId,
             String reason,
             boolean autoRejected
     ) {
@@ -423,7 +435,7 @@ public class TaskDeadlineService {
         deadline.setIsExtensionPending(false);
         deadline.setPendingRequestedDate(null);
         deadline.setExtensionStatus(TaskDeadlineEntity.ExtensionStatus.REJECTED);
-        deadline.setExtensionReviewedBy(managerId);
+        deadline.setExtensionReviewedBy(reviewerId);
         deadline.setExtensionReviewedAt(Instant.now());
         deadline.setExtensionRejectReason(rejectReason);
         deadlineRepository.save(deadline);
@@ -433,7 +445,7 @@ public class TaskDeadlineService {
                         this,
                         taskId,
                         task.getProjectId(),
-                        managerId,
+                        reviewerId,
                         resolveTargets(requesterId, task),
                         currentDueDate,
                         requestedDueDate,
@@ -451,40 +463,48 @@ public class TaskDeadlineService {
         return result;
     }
 
-    private String resolveTargetManagerId(TaskEntity task, String requesterId) {
+    private String resolveTargetReviewerId(TaskEntity task, String requesterId) {
+        if (validReviewer(task.getAuthorUserId(), requesterId)) {
+            return task.getAuthorUserId();
+        }
+
         ProjectEntity project = projectRepository.findByIdAndDeletedFalse(task.getProjectId()).orElse(null);
 
-        if (project != null && validManager(project.getOwnerId(), requesterId)) return project.getOwnerId();
+        if (project != null && validReviewer(project.getOwnerId(), requesterId)) {
+            return project.getOwnerId();
+        }
 
         if (project != null && project.getDepartmentId() != null) {
             DepartmentEntity department = departmentRepository.findByIdAndDeletedFalse(project.getDepartmentId()).orElse(null);
-            if (department != null && validManager(department.getManagerId(), requesterId)) return department.getManagerId();
+            if (department != null && validReviewer(department.getManagerId(), requesterId)) {
+                return department.getManagerId();
+            }
         }
 
         User requester = userRepository.findByIdAndDeletedFalse(requesterId).orElse(null);
 
         if (requester != null && requester.getTeamId() != null) {
             TeamEntity team = teamRepository.findByIdAndDeletedFalse(requester.getTeamId()).orElse(null);
-            if (team != null && validManager(team.getLeadId(), requesterId)) return team.getLeadId();
+            if (team != null && validReviewer(team.getLeadId(), requesterId)) {
+                return team.getLeadId();
+            }
         }
 
-        if (validManager(task.getAuthorUserId(), requesterId)) return task.getAuthorUserId();
-
         for (ProjectMember member : projectMemberRepository.findActiveByProjectId(task.getProjectId())) {
-            if (!validManager(member.getUserId(), requesterId) || member.getRoleIds() == null) continue;
+            if (!validReviewer(member.getUserId(), requesterId) || member.getRoleIds() == null) continue;
 
             boolean canManageDeadline = member.getRoleIds().stream()
                     .anyMatch(roleId -> permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG"));
 
-            if (canManageDeadline) return member.getUserId();
+            if (canManageDeadline) {
+                return member.getUserId();
+            }
         }
 
-        if (task.getAuthorUserId() != null && !task.getAuthorUserId().isBlank()) return task.getAuthorUserId();
-
-        throw new AppException(ErrorCode.BAD_REQUEST, "No manager found for this extension request.");
+        throw new AppException(ErrorCode.BAD_REQUEST, "No task creator or board/project creator found for this extension request.");
     }
 
-    private boolean validManager(String candidateId, String requesterId) {
+    private boolean validReviewer(String candidateId, String requesterId) {
         return candidateId != null
                 && !candidateId.isBlank()
                 && !same(candidateId, requesterId)
@@ -504,36 +524,36 @@ public class TaskDeadlineService {
         return a != null && b != null && a.equals(b);
     }
 
-    private Instant extensionExpiresAt(TaskDeadlineEntity d) {
-        return d.getExtensionRequestedAt() == null
+    private Instant extensionExpiresAt(TaskDeadlineEntity deadline) {
+        return deadline.getExtensionRequestedAt() == null
                 ? null
-                : d.getExtensionRequestedAt().plus(EXTENSION_REVIEW_TIMEOUT);
+                : deadline.getExtensionRequestedAt().plus(EXTENSION_REVIEW_TIMEOUT);
     }
 
-    private Map<String, Object> toResponse(TaskDeadlineEntity d) {
-        Map<String, Object> r = new LinkedHashMap<>();
+    private Map<String, Object> toResponse(TaskDeadlineEntity deadline) {
+        Map<String, Object> result = new LinkedHashMap<>();
 
-        r.put("id", d.getId());
-        r.put("task_id", d.getTaskId());
-        r.put("start_date", d.getStartDate());
-        r.put("due_date", d.getDueDate());
-        r.put("actual_completed_at", d.getActualCompletedAt());
-        r.put("reminder_offset", d.getReminderOffset());
-        r.put("status", d.getStatus() == null ? null : d.getStatus().name());
-        r.put("extension_count", d.getExtensionCount());
-        r.put("extension_limit", d.getExtensionLimit());
-        r.put("is_reminder_sent", d.getIsReminderSent());
-        r.put("is_extension_pending", d.getIsExtensionPending());
-        r.put("pending_requested_date", d.getPendingRequestedDate());
-        r.put("extension_status", d.getExtensionStatus() == null ? null : d.getExtensionStatus().name());
-        r.put("extension_requested_by", d.getExtensionRequestedBy());
-        r.put("extension_requested_at", d.getExtensionRequestedAt());
-        r.put("extension_expires_at", extensionExpiresAt(d));
-        r.put("extension_reason", d.getExtensionReason());
-        r.put("extension_reviewed_by", d.getExtensionReviewedBy());
-        r.put("extension_reviewed_at", d.getExtensionReviewedAt());
-        r.put("extension_reject_reason", d.getExtensionRejectReason());
+        result.put("id", deadline.getId());
+        result.put("task_id", deadline.getTaskId());
+        result.put("start_date", deadline.getStartDate());
+        result.put("due_date", deadline.getDueDate());
+        result.put("actual_completed_at", deadline.getActualCompletedAt());
+        result.put("reminder_offset", deadline.getReminderOffset());
+        result.put("status", deadline.getStatus() == null ? null : deadline.getStatus().name());
+        result.put("extension_count", deadline.getExtensionCount());
+        result.put("extension_limit", deadline.getExtensionLimit());
+        result.put("is_reminder_sent", deadline.getIsReminderSent());
+        result.put("is_extension_pending", deadline.getIsExtensionPending());
+        result.put("pending_requested_date", deadline.getPendingRequestedDate());
+        result.put("extension_status", deadline.getExtensionStatus() == null ? null : deadline.getExtensionStatus().name());
+        result.put("extension_requested_by", deadline.getExtensionRequestedBy());
+        result.put("extension_requested_at", deadline.getExtensionRequestedAt());
+        result.put("extension_expires_at", extensionExpiresAt(deadline));
+        result.put("extension_reason", deadline.getExtensionReason());
+        result.put("extension_reviewed_by", deadline.getExtensionReviewedBy());
+        result.put("extension_reviewed_at", deadline.getExtensionReviewedAt());
+        result.put("extension_reject_reason", deadline.getExtensionRejectReason());
 
-        return r;
+        return result;
     }
 }

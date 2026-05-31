@@ -2,18 +2,19 @@ package com.fluxboard.notification.controller;
 
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
+import com.fluxboard.notification.dto.response.NotificationResponse;
 import com.fluxboard.notification.entity.NotificationEntity;
 import com.fluxboard.notification.repository.NotificationRepository;
 import com.fluxboard.notification.service.NotificationDispatcher;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
-import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,21 +36,28 @@ public class NotificationController {
     ) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.max(size, 1);
-
         Pageable pageable = PageRequest.of(safePage, safeSize);
-        Page<NotificationEntity> notificationPage = Boolean.TRUE.equals(unreadOnly)
-                ? notificationRepository.findByRecipientIdAndIsReadOrderByCreatedAtDesc(userId, false, pageable)
-                : notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, pageable);
+
+        List<NotificationEntity> source = Boolean.TRUE.equals(unreadOnly)
+                ? notificationRepository.findByRecipientIdAndIsReadOrderByCreatedAtDesc(userId, false)
+                : notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId);
+
+        List<NotificationEntity> distinct = distinctNotifications(source);
+        List<NotificationResponse> responses = slice(distinct, safePage, safeSize)
+                .stream()
+                .map(NotificationResponse::fromEntity)
+                .toList();
 
         return ResponseFactory.paged(
                 "Fetch notifications successfully",
-                notificationPage.map(NotificationResponse::fromEntity)
+                new PageImpl<>(responses, pageable, distinct.size())
         );
     }
 
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Long>> getUnreadCount(@RequestAttribute("userId") String userId) {
-        long count = notificationRepository.countByRecipientIdAndIsReadFalse(userId);
+        List<NotificationEntity> unreadNotifications = notificationRepository.findByRecipientIdAndIsReadFalse(userId);
+        long count = distinctNotifications(unreadNotifications).size();
         return ResponseFactory.success("Fetch unread count successfully", count);
     }
 
@@ -57,11 +65,8 @@ public class NotificationController {
     public DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> longPollingNotifications(
             @RequestAttribute("userId") String userId
     ) {
-        DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> result =
-                new DeferredResult<>(35_000L);
-
-        CompletableFuture<List<NotificationEntity>> future =
-                notificationDispatcher.waitForRealtimeNotifications(userId, 30_000L);
+        DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> result = new DeferredResult<>(35_000L);
+        CompletableFuture<List<NotificationEntity>> future = notificationDispatcher.waitForRealtimeNotifications(userId, 30_000L);
 
         future.whenComplete((notifications, error) -> {
             if (result.isSetOrExpired()) return;
@@ -73,18 +78,12 @@ public class NotificationController {
 
             List<NotificationResponse> payload = notifications == null
                     ? List.of()
-                    : notifications.stream()
-                    .map(NotificationResponse::fromEntity)
-                    .toList();
+                    : distinctNotifications(notifications).stream().map(NotificationResponse::fromEntity).toList();
 
-            result.setResult(
-                    ResponseFactory.success(
-                            payload.isEmpty()
-                                    ? "Polling cycle completed"
-                                    : "New notifications retrieved successfully",
-                            payload
-                    )
-            );
+            result.setResult(ResponseFactory.success(
+                    payload.isEmpty() ? "Polling cycle completed" : "New notifications retrieved successfully",
+                    payload
+            ));
         });
 
         result.onTimeout(() -> {
@@ -103,140 +102,137 @@ public class NotificationController {
             @RequestAttribute("userId") String userId,
             @PathVariable String id
     ) {
-        NotificationEntity notification = notificationRepository.findByIdAndRecipientId(id, userId)
-                .orElse(null);
+        NotificationEntity notification = notificationRepository.findByIdAndRecipientId(id, userId).orElse(null);
 
         if (notification == null) {
             return ResponseFactory.success("Notification not found or already unavailable", null);
         }
 
-        notification.setRead(true);
-        NotificationEntity saved = notificationRepository.save(notification);
+        String key = semanticKey(notification);
+        List<NotificationEntity> sameNotifications = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId)
+                .stream()
+                .filter(item -> semanticKey(item).equals(key))
+                .toList();
 
-        return ResponseFactory.success(
-                "Notification marked as read successfully",
-                NotificationResponse.fromEntity(saved)
-        );
+        if (sameNotifications.isEmpty()) {
+            notification.setRead(true);
+            NotificationEntity saved = notificationRepository.save(notification);
+            return ResponseFactory.success("Notification marked as read successfully", NotificationResponse.fromEntity(saved));
+        }
+
+        for (NotificationEntity item : sameNotifications) item.setRead(true);
+        notificationRepository.saveAll(sameNotifications);
+
+        NotificationEntity savedTarget = sameNotifications.stream()
+                .filter(item -> id.equals(item.getId()))
+                .findFirst()
+                .orElse(sameNotifications.get(0));
+
+        return ResponseFactory.success("Notification marked as read successfully", NotificationResponse.fromEntity(savedTarget));
     }
 
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") String userId) {
-        List<NotificationEntity> unreadNotifications =
-                notificationRepository.findByRecipientIdAndIsReadFalse(userId);
-
-        for (NotificationEntity notification : unreadNotifications) {
-            notification.setRead(true);
-        }
-
+        List<NotificationEntity> unreadNotifications = notificationRepository.findByRecipientIdAndIsReadFalse(userId);
+        for (NotificationEntity notification : unreadNotifications) notification.setRead(true);
         notificationRepository.saveAll(unreadNotifications);
         return ResponseFactory.success("All notifications marked as read successfully");
     }
 
-    public static class NotificationResponse {
-        private String id;
-        private String recipientId;
-        private String senderId;
-        private String title;
-        private String message;
-        private String type;
-        private String referenceId;
-        private String referenceType;
-        private String actionUrl;
-        private Map<String, Object> metadata;
-        private Instant timestamp;
-        private Instant createdAt;
-        private Instant updatedAt;
-        private Instant sendAt;
-        private String status;
-        private boolean isRead;
+    private List<NotificationEntity> distinctNotifications(List<NotificationEntity> source) {
+        Map<String, NotificationEntity> result = new LinkedHashMap<>();
 
-        public static NotificationResponse fromEntity(NotificationEntity entity) {
-            if (entity == null) return null;
+        for (NotificationEntity notification : source == null ? List.<NotificationEntity>of() : source) {
+            String key = semanticKey(notification);
+            NotificationEntity existing = result.get(key);
 
-            NotificationResponse response = new NotificationResponse();
-            response.id = entity.getId();
-            response.recipientId = entity.getRecipientId();
-            response.senderId = entity.getSenderId();
-            response.title = entity.getTitle();
-            response.message = entity.getMessage();
-            response.type = entity.getType();
-            response.referenceId = entity.getReferenceId();
-            response.referenceType = entity.getReferenceType();
-            response.actionUrl = entity.getActionUrl();
-            response.metadata = entity.getMetadata() == null
-                    ? new LinkedHashMap<>()
-                    : new LinkedHashMap<>(entity.getMetadata());
-            response.timestamp = entity.getCreatedAt();
-            response.createdAt = entity.getCreatedAt();
-            response.updatedAt = entity.getUpdatedAt();
-            response.sendAt = entity.getSendAt();
-            response.status = entity.getStatus() == null ? null : entity.getStatus().name();
-            response.isRead = entity.isRead();
-            return response;
+            if (existing == null) {
+                result.put(key, notification);
+                continue;
+            }
+
+            if (existing.isRead() && !notification.isRead()) {
+                notification.setRead(true);
+                result.put(key, notification);
+            }
         }
 
-        public String getId() {
-            return id;
+        return new ArrayList<>(result.values());
+    }
+
+    private List<NotificationEntity> slice(List<NotificationEntity> source, int page, int size) {
+        if (source == null || source.isEmpty()) return List.of();
+
+        int from = Math.min(page * size, source.size());
+        int to = Math.min(from + size, source.size());
+
+        if (from >= to) return List.of();
+        return source.subList(from, to);
+    }
+
+    private String semanticKey(NotificationEntity notification) {
+        if (notification == null) return "NULL";
+
+        if (notification.getDedupeKey() != null && !notification.getDedupeKey().isBlank()) {
+            return notification.getDedupeKey();
         }
 
-        public String getRecipientId() {
-            return recipientId;
+        Map<String, Object> metadata = notification.getMetadata();
+        String type = safe(notification.getType());
+        String referenceId = safe(notification.getReferenceId());
+        String taskId = first(metadata, "task_id", "taskId", "task");
+        String requesterId = first(metadata, "requester_id", "requesterId");
+        String dueDate = first(
+                metadata,
+                "requested_due_date",
+                "requestedDueDate",
+                "approved_due_date",
+                "approvedDueDate",
+                "current_due_date",
+                "currentDueDate",
+                "due_date",
+                "dueDate"
+        );
+
+        if (type.startsWith("EXTENSION_") || type.contains("DEADLINE") || type.contains("OVERDUE")) {
+            return String.join("|",
+                    safe(notification.getRecipientId()),
+                    type,
+                    firstNonBlank(referenceId, taskId),
+                    requesterId,
+                    safe(notification.getSenderId()),
+                    dueDate
+            );
         }
 
-        public String getSenderId() {
-            return senderId;
+        return String.join("|",
+                safe(notification.getRecipientId()),
+                type,
+                firstNonBlank(referenceId, taskId),
+                safe(notification.getId())
+        );
+    }
+
+    private String first(Map<String, Object> metadata, String... keys) {
+        if (metadata == null) return "";
+
+        for (String key : keys) {
+            Object value = metadata.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
         }
 
-        public String getTitle() {
-            return title;
+        return "";
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
         }
 
-        public String getMessage() {
-            return message;
-        }
+        return "";
+    }
 
-        public String getType() {
-            return type;
-        }
-
-        public String getReferenceId() {
-            return referenceId;
-        }
-
-        public String getReferenceType() {
-            return referenceType;
-        }
-
-        public String getActionUrl() {
-            return actionUrl;
-        }
-
-        public Map<String, Object> getMetadata() {
-            return metadata;
-        }
-
-        public Instant getTimestamp() {
-            return timestamp;
-        }
-
-        public Instant getCreatedAt() {
-            return createdAt;
-        }
-
-        public Instant getUpdatedAt() {
-            return updatedAt;
-        }
-
-        public Instant getSendAt() {
-            return sendAt;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public boolean isRead() {
-            return isRead;
-        }
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

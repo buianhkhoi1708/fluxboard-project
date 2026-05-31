@@ -38,6 +38,7 @@ export interface NotificationMetadata {
   task_title?: string;
   actionUrl?: string;
   action_url?: string;
+
   requesterId?: string;
   requester_id?: string;
   requesterName?: string;
@@ -59,31 +60,40 @@ export interface NotificationMetadata {
   expires_at?: string;
   canReview?: boolean;
   can_review?: boolean;
+
   dueDate?: string;
   due_date?: string;
   isOverdue?: boolean;
   is_overdue?: boolean;
+
   [key: string]: any;
 }
 
 export interface AppNotification {
   id: string;
+
   recipientId?: string;
   recipient_id?: string;
   senderId?: string | null;
   sender_id?: string | null;
+
   type: NotificationType;
   title: string;
   message: string;
+
   referenceId?: string | null;
   reference_id?: string | null;
   referenceType?: string | null;
   reference_type?: string | null;
+
   actionUrl?: string | null;
   action_url?: string | null;
+
   metadata: NotificationMetadata;
+
   isRead: boolean;
   is_read?: boolean;
+
   status?: string | null;
   timestamp?: string | number | null;
   createdAt?: string | null;

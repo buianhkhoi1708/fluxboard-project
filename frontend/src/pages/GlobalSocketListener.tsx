@@ -11,6 +11,26 @@ import {
   useNotificationStore,
 } from '../features/notification/stores/useNotificationStore';
 
+const getToken = () => {
+  return (
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('accessToken') ||
+    ''
+  );
+};
+
+const isJwtExpired = (token: string | null) => {
+  if (!token) return true;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return !payload?.exp || payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+};
+
 const getToastIcon = (type?: string) => {
   const upper = String(type || '').toUpperCase();
 
@@ -30,12 +50,7 @@ const getToastIcon = (type?: string) => {
 };
 
 const navigateWithoutRouter = (url: string) => {
-  if (!url || url.trim() === '') {
-    window.location.assign('/notifications');
-    return;
-  }
-
-  window.location.assign(url);
+  window.location.assign(url || '/notifications');
 };
 
 const NotificationToastViewport = () => {
@@ -74,7 +89,6 @@ const NotificationToastViewport = () => {
             }}
             onKeyDown={async (event) => {
               if (event.key !== 'Enter' && event.key !== ' ') return;
-
               event.preventDefault();
               await markAsRead(notification.id);
               removeToast(toast.id);
@@ -112,7 +126,7 @@ const NotificationToastViewport = () => {
                   </p>
 
                   <p className="mt-2 text-[11px] font-bold text-indigo-600">
-                    Bấm để mở công việc liên quan
+                    Bấm để mở nội dung liên quan
                   </p>
                 </div>
               </div>
@@ -126,7 +140,9 @@ const NotificationToastViewport = () => {
 
 export const GlobalSocketListener = () => {
   const queryClient = useQueryClient();
-  const user = useAuthStore((state) => state.user);
+
+  const user = useAuthStore((state: any) => state.user);
+  const tokenFromStore = useAuthStore((state: any) => state.token);
 
   const connectWebSocket = useNotificationStore((state) => state.connectWebSocket);
   const disconnectWebSocket = useNotificationStore((state) => state.disconnectWebSocket);
@@ -135,11 +151,27 @@ export const GlobalSocketListener = () => {
   const loadInitialNotifications = useNotificationStore((state) => state.loadInitialNotifications);
 
   useEffect(() => {
-    const userId = user?.id ? String(user.id) : null;
-
-    if (!userId) {
-      disconnectWebSocket();
+    const stopRealtime = () => {
       stopLongPolling();
+      disconnectWebSocket();
+    };
+
+    window.addEventListener('auth:unauthorized', stopRealtime);
+    window.addEventListener('auth:logout', stopRealtime);
+
+    return () => {
+      window.removeEventListener('auth:unauthorized', stopRealtime);
+      window.removeEventListener('auth:logout', stopRealtime);
+    };
+  }, [disconnectWebSocket, stopLongPolling]);
+
+  useEffect(() => {
+    const userId = user?.id ? String(user.id) : user?.user_id ? String(user.user_id) : null;
+    const token = tokenFromStore || getToken();
+
+    if (!userId || isJwtExpired(token)) {
+      stopLongPolling();
+      disconnectWebSocket();
       return;
     }
 
@@ -153,6 +185,8 @@ export const GlobalSocketListener = () => {
     };
   }, [
     user?.id,
+    user?.user_id,
+    tokenFromStore,
     connectWebSocket,
     disconnectWebSocket,
     startLongPolling,
@@ -160,20 +194,16 @@ export const GlobalSocketListener = () => {
     loadInitialNotifications,
   ]);
 
-  useRealtimeEvent('/user/queue/notifications', (message) => {
-    console.log('🔔 Có thông báo mới:', message);
+  useRealtimeEvent('/user/queue/notifications', () => {
     queryClient.invalidateQueries({ queryKey: SETTING_KEYS.notifications });
-    queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
   });
 
-  useRealtimeEvent('/topic/workspaces/updates', (message) => {
-    console.log('🏢 Có cập nhật workspace:', message);
+  useRealtimeEvent('/topic/workspaces/updates', () => {
     queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
   });
 
   useRealtimeEvent('/topic/system', (message) => {
-    const { action } = message;
+    const { action } = message || {};
 
     switch (action) {
       case 'PROJECT_DELETED':
@@ -181,10 +211,18 @@ export const GlobalSocketListener = () => {
         break;
 
       case 'TASK_ASSIGNED':
+      case 'TASK_COMMENT_ADDED':
+      case 'TASK_COMMENT_RESOLVED':
+      case 'TASK_UPDATED':
+      case 'TASK_UPDATE':
+      case 'TASK_MOVE':
+      case 'TASK_COMPLETED':
+      case 'EXTENSION_REQUESTED':
+      case 'EXTENSION_APPROVED':
+      case 'EXTENSION_REJECTED':
         queryClient.invalidateQueries({ queryKey: ['tasks', 'my-tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'metrics'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
         break;
 
       default:

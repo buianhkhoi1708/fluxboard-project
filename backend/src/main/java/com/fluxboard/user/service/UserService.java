@@ -21,6 +21,7 @@ import com.fluxboard.user.dto.response.UserResponse;
 import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class UserService implements CrudService<UserResponse, String, CreateUserRequest, UpdateUserRequest> {
@@ -39,17 +41,19 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     private final UserPresenceService presenceService;
     private final ActivityService activityService;
 
-    public UserService(UserRepository userRepository, ProjectMemberRepository projectMemberRepository,
-                       ApplicationEventPublisher eventPublisher, BCryptPasswordEncoder passwordEncoder,
-                       RoleRepository roleRepository, UserPresenceService presenceService,
+    public UserService(UserRepository userRepository,
+                       ProjectMemberRepository projectMemberRepository,
+                       ApplicationEventPublisher eventPublisher,
+                       RoleRepository roleRepository,
+                       UserPresenceService presenceService,
                        ActivityService activityService) {
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.eventPublisher = eventPublisher;
-        this.passwordEncoder = passwordEncoder;
         this.roleRepository = roleRepository;
         this.presenceService = presenceService;
         this.activityService = activityService;
+        this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @Override
@@ -58,31 +62,36 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
     }
 
     public UserResponse create(CreateUserRequest request, String actorUserId) {
-        String email = TextUtils.trim(request.email());
+        String email = normalizeEmail(request.email());
+
         if (userRepository.existsByEmailAndDeletedFalse(email)) {
             throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
         }
 
-        String roleId = TextUtils.trimToNull(request.roleId());
-        if (roleId != null) validateRoleExists(roleId);
+        validateRoleExistsIfPresent(request.roleId());
 
         User user = new User();
         user.setEmail(email);
         user.setPassword(encodePassword(request.password()));
         user.setFullName(TextUtils.trim(request.fullName()));
         user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
-        user.setRoleId(roleId);
+        user.setRoleId(TextUtils.trimToNull(request.roleId()));
         user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
-        User saved = userRepository.save(user);
+        try {
+            User saved = userRepository.save(user);
 
-        eventPublisher.publishEvent(new ActivityCreatedEvent(
-                this, ActivitySource.USER, saved.getId(), null, null, null,
-                TextUtils.trimToNull(actorUserId), ActivityAction.CREATE, null, null, null,
-                "User created: " + saved.getFullName() + " (" + saved.getEmail() + ")"
-        ));
-        activityService.logUserCreated(saved.getId(), actorUserId, saved.getEmail(), saved.getFullName());
-        return toResponse(saved);
+            eventPublisher.publishEvent(new ActivityCreatedEvent(
+                    this, ActivitySource.USER, saved.getId(), null, null, null,
+                    TextUtils.trimToNull(actorUserId), ActivityAction.CREATE, null, null, null,
+                    "User created: " + saved.getFullName() + " (" + saved.getEmail() + ")"
+            ));
+
+            activityService.logUserCreated(saved.getId(), actorUserId, saved.getEmail(), saved.getFullName());
+            return toResponse(saved);
+        } catch (DuplicateKeyException ex) {
+            throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+        }
     }
 
     @Override
@@ -112,69 +121,115 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
         String previousRoleId = user.getRoleId();
 
         if (request.email() != null) {
-            String email = TextUtils.trim(request.email());
+            String email = normalizeEmail(request.email());
             if (userRepository.existsByEmailAndIdNotAndDeletedFalse(email, id)) {
                 throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
             }
             user.setEmail(email);
         }
+
         if (request.password() != null) user.setPassword(encodePassword(request.password()));
         if (request.fullName() != null) user.setFullName(TextUtils.trim(request.fullName()));
         if (request.avatarUrl() != null) user.setAvatarUrl(resolveAvatarUrl(request.avatarUrl()));
+
         if (request.roleId() != null) {
-            String roleId = TextUtils.trimToNull(request.roleId());
-            if (roleId != null) validateRoleExists(roleId);
-            user.setRoleId(roleId);
+            validateRoleExistsIfPresent(request.roleId());
+            user.setRoleId(TextUtils.trimToNull(request.roleId()));
         }
+
         if (request.teamId() != null) user.setTeamId(TextUtils.trimToNull(request.teamId()));
 
-        User saved = userRepository.save(user);
-        String changedField = null, oldValue = null, newValue = null;
+        try {
+            User saved = userRepository.save(user);
+            String changedField = null;
+            String oldValue = null;
+            String newValue = null;
 
-        if (!sameText(previousEmail, saved.getEmail())) {
-            changedField = "email";
-            oldValue = previousEmail;
-            newValue = saved.getEmail();
-        } else if (!sameText(previousFullName, saved.getFullName())) {
-            changedField = "fullName";
-            oldValue = previousFullName;
-            newValue = saved.getFullName();
-        } else if (!sameText(previousRoleId, saved.getRoleId())) {
-            changedField = "roleId";
-            oldValue = previousRoleId;
-            newValue = saved.getRoleId();
+            if (!sameText(previousEmail, saved.getEmail())) {
+                changedField = "email";
+                oldValue = previousEmail;
+                newValue = saved.getEmail();
+            } else if (!sameText(previousFullName, saved.getFullName())) {
+                changedField = "fullName";
+                oldValue = previousFullName;
+                newValue = saved.getFullName();
+            } else if (!sameText(previousRoleId, saved.getRoleId())) {
+                changedField = "roleId";
+                oldValue = previousRoleId;
+                newValue = saved.getRoleId();
+            }
+
+            if (changedField != null) {
+                eventPublisher.publishEvent(new ActivityCreatedEvent(
+                        this, ActivitySource.USER, saved.getId(), null, null, null,
+                        TextUtils.trimToNull(actorUserId), ActivityAction.UPDATE, changedField, oldValue, newValue,
+                        "User updated"
+                ));
+
+                activityService.logUserUpdated(saved.getId(), actorUserId, changedField, oldValue, newValue);
+            }
+
+            return toResponse(saved);
+        } catch (DuplicateKeyException ex) {
+            throw new AppException(ErrorCode.CONFLICT, "Email already exists.");
+        }
+    }
+
+    public UserResponse updateAccountRole(String targetUserId, String roleId, AuthenticatedUser currentUser) {
+        assertSystemAdmin(currentUser);
+
+        String normalizedTargetUserId = TextUtils.trim(targetUserId);
+        String normalizedRoleId = TextUtils.trim(roleId);
+
+        if (sameText(normalizedTargetUserId, currentUser.userId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "System admin cannot change their own role here.");
         }
 
-        if (changedField != null) {
-            eventPublisher.publishEvent(new ActivityCreatedEvent(
-                    this, ActivitySource.USER, saved.getId(), null, null, null,
-                    TextUtils.trimToNull(actorUserId), ActivityAction.UPDATE, changedField, oldValue, newValue,
-                    "User updated"
-            ));
-            activityService.logUserUpdated(saved.getId(), actorUserId, changedField, oldValue, newValue);
-        }
+        RoleEntity role = roleRepository.findById(normalizedRoleId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Role not found."));
+
+        User target = findUserById(normalizedTargetUserId);
+        assertTargetSystemAdminNotModified(target, currentUser);
+
+        String oldRoleId = target.getRoleId();
+        if (sameText(oldRoleId, normalizedRoleId)) return toResponse(target);
+
+        target.setRoleId(normalizedRoleId);
+        User saved = userRepository.save(target);
+
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.USER, saved.getId(), null, null, null,
+                currentUser.userId(), ActivityAction.UPDATE, "roleId", oldRoleId, normalizedRoleId,
+                "Account role updated: " + safeDisplayName(saved) + " -> " + role.getName().name()
+        ));
+
+        activityService.logUserUpdated(saved.getId(), currentUser.userId(), "roleId", oldRoleId, normalizedRoleId);
         return toResponse(saved);
     }
 
-    public UserResponse updateAccountRole(String userId, String roleId, AuthenticatedUser currentUser) {
+    public void deleteAccountFromManagement(String targetUserId, AuthenticatedUser currentUser) {
         assertSystemAdmin(currentUser);
 
-        User user = findUserById(userId);
-        String normalizedRoleId = TextUtils.trimToNull(roleId);
-        if (normalizedRoleId == null) throw new AppException(ErrorCode.BAD_REQUEST, "Role ID is required.");
+        String normalizedTargetUserId = TextUtils.trim(targetUserId);
 
-        RoleEntity role = validateRoleExists(normalizedRoleId);
-        String oldRoleId = user.getRoleId();
-        if (sameText(oldRoleId, normalizedRoleId)) return toResponse(user);
+        if (sameText(normalizedTargetUserId, currentUser.userId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "System admin cannot delete their own account.");
+        }
 
-        user.setRoleId(normalizedRoleId);
-        User saved = userRepository.save(user);
+        User target = findUserById(normalizedTargetUserId);
+        assertTargetSystemAdminNotModified(target, currentUser);
 
-        String oldRoleName = resolveRoleName(oldRoleId);
-        String newRoleName = role.getName() == null ? null : role.getName().name();
-        activityService.logUserUpdated(saved.getId(), currentUser.userId(), "roleId", oldRoleName, newRoleName);
+        String deletedEmail = target.getEmail();
+        target.markDeleted();
+        userRepository.save(target);
 
-        return toResponse(saved);
+        eventPublisher.publishEvent(new ActivityCreatedEvent(
+                this, ActivitySource.USER, target.getId(), null, null, null,
+                currentUser.userId(), ActivityAction.DELETE, null, null, null,
+                "Account deleted from management: " + deletedEmail
+        ));
+
+        activityService.logUserDeleted(target.getId(), currentUser.userId(), deletedEmail);
     }
 
     @Override
@@ -194,22 +249,8 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                 TextUtils.trimToNull(actorUserId), ActivityAction.DELETE, null, null, null,
                 "User deleted: " + deletedEmail
         ));
+
         activityService.logUserDeleted(user.getId(), actorUserId, deletedEmail);
-    }
-
-    public void deleteAccountFromManagement(String userId, AuthenticatedUser currentUser) {
-        assertSystemAdmin(currentUser);
-
-        if (currentUser.userId().equals(userId)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "SYSTEM_ADMIN cannot delete their own account.");
-        }
-
-        User user = findUserById(userId);
-        String deletedEmail = user.getEmail();
-
-        user.markDeleted();
-        userRepository.save(user);
-        activityService.logUserDeleted(user.getId(), currentUser.userId(), deletedEmail);
     }
 
     public void updateAvatarUrl(String id, String avatarUrl) {
@@ -224,6 +265,7 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
     public boolean isSystemAdmin(AuthenticatedUser currentUser) {
         if (currentUser == null || !StringUtils.hasText(currentUser.roleId())) return false;
+
         return roleRepository.findById(currentUser.roleId())
                 .map(RoleEntity::getName)
                 .filter(Role.SYSTEM_ADMIN::equals)
@@ -246,21 +288,26 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
 
         return userRepository.findByIdInAndDeletedFalse(userIds)
                 .stream()
-                .map(u -> String.format("- ID: %s | Tên: %s | Team: %s", u.getId(), u.getFullName(), u.getTeamId() != null ? u.getTeamId() : "N/A"))
+                .map(user -> String.format(
+                        "- ID: %s | Tên: %s | Team: %s",
+                        user.getId(),
+                        user.getFullName(),
+                        user.getTeamId() != null ? user.getTeamId() : "N/A"
+                ))
                 .toList();
     }
 
     public List<UnassignedUserResponse> getUnassignedUsers() {
         return userRepository.findByTeamIdIsNullAndDeletedFalse()
                 .stream()
-                .map(u -> new UnassignedUserResponse(
-                        u.getId(),
-                        u.getFullName(),
-                        u.getEmail(),
-                        u.getRoleId(),
-                        resolveRoleName(u.getRoleId()),
-                        presenceService.isOnline(u.getId()),
-                        u.getStatus()
+                .map(user -> new UnassignedUserResponse(
+                        user.getId(),
+                        user.getFullName(),
+                        user.getEmail(),
+                        user.getRoleId(),
+                        resolveRoleName(user.getRoleId()),
+                        presenceService.isOnline(user.getId()),
+                        user.getStatus()
                 ))
                 .toList();
     }
@@ -270,26 +317,60 @@ public class UserService implements CrudService<UserResponse, String, CreateUser
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found."));
     }
 
-    private RoleEntity validateRoleExists(String roleId) {
-        return roleRepository.findById(roleId)
-                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Role not found."));
+    private String normalizeEmail(String email) {
+        String normalized = TextUtils.trimToNull(email);
+        if (!StringUtils.hasText(normalized)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Email must not be blank.");
+        }
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     private String resolveAvatarUrl(String avatarUrl) {
         String normalized = TextUtils.trimToNull(avatarUrl);
-        return StringUtils.hasText(normalized) ? normalized : "https://ui-avatars.com/api/?name=User&background=random";
+        return StringUtils.hasText(normalized)
+                ? normalized
+                : "https://ui-avatars.com/api/?name=User&background=random";
     }
 
     private String encodePassword(String rawPassword) {
         String normalized = TextUtils.trimToNull(rawPassword);
-        if (!StringUtils.hasText(normalized)) throw new AppException(ErrorCode.BAD_REQUEST, "Password must not be blank.");
+        if (!StringUtils.hasText(normalized)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Password must not be blank.");
+        }
         return passwordEncoder.encode(normalized);
+    }
+
+    private void validateRoleExistsIfPresent(String roleId) {
+        String normalizedRoleId = TextUtils.trimToNull(roleId);
+        if (normalizedRoleId == null) return;
+
+        if (!roleRepository.existsById(normalizedRoleId)) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Role not found.");
+        }
+    }
+
+    private void assertTargetSystemAdminNotModified(User target, AuthenticatedUser currentUser) {
+        if (target == null || !StringUtils.hasText(target.getRoleId())) return;
+
+        boolean targetIsSystemAdmin = roleRepository.findById(target.getRoleId())
+                .map(RoleEntity::getName)
+                .filter(Role.SYSTEM_ADMIN::equals)
+                .isPresent();
+
+        if (targetIsSystemAdmin && !sameText(target.getId(), currentUser.userId())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "SYSTEM_ADMIN account is protected.");
+        }
     }
 
     private boolean sameText(String first, String second) {
         String f = TextUtils.trimToNull(first);
         String s = TextUtils.trimToNull(second);
         return f == null ? s == null : f.equals(s);
+    }
+
+    private String safeDisplayName(User user) {
+        String fullName = TextUtils.trimToNull(user.getFullName());
+        return fullName != null ? fullName : user.getEmail();
     }
 
     private String resolveRoleName(String roleId) {

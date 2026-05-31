@@ -1,127 +1,82 @@
 import axiosClient from '../../../lib/axiosClient';
 import { AppNotification, NotificationPageResponse } from '../types/notificationTypes';
 
-const unwrapApiData = (res: any) => {
-  if (res?.data !== undefined) return res.data;
+const unwrap = (res: any) => {
+  if (!res) return res;
+  if (res.data?.data !== undefined) return res.data.data;
+  if (res.data !== undefined) return res.data;
   return res;
 };
 
-const normalizeArray = (payload: any): AppNotification[] => {
-  const data = unwrapApiData(payload);
+const normalizePage = (payload: any): NotificationPageResponse => {
+  const data = unwrap(payload);
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.content)) return data.content;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.data?.content)) return data.data.content;
-  if (Array.isArray(payload?.content)) return payload.content;
+  if (Array.isArray(data)) {
+    return {
+      content: data,
+      page: 0,
+      size: data.length,
+      totalElements: data.length,
+      totalPages: 1,
+      hasNext: false,
+    };
+  }
 
-  return [];
-};
-
-const normalizePage = (payload: any, page = 0, size = 20): NotificationPageResponse => {
-  const root = payload || {};
-  const data = unwrapApiData(root);
-  const content = normalizeArray(root);
-  const meta = root?.meta || data?.meta || root?.pageable || {};
+  const content = data?.content || data?.data?.content || data?.notifications || [];
 
   return {
     content,
-    page: meta.page ?? meta.page_number ?? root.page ?? data?.page ?? page,
-    size: meta.size ?? meta.page_size ?? root.size ?? data?.size ?? size,
-    totalElements:
-      meta.total_elements ??
-      meta.totalElements ??
-      root.totalElements ??
-      data?.totalElements ??
-      content.length,
-    totalPages:
-      meta.total_pages ??
-      meta.totalPages ??
-      root.totalPages ??
-      data?.totalPages ??
-      1,
-    hasNext:
-      meta.has_next ??
-      meta.hasNext ??
-      false,
+    page: Number(data?.page ?? data?.number ?? 0),
+    size: Number(data?.size ?? content.length ?? 20),
+    totalElements: Number(data?.totalElements ?? data?.total_elements ?? content.length ?? 0),
+    totalPages: Number(data?.totalPages ?? data?.total_pages ?? 1),
+    hasNext: Boolean(data?.hasNext ?? data?.has_next ?? false),
   };
 };
 
-export const notificationApi = {
-  getNotifications: async (
-    params?: {
-      page?: number;
-      size?: number;
-      unreadOnly?: boolean;
-    }
-  ): Promise<NotificationPageResponse> => {
-    const page = params?.page ?? 0;
-    const size = params?.size ?? 20;
+const normalizeUnreadCount = (payload: any) => {
+  const data = unwrap(payload);
 
-    const res: any = await axiosClient.get('/notifications', { params });
-    return normalizePage(res, page, size);
+  if (typeof data === 'number') return data;
+  if (typeof data === 'string') return Number(data) || 0;
+
+  return Number(data?.count ?? data?.unread_count ?? data?.unreadCount ?? data?.total ?? 0);
+};
+
+const normalizeNotificationList = (payload: any): AppNotification[] => {
+  const data = unwrap(payload);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.notifications)) return data.notifications;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  return [];
+};
+
+export const notificationApi = {
+  getNotifications: async (params?: { page?: number; size?: number; unreadOnly?: boolean }) => {
+    const res = await axiosClient.get('/notifications', { params });
+    return normalizePage(res);
   },
 
-  getUnreadCount: async (): Promise<number> => {
-    const res: any = await axiosClient.get('/notifications/unread-count');
-    const data = unwrapApiData(res);
-    return Number(data ?? 0);
+  getUnreadCount: async () => {
+    const res = await axiosClient.get('/notifications/unread-count');
+    return normalizeUnreadCount(res);
+  },
+
+  longPolling: async () => {
+    const res = await axiosClient.get('/notifications/long-polling');
+    return normalizeNotificationList(res);
   },
 
   markAsRead: async (id: string): Promise<AppNotification | null> => {
-    const res: any = await axiosClient.patch(`/notifications/${id}/read`);
-    return unwrapApiData(res) || null;
+    const res = await axiosClient.patch(`/notifications/${id}/read`);
+    const data = unwrap(res);
+    return data || null;
   },
 
-  markAllAsRead: async (): Promise<void> => {
-    await axiosClient.patch('/notifications/read-all');
-  },
-
-  longPolling: async (): Promise<AppNotification[]> => {
-    const res: any = await axiosClient.get('/notifications/long-polling');
-    return normalizeArray(res);
-  },
-
-  requestDeadlineExtension: async (
-    taskId: string,
-    payload: {
-      requestedDueDate?: string;
-      requested_due_date?: string;
-      newDueDate?: string;
-      new_due_date?: string;
-      reason: string;
-    }
-  ) => {
-    const finalPayload = {
-      requested_due_date:
-        payload.requested_due_date ||
-        payload.requestedDueDate ||
-        payload.new_due_date ||
-        payload.newDueDate,
-      reason: payload.reason,
-    };
-
-    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions`, finalPayload);
-    return unwrapApiData(res);
-  },
-
-  approveDeadlineExtension: async (taskId: string) => {
-    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/approve`);
-    return unwrapApiData(res);
-  },
-
-  rejectDeadlineExtension: async (
-    taskId: string,
-    payload?: {
-      reason?: string;
-      rejectReason?: string;
-      reject_reason?: string;
-    }
-  ) => {
-    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/reject`, {
-      reject_reason: payload?.reject_reason || payload?.rejectReason || payload?.reason || '',
-    });
-
-    return unwrapApiData(res);
+  markAllAsRead: async () => {
+    const res = await axiosClient.patch('/notifications/read-all');
+    return unwrap(res);
   },
 };

@@ -9,14 +9,13 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
-
-import java.io.IOException;
 
 @Component
 @Order(2)
@@ -31,16 +30,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod()) || CorsUtils.isPreFlightRequest(request)) return true;
-        String path = request.getServletPath();
-        return "/health-check".equals(path)
-                || "/auth/login".equals(path)
-                || "/auth/forgot-password".equals(path)
-                || "/auth/verify-reset-token".equals(path)
-                || "/auth/reset-password".equals(path)
-                || "/error".equals(path)
-                || path.startsWith("/api/v1/ws-fluxboard")
-                || path.startsWith("/ws-fluxboard");
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
+        if (CorsUtils.isPreFlightRequest(request)) return true;
+
+        String servletPath = request.getServletPath();
+        return "/health-check".equals(servletPath)
+                || "/auth/login".equals(servletPath)
+                || "/auth/forgot-password".equals(servletPath)
+                || "/auth/verify-reset-token".equals(servletPath)
+                || "/auth/reset-password".equals(servletPath)
+                || "/error".equals(servletPath)
+                || servletPath.startsWith("/api/v1/ws-fluxboard")
+                || servletPath.startsWith("/ws-fluxboard");
     }
 
     @Override
@@ -54,11 +55,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = authorization.substring(7).trim();
             if (!StringUtils.hasText(token)) throw new AppException(ErrorCode.UNAUTHORIZED, "Access token is required.");
 
-            AuthenticatedUser user = jwtTokenService.parseAccessToken(token);
-            request.setAttribute(AuthRequestContext.AUTH_USER_ATTR, user);
-            request.setAttribute("userId", user.userId());
-            request.setAttribute("roleId", user.roleId());
-            request.setAttribute("authorities", user.authorities());
+            AuthenticatedUser authenticatedUser = jwtTokenService.parseAccessToken(token);
+            request.setAttribute(AuthRequestContext.AUTH_USER_ATTR, authenticatedUser);
+            request.setAttribute("userId", authenticatedUser.userId());
+            request.setAttribute("roleId", authenticatedUser.roleId());
+            request.setAttribute("authorities", authenticatedUser.authorities());
 
             filterChain.doFilter(request, response);
         } catch (Exception ex) {

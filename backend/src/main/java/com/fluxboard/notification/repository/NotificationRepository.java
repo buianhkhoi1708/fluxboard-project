@@ -11,20 +11,21 @@ import java.util.List;
 import java.util.Optional;
 
 public interface NotificationRepository extends MongoRepository<NotificationEntity, String> {
-
     Page<NotificationEntity> findByRecipientIdOrderByCreatedAtDesc(String recipientId, Pageable pageable);
 
-    Page<NotificationEntity> findByRecipientIdAndIsReadOrderByCreatedAtDesc(
-            String recipientId,
-            boolean isRead,
-            Pageable pageable
-    );
+    List<NotificationEntity> findByRecipientIdOrderByCreatedAtDesc(String recipientId);
+
+    Page<NotificationEntity> findByRecipientIdAndIsReadOrderByCreatedAtDesc(String recipientId, boolean isRead, Pageable pageable);
+
+    List<NotificationEntity> findByRecipientIdAndIsReadOrderByCreatedAtDesc(String recipientId, boolean isRead);
 
     long countByRecipientIdAndIsReadFalse(String recipientId);
 
     List<NotificationEntity> findByRecipientIdAndIsReadFalse(String recipientId);
 
     Optional<NotificationEntity> findByIdAndRecipientId(String id, String recipientId);
+
+    Optional<NotificationEntity> findByDedupeKey(String dedupeKey);
 
     Optional<NotificationEntity> findByRecipientIdAndReferenceIdAndTypeAndStatus(
             String recipientId,

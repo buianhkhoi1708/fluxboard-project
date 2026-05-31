@@ -78,7 +78,8 @@ public class UserController {
     }
 
     @PostMapping("/me/presence/heartbeat")
-    public ResponseEntity<ApiResponse<Void>> heartbeat(@RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+    public ResponseEntity<ApiResponse<Void>> heartbeat(
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
         userService.heartbeat(authUser.userId());
         return ResponseFactory.ok("Presence heartbeat accepted.");
     }
@@ -118,7 +119,7 @@ public class UserController {
             @RequestParam String fileName,
             @RequestParam String contentType,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
-        String targetUserId = resolveAndVerifyUserId(userId, authUser);
+        resolveAndVerifyUserId(userId, authUser);
 
         if (contentType == null || !contentType.startsWith("image/")) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Only valid image formats are allowed!");
@@ -134,7 +135,11 @@ public class UserController {
             @RequestBody Map<String, String> requestBody,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
         String targetUserId = resolveAndVerifyUserId(userId, authUser);
-        String avatarUrl = requestBody.get("avatarUrl");
+        String avatarUrl = requestBody.get("avatar_url");
+
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            avatarUrl = requestBody.get("avatarUrl");
+        }
 
         if (avatarUrl == null || avatarUrl.isBlank()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Invalid image URL!");

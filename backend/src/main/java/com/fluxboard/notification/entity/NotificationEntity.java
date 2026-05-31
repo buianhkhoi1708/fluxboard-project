@@ -11,7 +11,6 @@ import java.util.Map;
 
 @Document(collection = "notifications")
 public class NotificationEntity extends BaseDocument {
-
     public enum NotificationStatus {
         PENDING,
         SENT
@@ -42,21 +41,9 @@ public class NotificationEntity extends BaseDocument {
     @Field("reference_type")
     private String referenceType = "TASK";
 
-    /**
-     * URL nội bộ để FE click notification là đi thẳng tới đúng màn hình.
-     * Ví dụ: /board/{boardId}?taskId={taskId}
-     */
     @Field("action_url")
     private String actionUrl;
 
-    /**
-     * Metadata dùng cho FE dựng popup, điều hướng task, popup dời deadline.
-     *
-     * Với EXTENSION_REQUEST cần có:
-     * task_id, board_id, task_title,
-     * requester_id, requester_name,
-     * current_due_date, requested_due_date, reason
-     */
     @Field("metadata")
     private Map<String, Object> metadata = new LinkedHashMap<>();
 
@@ -74,6 +61,10 @@ public class NotificationEntity extends BaseDocument {
     @Indexed
     @Field("send_at")
     private Instant sendAt;
+
+    @Indexed(unique = true, sparse = true)
+    @Field("dedupe_key")
+    private String dedupeKey;
 
     public String getRecipientId() {
         return recipientId;
@@ -140,9 +131,7 @@ public class NotificationEntity extends BaseDocument {
     }
 
     public Map<String, Object> getMetadata() {
-        if (metadata == null) {
-            metadata = new LinkedHashMap<>();
-        }
+        if (metadata == null) metadata = new LinkedHashMap<>();
         return metadata;
     }
 
@@ -180,5 +169,13 @@ public class NotificationEntity extends BaseDocument {
 
     public void setSendAt(Instant sendAt) {
         this.sendAt = sendAt;
+    }
+
+    public String getDedupeKey() {
+        return dedupeKey;
+    }
+
+    public void setDedupeKey(String dedupeKey) {
+        this.dedupeKey = dedupeKey;
     }
 }

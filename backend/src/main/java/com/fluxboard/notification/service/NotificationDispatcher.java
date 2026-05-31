@@ -13,6 +13,7 @@ import com.fluxboard.user.repository.UserRepository;
 import com.fluxboard.user.service.UserNotificationPrefService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
@@ -22,13 +23,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -69,9 +64,11 @@ public class NotificationDispatcher {
     private final TaskScheduler taskScheduler;
 
     private final Map<String, ScheduledFuture<?>> pendingDeadlineUpdateEmails = new ConcurrentHashMap<>();
-
     private final Map<String, CopyOnWriteArrayList<CompletableFuture<List<NotificationEntity>>>> realtimeWaiters =
             new ConcurrentHashMap<>();
+
+    private record DispatchOutcome(NotificationEntity notification, boolean created) {
+    }
 
     public CompletableFuture<List<NotificationEntity>> waitForRealtimeNotifications(String userId, long timeoutMs) {
         CompletableFuture<List<NotificationEntity>> future = new CompletableFuture<>();
@@ -81,9 +78,7 @@ public class NotificationDispatcher {
             return future;
         }
 
-        realtimeWaiters
-                .computeIfAbsent(userId, ignored -> new CopyOnWriteArrayList<>())
-                .add(future);
+        realtimeWaiters.computeIfAbsent(userId, ignored -> new CopyOnWriteArrayList<>()).add(future);
 
         taskScheduler.schedule(() -> {
             if (!future.isDone()) future.complete(List.of());
@@ -91,7 +86,6 @@ public class NotificationDispatcher {
 
         future.whenComplete((result, error) -> {
             CopyOnWriteArrayList<CompletableFuture<List<NotificationEntity>>> waiters = realtimeWaiters.get(userId);
-
             if (waiters != null) {
                 waiters.remove(future);
                 if (waiters.isEmpty()) realtimeWaiters.remove(userId);
@@ -111,35 +105,15 @@ public class NotificationDispatcher {
         Map<String, Object> metadata = buildTaskMetadata(task);
 
         for (String recipientId : resolveTaskAssignees(task)) {
-            dispatch(
-                    recipientId,
-                    actorId,
-                    "Được giao công việc mới",
-                    "Bạn vừa được phân công vào task: " + safeTaskTitle(task),
-                    null,
-                    "TASK_CREATE",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(recipientId, actorId, "Được giao công việc mới",
+                    "Bạn vừa được phân công vào công việc: " + safeTaskTitle(task),
+                    null, "TASK_CREATE", task.getId(), "TASK", actionUrl, metadata, true);
         }
 
         if (actorId != null && !actorId.isBlank()) {
-            dispatch(
-                    actorId,
-                    actorId,
-                    "Task Created Successfully",
-                    "Bạn đã tạo task: " + safeTaskTitle(task),
-                    null,
-                    "TASK_CREATE_BY_YOU",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(actorId, actorId, "Bạn đã tạo công việc",
+                    "Bạn đã tạo công việc: " + safeTaskTitle(task),
+                    null, "TASK_CREATE_BY_YOU", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
@@ -154,35 +128,15 @@ public class NotificationDispatcher {
             Map<String, Object> metadata = buildTaskMetadata(task);
 
             for (String recipientId : resolveTaskAssignees(task)) {
-                dispatch(
-                        recipientId,
-                        actorId,
-                        "Task Updated",
-                        "Task details have been updated: " + safeTaskTitle(task),
-                        null,
-                        "TASK_UPDATE",
-                        task.getId(),
-                        "TASK",
-                        actionUrl,
-                        metadata,
-                        true
-                );
+                dispatch(recipientId, actorId, "Công việc đã được cập nhật",
+                        "Công việc \"" + safeTaskTitle(task) + "\" vừa được cập nhật.",
+                        null, "TASK_UPDATE", task.getId(), "TASK", actionUrl, metadata, true);
             }
 
             if (actorId != null && !actorId.isBlank()) {
-                dispatch(
-                        actorId,
-                        actorId,
-                        "Task Updated by You",
-                        "Bạn đã cập nhật task: " + safeTaskTitle(task),
-                        null,
-                        "TASK_UPDATE_BY_YOU",
-                        task.getId(),
-                        "TASK",
-                        actionUrl,
-                        metadata,
-                        true
-                );
+                dispatch(actorId, actorId, "Bạn đã cập nhật công việc",
+                        "Bạn đã cập nhật công việc: " + safeTaskTitle(task),
+                        null, "TASK_UPDATE_BY_YOU", task.getId(), "TASK", actionUrl, metadata, true);
             }
         }, TASK_UPDATE_MOVE_DEBOUNCE_MS);
     }
@@ -195,46 +149,26 @@ public class NotificationDispatcher {
             if (task == null) return;
 
             String actionUrl = getTaskActionUrl(task);
-            Map<String, Object> metadata = buildTaskMetadata(task);
-            putIfPresent(metadata, "destination_column_id", destinationColumnId);
-            putIfPresent(metadata, "destinationColumnId", destinationColumnId);
-            putIfPresent(metadata, "destination_column_name", destinationColumnName);
-            putIfPresent(metadata, "destinationColumnName", destinationColumnName);
-
             String stageName = destinationColumnName == null || destinationColumnName.isBlank()
                     ? "trạng thái mới"
                     : destinationColumnName;
 
+            Map<String, Object> metadata = buildTaskMetadata(task);
+            putIfPresent(metadata, "destination_column_id", destinationColumnId);
+            putIfPresent(metadata, "destinationColumnId", destinationColumnId);
+            putIfPresent(metadata, "destination_column_name", stageName);
+            putIfPresent(metadata, "destinationColumnName", stageName);
+
             for (String recipientId : resolveTaskAssignees(task)) {
-                dispatch(
-                        recipientId,
-                        actorId,
-                        "Task Moved",
-                        "Task \"" + safeTaskTitle(task) + "\" was moved to " + stageName,
-                        null,
-                        "TASK_MOVE",
-                        task.getId(),
-                        "TASK",
-                        actionUrl,
-                        metadata,
-                        true
-                );
+                dispatch(recipientId, actorId, "Công việc đã được di chuyển",
+                        "Công việc \"" + safeTaskTitle(task) + "\" đã được chuyển sang " + stageName,
+                        null, "TASK_MOVE", task.getId(), "TASK", actionUrl, metadata, true);
             }
 
             if (actorId != null && !actorId.isBlank()) {
-                dispatch(
-                        actorId,
-                        actorId,
-                        "Task Moved by You",
-                        "Bạn đã chuyển task \"" + safeTaskTitle(task) + "\" sang " + stageName,
-                        null,
-                        "TASK_MOVE_BY_YOU",
-                        task.getId(),
-                        "TASK",
-                        actionUrl,
-                        metadata,
-                        true
-                );
+                dispatch(actorId, actorId, "Bạn đã di chuyển công việc",
+                        "Bạn đã chuyển công việc \"" + safeTaskTitle(task) + "\" sang " + stageName,
+                        null, "TASK_MOVE_BY_YOU", task.getId(), "TASK", actionUrl, metadata, true);
             }
         }, TASK_UPDATE_MOVE_DEBOUNCE_MS);
     }
@@ -260,21 +194,18 @@ public class NotificationDispatcher {
         for (String recipientId : resolveTaskParticipants(task, actorId)) {
             boolean isActor = idsEqual(recipientId, actorId);
 
-            dispatch(
-                    recipientId,
-                    actorId,
-                    isActor ? "Bạn đã hoàn thành task" : "Task đã hoàn thành",
+            dispatch(recipientId, actorId,
+                    isActor ? "Bạn đã hoàn thành công việc" : "Công việc đã hoàn thành",
                     isActor
-                            ? "Bạn đã đánh dấu hoàn thành task: " + safeTaskTitle(task)
-                            : actorName + " đã đánh dấu hoàn thành task: " + safeTaskTitle(task),
+                            ? "Bạn đã đánh dấu hoàn thành công việc: " + safeTaskTitle(task)
+                            : actorName + " đã đánh dấu hoàn thành công việc: " + safeTaskTitle(task),
                     null,
                     isActor ? "TASK_COMPLETED_BY_YOU" : "TASK_COMPLETED",
                     task.getId(),
                     "TASK",
                     actionUrl,
                     metadata,
-                    true
-            );
+                    true);
         }
     }
 
@@ -288,19 +219,9 @@ public class NotificationDispatcher {
         putIfPresent(metadata, "action_url", actionUrl);
         putIfPresent(metadata, "actionUrl", actionUrl);
 
-        dispatch(
-                recipientId,
-                null,
-                "Cập nhật công việc",
-                "Thẻ '" + taskName + "' đã được cập nhật vị trí hoặc trạng thái trên bảng.",
-                null,
-                "TASK_MOVE",
-                taskId,
-                "TASK",
-                actionUrl,
-                metadata,
-                true
-        );
+        dispatch(recipientId, null, "Cập nhật công việc",
+                "Công việc \"" + taskName + "\" đã được cập nhật vị trí hoặc trạng thái trên bảng.",
+                null, "TASK_MOVE", taskId, "TASK", actionUrl, metadata, true);
     }
 
     public void notifyTaskAssigned(String userId, TaskEntity task) {
@@ -309,19 +230,10 @@ public class NotificationDispatcher {
         String actionUrl = getTaskActionUrl(task);
         Map<String, Object> metadata = buildTaskMetadata(task);
 
-        dispatch(
-                userId,
-                readString(task, "getAuthorUserId", "getCreatedBy", "getCreatedById"),
+        dispatch(userId, readString(task, "getAuthorUserId", "getCreatedBy", "getCreatedById"),
                 "Giao việc mới",
-                "Bạn đã được gán vào công việc mới: '" + safeTaskTitle(task) + "'.",
-                null,
-                "TASK_CREATE",
-                task.getId(),
-                "TASK",
-                actionUrl,
-                metadata,
-                true
-        );
+                "Bạn đã được gán vào công việc mới: \"" + safeTaskTitle(task) + "\".",
+                null, "TASK_CREATE", task.getId(), "TASK", actionUrl, metadata, true);
     }
 
     public void notifyTaskDeadline(String taskId) {
@@ -342,19 +254,9 @@ public class NotificationDispatcher {
         metadata.put("isOverdue", false);
 
         for (String userId : resolveTaskAssignees(task)) {
-            dispatch(
-                    userId,
-                    null,
-                    "Công việc sắp đến hạn",
+            dispatch(userId, null, "Công việc sắp đến hạn",
                     "Deadline của công việc \"" + safeTaskTitle(task) + "\" còn dưới 24 giờ.",
-                    null,
-                    "TASK_DEADLINE_REMINDER",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+                    null, "TASK_DEADLINE_REMINDER", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
@@ -372,19 +274,9 @@ public class NotificationDispatcher {
         metadata.put("isOverdue", true);
 
         for (String userId : resolveTaskAssignees(task)) {
-            dispatch(
-                    userId,
-                    null,
-                    "Task đã quá hạn",
-                    "Task \"" + safeTaskTitle(task) + "\" đã quá hạn!",
-                    null,
-                    "TASK_OVERDUE",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(userId, null, "Công việc đã quá hạn",
+                    "Công việc \"" + safeTaskTitle(task) + "\" đã quá hạn.",
+                    null, "TASK_OVERDUE", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
@@ -395,13 +287,10 @@ public class NotificationDispatcher {
             existingTimer.cancel(false);
         }
 
-        ScheduledFuture<?> newTimer = taskScheduler.schedule(
-                () -> {
-                    pendingDeadlineUpdateEmails.remove(taskId);
-                    executeDeadlineUpdatedNotification(taskId);
-                },
-                Instant.now().plusSeconds(600)
-        );
+        ScheduledFuture<?> newTimer = taskScheduler.schedule(() -> {
+            pendingDeadlineUpdateEmails.remove(taskId);
+            executeDeadlineUpdatedNotification(taskId);
+        }, Instant.now().plusSeconds(600));
 
         pendingDeadlineUpdateEmails.put(taskId, newTimer);
     }
@@ -414,19 +303,9 @@ public class NotificationDispatcher {
         Map<String, Object> metadata = buildTaskMetadata(task);
 
         for (String userId : resolveTaskAssignees(task)) {
-            dispatch(
-                    userId,
-                    null,
-                    "Thay đổi cấu hình thời gian",
-                    "Cấu hình thời gian công việc '" + safeTaskTitle(task) + "' vừa được cập nhật.",
-                    null,
-                    "DEADLINE_UPDATED",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(userId, null, "Deadline đã được cập nhật",
+                    "Deadline của công việc \"" + safeTaskTitle(task) + "\" vừa được cập nhật.",
+                    null, "DEADLINE_UPDATED", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
@@ -464,50 +343,22 @@ public class NotificationDispatcher {
         metadata.put("can_review", true);
         metadata.put("canReview", true);
 
-        dispatch(
-                managerId,
-                requesterId,
-                "Yêu cầu dời deadline",
-                (requesterName == null ? "Nhân viên" : requesterName)
-                        + " xin dời deadline task: "
-                        + safeTaskTitle(task),
-                null,
-                "EXTENSION_REQUEST",
-                task.getId(),
-                "TASK",
-                actionUrl,
-                metadata,
-                true
-        );
+        dispatch(managerId, requesterId, "Yêu cầu dời deadline",
+                (requesterName == null ? "Nhân viên" : requesterName) + " xin dời deadline công việc: " + safeTaskTitle(task),
+                null, "EXTENSION_REQUEST", task.getId(), "TASK", actionUrl, metadata, true);
 
         if (requesterId != null && !requesterId.isBlank()) {
             Map<String, Object> requesterMetadata = new LinkedHashMap<>(metadata);
             requesterMetadata.put("can_review", false);
             requesterMetadata.put("canReview", false);
 
-            dispatch(
-                    requesterId,
-                    requesterId,
-                    "Đã gửi đơn xin dời hạn",
-                    "Bạn đã gửi đơn xin dời hạn task: " + safeTaskTitle(task),
-                    null,
-                    "EXTENSION_SUBMITTED",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    requesterMetadata,
-                    true
-            );
+            dispatch(requesterId, requesterId, "Đã gửi yêu cầu dời deadline",
+                    "Bạn đã gửi yêu cầu dời deadline công việc: " + safeTaskTitle(task),
+                    null, "EXTENSION_SUBMITTED", task.getId(), "TASK", actionUrl, requesterMetadata, true);
         }
     }
 
-    public void notifyExtensionRequested(
-            String managerId,
-            String requesterName,
-            String taskTitle,
-            String requestedDueDate,
-            String reason
-    ) {
+    public void notifyExtensionRequested(String managerId, String requesterName, String taskTitle, String requestedDueDate, String reason) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("task_title", taskTitle);
         metadata.put("taskTitle", taskTitle);
@@ -521,29 +372,12 @@ public class NotificationDispatcher {
         metadata.put("can_review", true);
         metadata.put("canReview", true);
 
-        dispatch(
-                managerId,
-                null,
-                "Yêu cầu dời deadline",
-                requesterName + " xin dời deadline task: " + taskTitle,
-                null,
-                "EXTENSION_REQUEST",
-                null,
-                "TASK",
-                null,
-                metadata,
-                true
-        );
+        dispatch(managerId, null, "Yêu cầu dời deadline",
+                requesterName + " xin dời deadline công việc: " + taskTitle,
+                null, "EXTENSION_REQUEST", null, "TASK", null, metadata, true);
     }
 
-    public void notifyExtensionApproved(
-            String userId,
-            String managerId,
-            TaskEntity task,
-            Instant originalDueDate,
-            Instant newDueDate,
-            String reason
-    ) {
+    public void notifyExtensionApproved(String userId, String managerId, TaskEntity task, Instant originalDueDate, Instant newDueDate, String reason) {
         if (userId == null || userId.isBlank() || task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
@@ -563,34 +397,14 @@ public class NotificationDispatcher {
         metadata.put("can_review", false);
         metadata.put("canReview", false);
 
-        dispatch(
-                userId,
-                managerId,
-                "Dời deadline thành công",
-                "Yêu cầu dời deadline task \"" + safeTaskTitle(task) + "\" đã được chấp nhận.",
-                null,
-                "EXTENSION_APPROVED",
-                task.getId(),
-                "TASK",
-                actionUrl,
-                metadata,
-                true
-        );
+        dispatch(userId, managerId, "Yêu cầu dời deadline đã được duyệt",
+                "Yêu cầu dời deadline công việc \"" + safeTaskTitle(task) + "\" đã được chấp nhận.",
+                null, "EXTENSION_APPROVED", task.getId(), "TASK", actionUrl, metadata, true);
 
         if (managerId != null && !managerId.isBlank()) {
-            dispatch(
-                    managerId,
-                    managerId,
-                    "Bạn đã chấp nhận dời deadline",
-                    "Bạn đã chấp nhận dời deadline task: " + safeTaskTitle(task),
-                    null,
-                    "EXTENSION_APPROVED_BY_YOU",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(managerId, managerId, "Bạn đã duyệt yêu cầu dời deadline",
+                    "Bạn đã chấp nhận dời deadline công việc: " + safeTaskTitle(task),
+                    null, "EXTENSION_APPROVED_BY_YOU", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
@@ -603,19 +417,9 @@ public class NotificationDispatcher {
         metadata.put("extension_status", "APPROVED");
         metadata.put("extensionStatus", "APPROVED");
 
-        dispatch(
-                userId,
-                null,
-                "Yêu cầu gia hạn được chấp nhận",
-                "Yêu cầu xin lùi hạn chót công việc '" + taskTitle + "' đã được phê duyệt đến ngày " + newDueDate,
-                null,
-                "EXTENSION_APPROVED",
-                null,
-                "TASK",
-                null,
-                metadata,
-                true
-        );
+        dispatch(userId, null, "Yêu cầu dời deadline đã được duyệt",
+                "Yêu cầu dời deadline công việc \"" + taskTitle + "\" đã được phê duyệt đến ngày " + newDueDate,
+                null, "EXTENSION_APPROVED", null, "TASK", null, metadata, true);
     }
 
     public void notifyExtensionRejected(
@@ -646,43 +450,18 @@ public class NotificationDispatcher {
         metadata.put("can_review", false);
         metadata.put("canReview", false);
 
-        dispatch(
-                userId,
-                managerId,
-                "Yêu cầu dời deadline bị từ chối",
-                "Yêu cầu dời deadline task \"" + safeTaskTitle(task) + "\" đã bị từ chối.",
-                null,
-                "EXTENSION_REJECTED",
-                task.getId(),
-                "TASK",
-                actionUrl,
-                metadata,
-                true
-        );
+        dispatch(userId, managerId, "Yêu cầu dời deadline bị từ chối",
+                "Yêu cầu dời deadline công việc \"" + safeTaskTitle(task) + "\" đã bị từ chối.",
+                null, "EXTENSION_REJECTED", task.getId(), "TASK", actionUrl, metadata, true);
 
         if (managerId != null && !managerId.isBlank() && !"SYSTEM_AUTO_REJECT".equals(managerId)) {
-            dispatch(
-                    managerId,
-                    managerId,
-                    "Bạn đã từ chối dời deadline",
-                    "Bạn đã từ chối yêu cầu dời deadline task: " + safeTaskTitle(task),
-                    null,
-                    "EXTENSION_REJECTED_BY_YOU",
-                    task.getId(),
-                    "TASK",
-                    actionUrl,
-                    metadata,
-                    true
-            );
+            dispatch(managerId, managerId, "Bạn đã từ chối dời deadline",
+                    "Bạn đã từ chối yêu cầu dời deadline công việc: " + safeTaskTitle(task),
+                    null, "EXTENSION_REJECTED_BY_YOU", task.getId(), "TASK", actionUrl, metadata, true);
         }
     }
 
-    public void notifyExtensionRejected(
-            String userId,
-            String taskTitle,
-            String currentDueDate,
-            String managerReason
-    ) {
+    public void notifyExtensionRejected(String userId, String taskTitle, String currentDueDate, String managerReason) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("task_title", taskTitle);
         metadata.put("taskTitle", taskTitle);
@@ -693,19 +472,9 @@ public class NotificationDispatcher {
         metadata.put("extension_status", "REJECTED");
         metadata.put("extensionStatus", "REJECTED");
 
-        dispatch(
-                userId,
-                null,
-                "Yêu cầu gia hạn bị từ chối",
-                "Yêu cầu lùi hạn công việc '" + taskTitle + "' đã bị từ chối. Lý do: " + managerReason,
-                null,
-                "EXTENSION_REJECTED",
-                null,
-                "TASK",
-                null,
-                metadata,
-                true
-        );
+        dispatch(userId, null, "Yêu cầu dời deadline bị từ chối",
+                "Yêu cầu dời deadline công việc \"" + taskTitle + "\" đã bị từ chối. Lý do: " + managerReason,
+                null, "EXTENSION_REJECTED", null, "TASK", null, metadata, true);
     }
 
     private NotificationEntity dispatch(
@@ -731,7 +500,7 @@ public class NotificationDispatcher {
             return null;
         }
 
-        NotificationEntity notification = upsertPendingOrCreate(
+        DispatchOutcome outcome = createOrFindNotification(
                 recipientId,
                 senderId,
                 title,
@@ -744,6 +513,9 @@ public class NotificationDispatcher {
                 metadata
         );
 
+        NotificationEntity notification = outcome.notification();
+        if (!outcome.created()) return notification;
+
         boolean inAppEnabled = readBooleanPreference(
                 preferences,
                 true,
@@ -753,9 +525,7 @@ public class NotificationDispatcher {
                 "pushNotificationsEnabled"
         );
 
-        if (emitRealtime && inAppEnabled) {
-            emitRealtimeNotification(recipientId, notification);
-        }
+        if (emitRealtime && inAppEnabled) emitRealtimeNotification(recipientId, notification);
 
         boolean emailEnabled = readBooleanPreference(
                 preferences,
@@ -772,7 +542,7 @@ public class NotificationDispatcher {
         return notification;
     }
 
-    private NotificationEntity upsertPendingOrCreate(
+    private DispatchOutcome createOrFindNotification(
             String recipientId,
             String senderId,
             String title,
@@ -784,16 +554,15 @@ public class NotificationDispatcher {
             String actionUrl,
             Map<String, Object> metadata
     ) {
-        Optional<NotificationEntity> existing = referenceId == null || referenceId.isBlank()
-                ? Optional.empty()
-                : notificationRepository.findByRecipientIdAndReferenceIdAndTypeAndStatus(
-                recipientId,
-                referenceId,
-                type,
-                NotificationStatus.PENDING
-        );
+        Map<String, Object> safeMetadata = metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata);
+        String dedupeKey = buildDedupeKey(recipientId, senderId, type, referenceId, actionUrl, safeMetadata);
 
-        NotificationEntity notification = existing.orElseGet(NotificationEntity::new);
+        if (dedupeKey != null) {
+            Optional<NotificationEntity> existing = notificationRepository.findByDedupeKey(dedupeKey);
+            if (existing.isPresent()) return new DispatchOutcome(existing.get(), false);
+        }
+
+        NotificationEntity notification = new NotificationEntity();
         notification.setRecipientId(recipientId);
         notification.setSenderId(senderId);
         notification.setTitle(title);
@@ -802,13 +571,68 @@ public class NotificationDispatcher {
         notification.setReferenceId(referenceId);
         notification.setReferenceType(referenceType == null ? "TASK" : referenceType);
         notification.setActionUrl(actionUrl);
-        notification.setMetadata(metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata));
+        notification.setMetadata(safeMetadata);
         notification.setEmailHtml(emailHtml);
         notification.setRead(false);
         notification.setStatus(NotificationStatus.SENT);
         notification.setSendAt(null);
+        notification.setDedupeKey(dedupeKey);
 
-        return notificationRepository.save(notification);
+        if (dedupeKey != null) {
+            safeMetadata.put("dedupe_key", dedupeKey);
+            safeMetadata.put("dedupeKey", dedupeKey);
+            notification.setMetadata(safeMetadata);
+        }
+
+        try {
+            return new DispatchOutcome(notificationRepository.save(notification), true);
+        } catch (DuplicateKeyException duplicate) {
+            if (dedupeKey != null) {
+                return notificationRepository.findByDedupeKey(dedupeKey)
+                        .map(existing -> new DispatchOutcome(existing, false))
+                        .orElseThrow(() -> duplicate);
+            }
+
+            throw duplicate;
+        }
+    }
+
+    private String buildDedupeKey(
+            String recipientId,
+            String senderId,
+            String type,
+            String referenceId,
+            String actionUrl,
+            Map<String, Object> metadata
+    ) {
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+
+        boolean shouldDedupe = normalizedType.startsWith("EXTENSION_")
+                || normalizedType.contains("DEADLINE")
+                || normalizedType.contains("OVERDUE");
+
+        if (!shouldDedupe) return null;
+
+        String taskId = firstNonBlank(
+                referenceId,
+                readMetadata(metadata, "task_id", "taskId"),
+                parseTaskIdFromActionUrl(actionUrl)
+        );
+
+        String requesterId = readMetadata(metadata, "requester_id", "requesterId");
+        String requestedDueDate = readMetadata(metadata, "requested_due_date", "requestedDueDate");
+        String approvedDueDate = readMetadata(metadata, "approved_due_date", "approvedDueDate");
+        String currentDueDate = readMetadata(metadata, "current_due_date", "currentDueDate", "due_date", "dueDate");
+        String reviewKey = firstNonBlank(approvedDueDate, requestedDueDate, currentDueDate);
+
+        return String.join("|",
+                safe(recipientId),
+                normalizedType,
+                safe(taskId),
+                safe(senderId),
+                safe(requesterId),
+                safe(reviewKey)
+        );
     }
 
     private void emitRealtimeNotification(String recipientId, NotificationEntity notification) {
@@ -823,9 +647,7 @@ public class NotificationDispatcher {
             log.warn("Cannot emit websocket notification to user {}: {}", recipientId, error.getMessage());
         }
 
-        CopyOnWriteArrayList<CompletableFuture<List<NotificationEntity>>> waiters =
-                realtimeWaiters.remove(recipientId);
-
+        CopyOnWriteArrayList<CompletableFuture<List<NotificationEntity>>> waiters = realtimeWaiters.remove(recipientId);
         if (waiters != null) {
             for (CompletableFuture<List<NotificationEntity>> waiter : waiters) {
                 if (!waiter.isDone()) waiter.complete(List.of(notification));
@@ -859,6 +681,8 @@ public class NotificationDispatcher {
         payload.put("status", notification.getStatus() == null ? null : notification.getStatus().name());
         payload.put("isRead", notification.isRead());
         payload.put("is_read", notification.isRead());
+        payload.put("dedupeKey", notification.getDedupeKey());
+        payload.put("dedupe_key", notification.getDedupeKey());
         return payload;
     }
 
@@ -869,7 +693,6 @@ public class NotificationDispatcher {
     private void sendEmailSafely(String recipientId, String title, String message, String emailHtml) {
         try {
             User user = userRepository.findById(recipientId).orElse(null);
-
             if (user == null || user.getEmail() == null || user.getEmail().isBlank()) return;
 
             String subject = "[Fluxboard] " + title;
@@ -921,8 +744,8 @@ public class NotificationDispatcher {
 
     private Set<String> resolveTaskAssignees(TaskEntity task) {
         Set<String> recipients = new LinkedHashSet<>();
-
         Object assignees = readObject(task, "getAssigneesUserId", "getAssigneeUserIds", "getAssignees");
+
         if (assignees instanceof Iterable<?> iterable) {
             for (Object item : iterable) {
                 String id = toIdString(item);
@@ -956,7 +779,6 @@ public class NotificationDispatcher {
         Instant dueDate = task == null ? null : readInstant(task, "getDueDate", "getDueAt");
 
         putTaskNavigationMetadata(metadata, taskId, boardId, title);
-
         metadata.put("task_title", title);
         metadata.put("taskTitle", title);
 
@@ -969,9 +791,7 @@ public class NotificationDispatcher {
             putIfPresent(metadata, "actionUrl", actionUrl);
         }
 
-        if (priority != null) {
-            metadata.put("priority", String.valueOf(priority));
-        }
+        if (priority != null) metadata.put("priority", String.valueOf(priority));
 
         if (dueDate != null) {
             metadata.put("due_date", dueDate);
@@ -1024,10 +844,7 @@ public class NotificationDispatcher {
     }
 
     private String safeTaskTitle(TaskEntity task) {
-        if (task == null || task.getTitle() == null || task.getTitle().isBlank()) {
-            return "Không rõ task";
-        }
-
+        if (task == null || task.getTitle() == null || task.getTitle().isBlank()) return "Không rõ công việc";
         return task.getTitle();
     }
 
@@ -1036,7 +853,6 @@ public class NotificationDispatcher {
 
         try {
             User user = userRepository.findById(userId).orElse(null);
-
             if (user == null) return fallback;
             if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
             if (user.getEmail() != null && !user.getEmail().isBlank()) return user.getEmail();
@@ -1047,8 +863,7 @@ public class NotificationDispatcher {
     }
 
     private boolean idsEqual(String a, String b) {
-        if (a == null || b == null) return false;
-        return a.equals(b);
+        return a != null && b != null && a.equals(b);
     }
 
     private String toIdString(Object value) {
@@ -1056,9 +871,7 @@ public class NotificationDispatcher {
         if (value instanceof String str) return str;
 
         Object id = readObject(value, "getId");
-        if (id != null) return String.valueOf(id);
-
-        return String.valueOf(value);
+        return id == null ? String.valueOf(value) : String.valueOf(id);
     }
 
     private String readString(Object target, String... methodNames) {
@@ -1068,8 +881,7 @@ public class NotificationDispatcher {
 
     private Instant readInstant(Object target, String... methodNames) {
         Object value = readObject(target, methodNames);
-        if (value instanceof Instant instant) return instant;
-        return null;
+        return value instanceof Instant instant ? instant : null;
     }
 
     private Object readObject(Object target, String... methodNames) {
@@ -1084,6 +896,40 @@ public class NotificationDispatcher {
         }
 
         return null;
+    }
+
+    private String readMetadata(Map<String, Object> metadata, String... keys) {
+        if (metadata == null) return "";
+
+        for (String key : keys) {
+            Object value = metadata.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
+        }
+
+        return "";
+    }
+
+    private String parseTaskIdFromActionUrl(String actionUrl) {
+        if (actionUrl == null || actionUrl.isBlank()) return "";
+
+        int index = actionUrl.indexOf("taskId=");
+        if (index < 0) return "";
+
+        String value = actionUrl.substring(index + 7);
+        int end = value.indexOf('&');
+        return end >= 0 ? value.substring(0, end) : value;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+
+        return "";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private String buildHtmlEmail(String themeColor, String title, String message) {

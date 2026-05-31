@@ -1,22 +1,21 @@
 import { create } from 'zustand';
-import axiosClient from '../../../lib/axiosClient'; 
+import axiosClient from '../../../lib/axiosClient';
 
-// ===============================
-// 1. USER INTERFACE
-// ===============================
 export interface UserProfile {
   id: string | number;
+  user_id?: string | number;
   email: string;
   full_name: string;
+  fullName?: string;
   avatar_url?: string | null;
+  avatarUrl?: string | null;
   department?: string | null;
   system_role?: string;
   role_id?: string;
+  roleId?: string;
+  role?: string;
 }
 
-// ===============================
-// 2. STATE & ACTION
-// ===============================
 interface AuthState {
   token: string | null;
   user: UserProfile | null;
@@ -33,153 +32,151 @@ interface AuthState {
   updateUserProfile: (updatedData: Partial<UserProfile>) => void;
 }
 
-// ===============================
-// 3. STORE
-// ===============================
+const readStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    localStorage.removeItem('user');
+    return null;
+  }
+};
+
+const unwrapApiResponse = (res: any) => {
+  if (!res) return null;
+  if (res.data?.data) return res.data.data;
+  if (res.data) return res.data;
+  return res;
+};
+
+const normalizeUser = (payload: any): UserProfile => {
+  const user = payload.user || payload;
+
+  return {
+    ...user,
+    id: user.id || user.user_id || payload.userId || payload.user_id,
+    user_id: user.user_id || user.id || payload.userId || payload.user_id,
+    email: user.email || payload.email || '',
+    full_name: user.full_name || user.fullName || payload.fullName || payload.full_name || user.email || payload.email || 'Người dùng',
+    avatar_url: user.avatar_url || user.avatarUrl || null,
+    role_id: user.role_id || user.roleId || payload.roleId || payload.role_id,
+    role: user.role || payload.role || payload.roleName || payload.role_name,
+  };
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  
   token: localStorage.getItem('token') || null,
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
+  user: readStoredUser(),
   isLoading: false,
 
-  // ===============================
-  // 🚀 LOGIN (FIX CHÍNH Ở ĐÂY)
-  // ===============================
   login: async (email, password) => {
     set({ isLoading: true });
+
     try {
-      // 1. axiosClient interceptor đã trả về response.data (Cục ApiResponse của Java)
       const res: any = await axiosClient.post('/auth/login', { email, password });
+      const payload = unwrapApiResponse(res);
 
-      console.log("📦 DỮ LIỆU TỪ BACKEND GỬI VỀ:", res);
+      const accessToken =
+        payload?.accessToken ||
+        payload?.access_token ||
+        payload?.token ||
+        payload?.access;
 
-      // 2. Lấy đúng lõi payload (Chứa token và user)
-      const payload = res.data || res;
-
-      // 3. 🚀 CHÌA KHÓA: Hứng cả chuẩn Java (camelCase) lẫn JS (snake_case)
-      const finalAccessToken = payload.accessToken || payload.access_token;
-      const finalUser = payload.user || payload;
-
-      // 🚨 Báo động đỏ nếu không tìm thấy token
-      if (!finalAccessToken) {
-        console.error("🔴 CẢNH BÁO: Không tìm thấy Access Token! Code Java đang trả về cái gì thế này?");
-      } else {
-        // Típ nhỏ: In 10 ký tự đầu của Token ra để đối chiếu xem có đúng Access Token không
-        console.log("🔑 Đang lưu Access Token:", finalAccessToken.substring(0, 10) + "...");
+      if (!accessToken) {
+        set({ isLoading: false });
+        return { success: false, message: 'Backend không trả về access token.' };
       }
 
-      // 4. Chuẩn hóa User
-      const normalizedUser: UserProfile = {
-        ...finalUser,
-        id: finalUser.id || finalUser.user_id
-      };
+      const user = normalizeUser(payload);
 
-      // 5. Ghi vào LocalStorage (Đảm bảo là ghi biến finalAccessToken chuẩn)
-      localStorage.setItem('token', finalAccessToken);
-      localStorage.setItem('user', JSON.stringify(normalizedUser));
+      localStorage.setItem('token', accessToken);
+      localStorage.setItem('user', JSON.stringify(user));
 
-      // 6. Cập nhật State
-      set({
-        token: finalAccessToken,
-        user: normalizedUser,
-        isLoading: false
-      });
-
+      set({ token: accessToken, user, isLoading: false });
       return { success: true };
-
     } catch (error: any) {
       set({ isLoading: false });
       return {
         success: false,
-        message: error.response?.data?.message || 'Đăng nhập thất bại!'
+        message: error.response?.data?.message || error.response?.data?.error || 'Đăng nhập thất bại!',
       };
     }
   },
 
-  // ===============================
-  // FORGOT PASSWORD
-  // ===============================
   forgotPassword: async (email: string) => {
     set({ isLoading: true });
+
     try {
       const res: any = await axiosClient.post('/auth/forgot-password', { email });
+      const payload = unwrapApiResponse(res);
+
       set({ isLoading: false });
-      return { success: true, message: res.message || 'Đã gửi yêu cầu.' };
+      return { success: true, message: payload?.message || res?.message || 'Nếu email tồn tại, hệ thống đã gửi liên kết đặt lại mật khẩu.' };
     } catch (error: any) {
       set({ isLoading: false });
       return {
         success: false,
-        message: error.response?.data?.message || 'Lỗi hệ thống.'
+        message: error.response?.data?.message || 'Không thể gửi yêu cầu đặt lại mật khẩu.',
       };
     }
   },
 
   verifyResetToken: async (token: string) => {
     try {
-      await axiosClient.get(`/auth/verify-reset-token?token=${token}`);
+      await axiosClient.get(`/auth/verify-reset-token?token=${encodeURIComponent(token)}`);
       return { success: true };
     } catch (error: any) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Token không hợp lệ.'
+        message: error.response?.data?.message || 'Token không hợp lệ hoặc đã hết hạn.',
       };
     }
   },
 
   resetPassword: async (token: string, newPassword: string) => {
     set({ isLoading: true });
+
     try {
       const res: any = await axiosClient.post('/auth/reset-password', {
         token,
-        new_password: newPassword
+        new_password: newPassword,
       });
+
       set({ isLoading: false });
-      return { success: true, message: res.message || 'Đổi mật khẩu thành công!' };
+      return { success: true, message: res?.message || 'Đổi mật khẩu thành công!' };
     } catch (error: any) {
       set({ isLoading: false });
       return {
         success: false,
-        message: error.response?.data?.message || 'Có lỗi xảy ra.'
+        message: error.response?.data?.message || 'Có lỗi xảy ra.',
       };
     }
   },
 
-  // ===============================
-  // UPDATE PROFILE
-  // ===============================
   updateUserProfile: (updatedData) => {
     const currentUser = get().user;
-    if (currentUser) {
-      const newUser = { ...currentUser, ...updatedData };
+    if (!currentUser) return;
 
-      localStorage.setItem('user', JSON.stringify(newUser));
-      set({ user: newUser });
-    }
+    const newUser = { ...currentUser, ...updatedData };
+    localStorage.setItem('user', JSON.stringify(newUser));
+    set({ user: newUser });
   },
 
-  // ===============================
-  // LOGOUT
-  // ===============================
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-
     set({ token: null, user: null });
-
+    window.dispatchEvent(new Event('auth:logout'));
     window.location.href = '/login';
   },
 
-  // ===============================
-  // CHECK AUTH (JWT)
-  // ===============================
   checkAuth: () => {
-    const token = get().token;
+    const token = get().token || localStorage.getItem('token');
     if (!token) return false;
 
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
 
-      if (payload.exp * 1000 < Date.now()) {
+      if (!payload?.exp || payload.exp * 1000 < Date.now()) {
         get().logout();
         return false;
       }
@@ -189,5 +186,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       get().logout();
       return false;
     }
-  }
+  },
 }));
+
+window.addEventListener('auth:unauthorized', () => {
+  useAuthStore.setState({ token: null, user: null, isLoading: false });
+});

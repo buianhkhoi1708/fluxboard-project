@@ -4,8 +4,8 @@ import SockJS from 'sockjs-client';
 import { notificationApi } from '../api/notificationApi';
 import {
   AppNotification,
-  NotificationStore,
   NotificationMetadata,
+  NotificationStore,
 } from '../types/notificationTypes';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1').replace(/\/$/, '');
@@ -17,6 +17,28 @@ const read = (obj: any, camelKey: string, snakeKey?: string) => {
   if (!obj) return undefined;
   return obj[camelKey] ?? (snakeKey ? obj[snakeKey] : undefined);
 };
+
+const getToken = () => {
+  return (
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('accessToken') ||
+    ''
+  );
+};
+
+const isJwtExpired = (token: string | null) => {
+  if (!token) return true;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return !payload?.exp || payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+};
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const parseMaybeJson = (value: any) => {
   if (typeof value !== 'string') return value;
@@ -30,8 +52,8 @@ const parseMaybeJson = (value: any) => {
       message: value,
       type: 'SYSTEM',
       metadata: {},
-      isRead: false,
-      createdAt: new Date().toISOString(),
+      is_read: false,
+      created_at: new Date().toISOString(),
     };
   }
 };
@@ -71,72 +93,87 @@ const translateMessage = (message?: string) => {
   if (!message) return '';
 
   return message
-    .replaceAll('Task Created Successfully', 'Bạn đã tạo công việc')
-    .replaceAll('Task Updated by You', 'Bạn đã cập nhật công việc')
-    .replaceAll('Task Moved by You', 'Bạn đã di chuyển công việc')
-    .replaceAll('Task Moved', 'Công việc đã được di chuyển')
-    .replaceAll('Task Updated', 'Công việc đã được cập nhật')
-    .replaceAll('Task Overdue Notice', 'Công việc đã quá hạn')
     .replaceAll('Task', 'Công việc')
     .replaceAll('task', 'công việc')
     .replaceAll('was moved to', 'đã được chuyển sang')
+    .replaceAll('moved to', 'được chuyển sang')
     .replaceAll('You moved', 'Bạn đã chuyển')
-    .replaceAll('has been updated', 'đã được cập nhật');
+    .replaceAll('created successfully', 'đã được tạo thành công')
+    .replaceAll('assigned to you', 'được giao cho bạn');
 };
 
 const extractNavigationFromActionUrl = (actionUrl?: string | null) => {
-  if (!actionUrl) return { boardId: undefined as string | undefined, taskId: undefined as string | undefined };
+  if (!actionUrl) return { boardId: undefined, taskId: undefined };
 
-  try {
-    const url = actionUrl.startsWith('http')
-      ? new URL(actionUrl)
-      : new URL(actionUrl, window.location.origin);
+  const boardMatch = actionUrl.match(/\/board\/([^?/#]+)/);
+  const taskMatch = actionUrl.match(/[?&]taskId=([^&#]+)/);
 
-    const boardMatch = url.pathname.match(/\/board\/([^/?#]+)/);
-    const boardId = boardMatch?.[1];
-    const taskId = url.searchParams.get('taskId') || undefined;
+  return {
+    boardId: boardMatch?.[1],
+    taskId: taskMatch?.[1],
+  };
+};
 
-    return { boardId, taskId };
-  } catch {
-    const boardMatch = actionUrl.match(/\/board\/([^/?#]+)/);
-    const taskMatch = actionUrl.match(/[?&]taskId=([^&#]+)/);
-
-    return {
-      boardId: boardMatch?.[1],
-      taskId: taskMatch?.[1],
-    };
-  }
+const getRawDedupeKey = (raw: any) => {
+  return (
+    raw?.dedupeKey ||
+    raw?.dedupe_key ||
+    raw?.metadata?.dedupeKey ||
+    raw?.metadata?.dedupe_key ||
+    ''
+  );
 };
 
 const normalizeMetadata = (raw: any): NotificationMetadata => {
-  const metadata = raw?.metadata || {};
-  const rawActionUrl = metadata.actionUrl || metadata.action_url || raw?.actionUrl || raw?.action_url;
+  const rawMetadata = raw?.metadata || {};
+  const rawActionUrl =
+    rawMetadata.actionUrl ||
+    rawMetadata.action_url ||
+    raw?.actionUrl ||
+    raw?.action_url ||
+    undefined;
+
   const parsed = extractNavigationFromActionUrl(rawActionUrl);
 
   const taskId =
-    metadata.taskId ||
-    metadata.task_id ||
+    rawMetadata.taskId ||
+    rawMetadata.task_id ||
     raw?.taskId ||
     raw?.task_id ||
     parsed.taskId ||
     raw?.referenceId ||
-    raw?.reference_id;
+    raw?.reference_id ||
+    undefined;
 
   const boardId =
-    metadata.boardId ||
-    metadata.board_id ||
+    rawMetadata.boardId ||
+    rawMetadata.board_id ||
     raw?.boardId ||
     raw?.board_id ||
-    parsed.boardId;
+    parsed.boardId ||
+    undefined;
+
+  const projectId =
+    rawMetadata.projectId ||
+    rawMetadata.project_id ||
+    raw?.projectId ||
+    raw?.project_id ||
+    undefined;
+
+  const dedupeKey = getRawDedupeKey(raw);
 
   return {
-    ...metadata,
+    ...rawMetadata,
     taskId,
     task_id: taskId,
     boardId,
     board_id: boardId,
+    projectId,
+    project_id: projectId,
     actionUrl: rawActionUrl,
     action_url: rawActionUrl,
+    dedupeKey,
+    dedupe_key: dedupeKey,
   };
 };
 
@@ -146,9 +183,15 @@ const normalizeNotification = (input: any): AppNotification | null => {
 
   const metadata = normalizeMetadata(raw);
   const id = String(raw.id || raw._id || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const type = String(raw.type || 'SYSTEM');
+  const type = String(raw.type || raw.notification_type || 'SYSTEM');
+  const isRead = Boolean(read(raw, 'isRead', 'is_read'));
+  const actionUrl =
+    read(raw, 'actionUrl', 'action_url') ||
+    metadata.actionUrl ||
+    metadata.action_url ||
+    null;
 
-  return {
+  const notification: AppNotification = {
     id,
     recipientId: read(raw, 'recipientId', 'recipient_id'),
     recipient_id: read(raw, 'recipientId', 'recipient_id'),
@@ -161,11 +204,11 @@ const normalizeNotification = (input: any): AppNotification | null => {
     reference_id: read(raw, 'referenceId', 'reference_id') || null,
     referenceType: read(raw, 'referenceType', 'reference_type') || null,
     reference_type: read(raw, 'referenceType', 'reference_type') || null,
-    actionUrl: read(raw, 'actionUrl', 'action_url') || metadata.actionUrl || null,
-    action_url: read(raw, 'actionUrl', 'action_url') || metadata.action_url || null,
+    actionUrl,
+    action_url: actionUrl,
     metadata,
-    isRead: Boolean(read(raw, 'isRead', 'is_read')),
-    is_read: Boolean(read(raw, 'isRead', 'is_read')),
+    isRead,
+    is_read: isRead,
     status: raw.status || null,
     timestamp: raw.timestamp || raw.createdAt || raw.created_at || Date.now(),
     createdAt: raw.createdAt || raw.created_at || raw.timestamp || new Date().toISOString(),
@@ -175,23 +218,91 @@ const normalizeNotification = (input: any): AppNotification | null => {
     sendAt: raw.sendAt || raw.send_at || null,
     send_at: raw.sendAt || raw.send_at || null,
   };
+
+  (notification as any).dedupeKey = getRawDedupeKey(raw);
+  (notification as any).dedupe_key = getRawDedupeKey(raw);
+
+  return notification;
+};
+
+const getNotificationTime = (notification: AppNotification) => {
+  return new Date(String(notification.createdAt || notification.created_at || notification.timestamp || 0)).getTime();
+};
+
+const getSemanticKey = (notification: AppNotification | null | undefined) => {
+  if (!notification) return '';
+
+  const metadata: any = notification.metadata || {};
+  const dedupeKey =
+    (notification as any).dedupeKey ||
+    (notification as any).dedupe_key ||
+    metadata.dedupeKey ||
+    metadata.dedupe_key;
+
+  if (dedupeKey) return String(dedupeKey);
+
+  const type = String(notification.type || '').toUpperCase();
+  const referenceId = String(notification.referenceId || notification.reference_id || '');
+  const taskId = String(metadata.taskId || metadata.task_id || referenceId || '');
+  const requesterId = String(metadata.requesterId || metadata.requester_id || '');
+  const senderId = String(notification.senderId || notification.sender_id || '');
+  const recipientId = String(notification.recipientId || notification.recipient_id || '');
+  const dueDate = String(
+    metadata.requestedDueDate ||
+      metadata.requested_due_date ||
+      metadata.approvedDueDate ||
+      metadata.approved_due_date ||
+      metadata.currentDueDate ||
+      metadata.current_due_date ||
+      metadata.dueDate ||
+      metadata.due_date ||
+      ''
+  );
+
+  if (type.startsWith('EXTENSION_') || type.includes('DEADLINE') || type.includes('OVERDUE')) {
+    return [recipientId, type, taskId, senderId, requesterId, dueDate].join('|');
+  }
+
+  return [recipientId, type, taskId, notification.id].join('|');
 };
 
 const dedupeAndSort = (notifications: AppNotification[]) => {
   const map = new Map<string, AppNotification>();
 
   notifications.forEach((notification) => {
-    map.set(notification.id, {
-      ...map.get(notification.id),
-      ...notification,
+    const key = getSemanticKey(notification) || notification.id;
+    const current = map.get(key);
+
+    if (!current) {
+      map.set(key, notification);
+      return;
+    }
+
+    const currentTime = getNotificationTime(current);
+    const nextTime = getNotificationTime(notification);
+    const latest = nextTime >= currentTime ? notification : current;
+    const earliestRead = Boolean(current.isRead || current.is_read || notification.isRead || notification.is_read);
+
+    map.set(key, {
+      ...current,
+      ...latest,
+      metadata: {
+        ...(current.metadata || {}),
+        ...(latest.metadata || {}),
+      },
+      isRead: earliestRead,
+      is_read: earliestRead,
     });
   });
 
-  return Array.from(map.values()).sort((a, b) => {
-    const aTime = new Date(String(a.createdAt || a.created_at || a.timestamp || 0)).getTime();
-    const bTime = new Date(String(b.createdAt || b.created_at || b.timestamp || 0)).getTime();
-    return bTime - aTime;
-  });
+  return Array.from(map.values()).sort((a, b) => getNotificationTime(b) - getNotificationTime(a));
+};
+
+const countUnread = (notifications: AppNotification[]) => notifications.filter((n) => !n.isRead).length;
+
+const isExtensionReviewNotification = (notification: AppNotification) => {
+  const type = String(notification.type || '').toUpperCase();
+  return ['EXTENSION_REQUEST', 'EXTENSION_REQUESTED'].includes(type);
 };
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
@@ -203,15 +314,14 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   toastNotifications: [],
 
   hydrateNotifications: (notifications) => {
-    const normalized = notifications
-      .map(normalizeNotification)
-      .filter(Boolean) as AppNotification[];
+    const normalized = notifications.map(normalizeNotification).filter(Boolean) as AppNotification[];
 
     set((state) => {
       const merged = dedupeAndSort([...normalized, ...state.notifications]);
+
       return {
         notifications: merged,
-        unreadCount: merged.filter((n) => !n.isRead).length,
+        unreadCount: countUnread(merged),
       };
     });
   },
@@ -219,48 +329,60 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   setUnreadCount: (count) => set({ unreadCount: Math.max(0, Number(count) || 0) }),
 
   loadInitialNotifications: async () => {
-    try {
-      const [page, unreadCount] = await Promise.all([
-        notificationApi.getNotifications({ page: 0, size: 20 }),
-        notificationApi.getUnreadCount(),
-      ]);
+    const token = getToken();
+    if (isJwtExpired(token)) return;
 
-      get().hydrateNotifications(page.content);
-      set({ unreadCount });
-    } catch (error) {
-      console.error('Tải thông báo thất bại:', error);
+    try {
+      const page = await notificationApi.getNotifications({ page: 0, size: 50 });
+      const normalized = page.content.map(normalizeNotification).filter(Boolean) as AppNotification[];
+      const merged = dedupeAndSort(normalized);
+
+      set({
+        notifications: merged,
+        unreadCount: countUnread(merged),
+      });
+    } catch (error: any) {
+      if (error?.response?.status !== 401) console.error('Tải thông báo thất bại:', error);
     }
   },
 
   connectWebSocket: (userId: string) => {
     if (!userId) return;
 
+    const token = getToken();
+    if (isJwtExpired(token)) return;
+
     const currentClient = get().stompClient;
     if (currentClient?.active || currentClient?.connected) return;
 
-    const token = localStorage.getItem('token');
-
     const client = new Client({
-      webSocketFactory: () => new SockJS(WEBSOCKET_URL),
+      webSocketFactory: () => new SockJS(`${WEBSOCKET_URL}?access_token=${encodeURIComponent(token)}`),
+      connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 5000,
-      debug: () => {},
-      connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+      debug: () => undefined,
       onConnect: () => {
-        set({ isConnected: true });
+        set({ isConnected: true, stompClient: client });
 
-        const handleMessage = (message: any) => {
-          if (!message?.body) return;
+        client.subscribe('/user/queue/notifications', (message) => {
+          if (!message.body) return;
           get().addNotification(message.body, { showToast: true });
-        };
+        });
 
-        client.subscribe(`/topic/notifications/${userId}`, handleMessage);
-        client.subscribe(`/topic/notifications/${userId}/latest`, handleMessage);
+        client.subscribe(`/topic/notifications/${userId}`, (message) => {
+          if (!message.body) return;
+          get().addNotification(message.body, { showToast: true });
+        });
+
+        client.subscribe(`/topic/notifications/${userId}/latest`, (message) => {
+          if (!message.body) return;
+          get().addNotification(message.body, { showToast: true });
+        });
       },
       onDisconnect: () => set({ isConnected: false }),
-      onWebSocketClose: () => set({ isConnected: false }),
       onStompError: (frame) => {
-        console.error('Lỗi STOMP notification:', frame.headers?.message || frame);
+        console.error('Lỗi STOMP notification:', frame.headers?.message || frame.body);
       },
+      onWebSocketClose: () => set({ isConnected: false }),
     });
 
     client.activate();
@@ -269,35 +391,47 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
 
   disconnectWebSocket: () => {
     const client = get().stompClient;
-    if (client) client.deactivate();
 
-    set({
-      stompClient: null,
-      isConnected: false,
-    });
+    if (client) {
+      client.deactivate();
+    }
+
+    set({ stompClient: null, isConnected: false });
   },
 
   startLongPolling: () => {
-    if (get().isLongPolling) return;
+    const token = getToken();
+    if (get().isLongPolling || isJwtExpired(token)) return;
 
     shouldLongPoll = true;
     set({ isLongPolling: true });
 
     const loop = async () => {
       while (shouldLongPoll) {
-        try {
-          const notifications = await notificationApi.longPolling();
+        const currentToken = getToken();
 
-          if (notifications.length > 0) {
-            notifications.forEach((notification) => {
+        if (isJwtExpired(currentToken)) {
+          shouldLongPoll = false;
+          set({ isLongPolling: false });
+          break;
+        }
+
+        try {
+          const newNotifications = await notificationApi.longPolling();
+
+          if (Array.isArray(newNotifications) && newNotifications.length > 0) {
+            newNotifications.forEach((notification) => {
               get().addNotification(notification, { showToast: true });
             });
           }
         } catch (error: any) {
-          if (shouldLongPoll) {
-            console.warn('Long-polling thông báo thất bại:', error?.message || error);
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+          if (error?.response?.status === 401) {
+            shouldLongPoll = false;
+            set({ isLongPolling: false });
+            break;
           }
+
+          await sleep(3000);
         }
       }
 
@@ -316,14 +450,19 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     const notification = normalizeNotification(rawNotification);
     if (!notification) return null;
 
+    let created = false;
+
     set((state) => {
-      const exists = state.notifications.some((item) => item.id === notification.id);
+      const key = getSemanticKey(notification);
+      const exists = state.notifications.some((item) => getSemanticKey(item) === key || item.id === notification.id);
+      created = !exists;
+
       const nextNotifications = dedupeAndSort([notification, ...state.notifications]);
-      const shouldToast = options.showToast !== false && !exists;
+      const shouldToast = options.showToast !== false && created && !notification.isRead;
 
       return {
         notifications: nextNotifications,
-        unreadCount: nextNotifications.filter((n) => !n.isRead).length,
+        unreadCount: countUnread(nextNotifications),
         toastNotifications: shouldToast
           ? [
               {
@@ -349,24 +488,50 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   markAsRead: async (id: string) => {
     if (!id) return;
 
+    const target = get().notifications.find((notification) => notification.id === id);
+    const targetKey = getSemanticKey(target);
+
     set((state) => {
-      const nextNotifications = state.notifications.map((notification) =>
-        notification.id === id
+      const nextNotifications = state.notifications.map((notification) => {
+        const same = notification.id === id || (targetKey && getSemanticKey(notification) === targetKey);
+
+        return same
           ? { ...notification, isRead: true, is_read: true }
-          : notification
-      );
+          : notification;
+      });
 
       return {
         notifications: nextNotifications,
-        unreadCount: nextNotifications.filter((n) => !n.isRead).length,
+        unreadCount: countUnread(nextNotifications),
       };
     });
 
     try {
       const updated = await notificationApi.markAsRead(id);
-      if (updated) get().addNotification(updated, { showToast: false });
-    } catch (error) {
-      console.error('Đánh dấu đã đọc thất bại:', error);
+
+      if (updated) {
+        const normalized = normalizeNotification(updated);
+        if (normalized) {
+          const updatedKey = getSemanticKey(normalized);
+
+          set((state) => {
+            const nextNotifications = state.notifications.map((notification) => {
+              const same = notification.id === normalized.id || (updatedKey && getSemanticKey(notification) === updatedKey);
+
+              return same
+                ? { ...notification, ...normalized, metadata: { ...(notification.metadata || {}), ...(normalized.metadata || {}) }, isRead: true, is_read: true }
+                : notification;
+            });
+
+            return {
+              notifications: dedupeAndSort(nextNotifications),
+              unreadCount: countUnread(nextNotifications),
+            };
+          });
+        }
+      }
+    } catch (error: any) {
+      if (error?.response?.status !== 401) console.error('Đánh dấu đã đọc thất bại:', error);
       get().loadInitialNotifications();
     }
   },
@@ -383,8 +548,16 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
 
     try {
       await notificationApi.markAllAsRead();
-    } catch (error) {
-      console.error('Đánh dấu tất cả đã đọc thất bại:', error);
+      set((state) => ({
+        notifications: state.notifications.map((notification) => ({
+          ...notification,
+          isRead: true,
+          is_read: true,
+        })),
+        unreadCount: 0,
+      }));
+    } catch (error: any) {
+      if (error?.response?.status !== 401) console.error('Đánh dấu tất cả đã đọc thất bại:', error);
       get().loadInitialNotifications();
     }
   },
@@ -409,11 +582,7 @@ export const getNotificationTaskNavigation = (notification: AppNotification) => 
     notification.reference_id ||
     undefined;
 
-  const boardId =
-    metadata.boardId ||
-    metadata.board_id ||
-    parsed.boardId ||
-    undefined;
+  const boardId = metadata.boardId || metadata.board_id || parsed.boardId || undefined;
 
   return {
     taskId,
@@ -423,6 +592,10 @@ export const getNotificationTaskNavigation = (notification: AppNotification) => 
 };
 
 export const getNotificationTargetUrl = (notification: AppNotification) => {
+  if (isExtensionReviewNotification(notification)) {
+    return `/notifications?notificationId=${encodeURIComponent(notification.id)}&review=1`;
+  }
+
   const { taskId, boardId, actionUrl } = getNotificationTaskNavigation(notification);
 
   if (actionUrl && actionUrl.includes('/board/')) {
@@ -433,7 +606,7 @@ export const getNotificationTargetUrl = (notification: AppNotification) => {
     return `/board/${boardId}?taskId=${taskId}`;
   }
 
-  return '/notifications';
+  return `/notifications?notificationId=${encodeURIComponent(notification.id)}`;
 };
 
 export const canOpenNotificationTask = (notification: AppNotification | null | undefined) => {

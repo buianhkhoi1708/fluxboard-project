@@ -17,7 +17,6 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -65,8 +64,6 @@ public class NotificationListener {
 
         if (task == null || requester == null) return;
 
-        Instant currentDueDate = readInstant(event, "getCurrentDueDate", "getOriginalDueDate");
-        Instant requestedDueDate = event.getRequestedDueDate();
         String requesterName = requester.getFullName() != null && !requester.getFullName().isBlank()
                 ? requester.getFullName()
                 : requester.getEmail();
@@ -76,8 +73,8 @@ public class NotificationListener {
                 event.getRequesterId(),
                 requesterName,
                 task,
-                currentDueDate,
-                requestedDueDate,
+                event.getCurrentDueDate(),
+                event.getRequestedDueDate(),
                 event.getReason()
         );
     }
@@ -89,20 +86,17 @@ public class NotificationListener {
         if (task == null) return;
 
         String managerId = readString(event, "getManagerId", "getReviewerId", "getUserId", "getSenderId");
-        Instant originalDueDate = readInstant(event, "getOriginalDueDate", "getCurrentDueDate", "getOldDueDate");
-        Instant newDueDate = event.getNewDueDate();
-        String reason = readString(event, "getReason", "getRequestReason");
+        String requesterId = resolveRequesterId(event.getRequesterId(), event.getTargetUserIds(), task);
+        if (requesterId == null || requesterId.isBlank()) return;
 
-        for (String userId : safeTargets(event.getTargetUserIds(), event.getRequesterId(), task)) {
-            notificationDispatcher.notifyExtensionApproved(
-                    userId,
-                    managerId,
-                    task,
-                    originalDueDate,
-                    newDueDate,
-                    reason
-            );
-        }
+        notificationDispatcher.notifyExtensionApproved(
+                requesterId,
+                managerId,
+                task,
+                event.getOriginalDueDate(),
+                event.getNewDueDate(),
+                event.getReason()
+        );
     }
 
     @Async
@@ -112,44 +106,36 @@ public class NotificationListener {
         if (task == null) return;
 
         String managerId = readString(event, "getManagerId", "getReviewerId", "getUserId", "getSenderId");
-        Instant originalDueDate = event.getCurrentDueDate();
-        Instant requestedDueDate = readInstant(event, "getRequestedDueDate", "getNewDueDate", "getPendingDueDate");
-        String reason = readString(event, "getReason", "getRequestReason");
-        String rejectReason = event.getManagerReason();
+        String requesterId = resolveRequesterId(event.getRequesterId(), event.getTargetUserIds(), task);
+        if (requesterId == null || requesterId.isBlank()) return;
 
-        for (String userId : safeTargets(event.getTargetUserIds(), event.getRequesterId(), task)) {
-            notificationDispatcher.notifyExtensionRejected(
-                    userId,
-                    managerId,
-                    task,
-                    originalDueDate,
-                    requestedDueDate,
-                    reason,
-                    rejectReason
-            );
-        }
+        notificationDispatcher.notifyExtensionRejected(
+                requesterId,
+                managerId,
+                task,
+                event.getCurrentDueDate(),
+                event.getRequestedDueDate(),
+                event.getReason(),
+                event.getManagerReason()
+        );
     }
 
-    private List<String> safeTargets(List<String> eventTargets, String requesterId, TaskEntity task) {
-        List<String> targets = new ArrayList<>();
+    private String resolveRequesterId(String requesterId, List<String> eventTargets, TaskEntity task) {
+        if (requesterId != null && !requesterId.isBlank()) return requesterId;
 
         if (eventTargets != null) {
             for (String id : eventTargets) {
-                if (id != null && !id.isBlank() && !targets.contains(id)) targets.add(id);
+                if (id != null && !id.isBlank()) return id;
             }
         }
 
-        if (requesterId != null && !requesterId.isBlank() && !targets.contains(requesterId)) {
-            targets.add(requesterId);
-        }
-
-        if (targets.isEmpty() && task.getAssigneesUserId() != null) {
+        if (task.getAssigneesUserId() != null) {
             for (String id : task.getAssigneesUserId()) {
-                if (id != null && !id.isBlank() && !targets.contains(id)) targets.add(id);
+                if (id != null && !id.isBlank()) return id;
             }
         }
 
-        return targets;
+        return null;
     }
 
     private boolean isCompletedEvent(String eventType, Object event) {
@@ -180,11 +166,6 @@ public class NotificationListener {
     private String readString(Object target, String... methodNames) {
         Object value = readObject(target, methodNames);
         return value == null ? null : String.valueOf(value);
-    }
-
-    private Instant readInstant(Object target, String... methodNames) {
-        Object value = readObject(target, methodNames);
-        return value instanceof Instant instant ? instant : null;
     }
 
     private Object readObject(Object target, String... methodNames) {
