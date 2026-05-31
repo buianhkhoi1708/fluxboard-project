@@ -762,12 +762,21 @@ const NotificationsPage = () => {
       await markAsRead(notification.id);
     }
 
-    navigate(getNotificationTargetUrl({
-      ...notification,
-      type: String(notification.type).includes('EXTENSION')
-        ? 'TASK_LINK'
-        : notification.type,
-    }));
+    const handleOpenTask = async (notification: AppNotification | null) => {
+  if (!notification) return;
+
+  if (!notification.isRead) {
+    await markAsRead(notification.id);
+  }
+
+  const targetUrl = getNotificationTargetUrl(notification);
+
+  if (targetUrl === '/notifications') {
+    return;
+  }
+
+  navigate(targetUrl);
+};
   };
 
   const handleOpenExtension = async (notification: AppNotification | null) => {

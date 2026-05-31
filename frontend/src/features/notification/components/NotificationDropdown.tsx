@@ -14,6 +14,7 @@ import { vi } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 
 import {
+  canOpenNotificationTask,
   getNotificationTargetUrl,
   useNotificationStore,
 } from '../stores/useNotificationStore';
@@ -205,6 +206,7 @@ const NotificationDropdown: React.FC = () => {
             ) : (
               latestNotifications.map((notification) => {
                 const style = getNotificationStyle(notification.type);
+                const canOpen = canOpenNotificationTask(notification);
 
                 return (
                   <button
@@ -242,8 +244,10 @@ const NotificationDropdown: React.FC = () => {
                             {getTimeLabel(notification)}
                           </span>
 
-                          <span className="text-[10px] font-black text-indigo-600 flex items-center gap-1">
-                            Mở
+                          <span className={`text-[10px] font-black flex items-center gap-1 ${
+                            canOpen ? 'text-indigo-600' : 'text-slate-400'
+                          }`}>
+                            {canOpen ? 'Mở công việc' : 'Xem chi tiết'}
                             <ExternalLink size={11} />
                           </span>
                         </div>

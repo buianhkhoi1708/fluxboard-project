@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Bell, Clock, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -30,8 +29,16 @@ const getToastIcon = (type?: string) => {
   return <Bell size={18} className="text-indigo-500" />;
 };
 
+const navigateWithoutRouter = (url: string) => {
+  if (!url || url.trim() === '') {
+    window.location.assign('/notifications');
+    return;
+  }
+
+  window.location.assign(url);
+};
+
 const NotificationToastViewport = () => {
-  const navigate = useNavigate();
   const toastNotifications = useNotificationStore((state) => state.toastNotifications);
   const removeToast = useNotificationStore((state) => state.removeToast);
   const markAsRead = useNotificationStore((state) => state.markAsRead);
@@ -51,24 +58,31 @@ const NotificationToastViewport = () => {
   if (toastNotifications.length === 0) return null;
 
   return (
-    <div className="fixed left-5 bottom-5 z-[9999] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed right-6 top-[76px] z-[9999] flex flex-col gap-3 pointer-events-none">
       {toastNotifications.map((toast) => {
         const notification = toast.notification;
 
         return (
           <div
             key={toast.id}
-            className="pointer-events-auto w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-md overflow-hidden animate-in slide-in-from-left-5 fade-in duration-300"
+            role="button"
+            tabIndex={0}
+            onClick={async () => {
+              await markAsRead(notification.id);
+              removeToast(toast.id);
+              navigateWithoutRouter(getNotificationTargetUrl(notification));
+            }}
+            onKeyDown={async (event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+
+              event.preventDefault();
+              await markAsRead(notification.id);
+              removeToast(toast.id);
+              navigateWithoutRouter(getNotificationTargetUrl(notification));
+            }}
+            className="pointer-events-auto w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-md overflow-hidden animate-in slide-in-from-top-4 fade-in duration-300 cursor-pointer hover:bg-slate-50 transition-colors"
           >
-            <button
-              type="button"
-              onClick={async () => {
-                await markAsRead(notification.id);
-                removeToast(toast.id);
-                navigate(getNotificationTargetUrl(notification));
-              }}
-              className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
-            >
+            <div className="w-full text-left p-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
                   {getToastIcon(notification.type)}
@@ -87,6 +101,7 @@ const NotificationToastViewport = () => {
                         removeToast(toast.id);
                       }}
                       className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                      aria-label="Đóng thông báo"
                     >
                       <X size={14} />
                     </button>
@@ -97,11 +112,11 @@ const NotificationToastViewport = () => {
                   </p>
 
                   <p className="mt-2 text-[11px] font-bold text-indigo-600">
-                    Bấm để xem chi tiết
+                    Bấm để mở công việc liên quan
                   </p>
                 </div>
               </div>
-            </button>
+            </div>
           </div>
         );
       })}
@@ -146,14 +161,14 @@ export const GlobalSocketListener = () => {
   ]);
 
   useRealtimeEvent('/user/queue/notifications', (message) => {
-    console.log('🔔 [Global] Có thông báo mới:', message);
+    console.log('🔔 Có thông báo mới:', message);
     queryClient.invalidateQueries({ queryKey: SETTING_KEYS.notifications });
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
     queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
   });
 
   useRealtimeEvent('/topic/workspaces/updates', (message) => {
-    console.log('🏢 [Global] Có cập nhật ở Workspace:', message);
+    console.log('🏢 Có cập nhật workspace:', message);
     queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
   });
 
