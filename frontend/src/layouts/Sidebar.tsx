@@ -1,18 +1,13 @@
-import React, { useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useMemo } from "react";
+import { NavLink } from "react-router-dom";
+import { useAuthStore } from "../features/auth/store/useAuthStore";
+// 🚀 ĐẢM BẢO IMPORT ĐÚNG ĐƯỜNG DẪN CỦA HOOK ROLE ACCESS NÀY NHÉ SẾP
+import { useRoleAccess } from "../features/rbac/hooks/useRoleAccess";
 import {
-  LayoutDashboard,
-  Briefcase,
-  KanbanSquare,
-  ListTodo,
-  Building2,
-  ShieldCheck,
-  Activity,
-  Settings,
-  LogOut,
+  LayoutDashboard, Briefcase, KanbanSquare, ListTodo,
+  Building2, ShieldCheck, Activity, Settings, LogOut,
   Bell,
-} from 'lucide-react';
-import { useAuthStore } from '../features/auth/store/useAuthStore';
+} from "lucide-react";
 
 type MenuItem = {
   path: string;
@@ -21,134 +16,43 @@ type MenuItem = {
   roles: string[];
 };
 
-const roleAliases: Record<string, string[]> = {
-  SYSTEM_ADMIN: ['SYSTEM_ADMIN', 'ADMIN'],
-  ADMIN: ['ADMIN', 'SYSTEM_ADMIN'],
-  MANAGER: ['MANAGER', 'PM', 'PROJECT_ADMIN'],
-  PM: ['PM', 'MANAGER', 'PROJECT_ADMIN'],
-  PROJECT_ADMIN: ['PROJECT_ADMIN', 'PM', 'MANAGER'],
-  LEAD: ['LEAD'],
-  MEMBER: ['MEMBER', 'EMPLOYEE'],
-  EMPLOYEE: ['EMPLOYEE', 'MEMBER'],
-  USER: ['USER', 'MEMBER', 'EMPLOYEE'],
-  VIEWER: ['VIEWER'],
-};
-
-const normalizeRole = (value?: string | null) => {
-  if (!value) return '';
-  return String(value).trim().toUpperCase();
-};
-
-const getUserRole = (user: any) => {
-  const direct =
-    user?.role ||
-    user?.role_name ||
-    user?.roleName ||
-    user?.system_role ||
-    user?.systemRole ||
-    user?.authority ||
-    user?.authorities?.[0] ||
-    user?.roles?.[0]?.name ||
-    user?.roles?.[0];
-
-  return normalizeRole(direct);
-};
-
-const expandRoles = (role: string) => {
-  const normalized = normalizeRole(role);
-  return new Set([normalized, ...(roleAliases[normalized] || [])]);
-};
-
 const Sidebar = () => {
-  const { user, logout } = useAuthStore();
+  const { logout } = useAuthStore();
+  // 🚀 Tận dụng luôn hook hasAccess sếp đã viết rất xịn
+  const { hasAccess } = useRoleAccess();
 
-  const currentRole = getUserRole(user);
-  const expandedCurrentRoles = useMemo(() => expandRoles(currentRole), [currentRole]);
-
+  // ==========================================
+  // DANH SÁCH MENU 
+  // ==========================================
   const executionItems: MenuItem[] = [
-    {
-      path: '/dashboard',
-      icon: <LayoutDashboard size={20} />,
-      label: 'Bảng điều khiển',
-      roles: ['MEMBER', 'EMPLOYEE', 'USER', 'LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
-    {
-      path: '/workspaces',
-      icon: <Briefcase size={20} />,
-      label: 'Không gian làm việc',
-      roles: ['MEMBER', 'EMPLOYEE', 'USER', 'LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
-    {
-      path: '/aigenerateboard',
-      icon: <KanbanSquare size={20} />,
-      label: 'Tạo Board AI',
-      roles: ['LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
-    {
-      path: '/mytasks',
-      icon: <ListTodo size={20} />,
-      label: 'Công việc của tôi',
-      roles: ['MEMBER', 'EMPLOYEE', 'USER', 'LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
-    {
-      path: '/notifications',
-      icon: <Bell size={20} />,
-      label: 'Thông báo',
-      roles: ['MEMBER', 'EMPLOYEE', 'USER', 'LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
+    { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Bảng điều khiển", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
+    { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["EMPLOYEE", "LEAD", "MANAGER", "ADMIN", "MEMBER", "SYSTEM_ADMIN"] },
+    { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "Tạo Board AI", roles: ["LEAD", "MANAGER", "ADMIN", "SYSTEM_ADMIN"] }, 
+    { path: "/mytasks", icon: <ListTodo size={20} />, label: "Công việc của tôi", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
+    { path: "/notifications", icon: <Bell size={20} />, label: "Thông báo", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
   ];
 
   const managementItems: MenuItem[] = [
-    {
-      path: '/organization',
-      icon: <Building2 size={20} />,
-      label: 'Tổ chức',
-      roles: ['SYSTEM_ADMIN', 'ADMIN'],
-    },
-    {
-      path: '/createuser',
-      icon: <Building2 size={20} />,
-      label: 'Tạo người dùng',
-      roles: ['SYSTEM_ADMIN', 'ADMIN'],
-    },
-    {
-      path: '/adminrbac',
-      icon: <ShieldCheck size={20} />,
-      label: 'Phân quyền (RBAC)',
-      roles: ['SYSTEM_ADMIN', 'ADMIN'],
-    },
-    {
-      path: '/activity',
-      icon: <Activity size={20} />,
-      label: 'Hoạt động',
-      roles: ['SYSTEM_ADMIN'],
-    },
-    {
-      path: '/settings',
-      icon: <Settings size={20} />,
-      label: 'Cài đặt',
-      roles: ['MEMBER', 'EMPLOYEE', 'USER', 'LEAD', 'MANAGER', 'PM', 'PROJECT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'],
-    },
+    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN", "MANAGER", "SYSTEM_ADMIN"] },
+    { path: "/createuser", icon: <Building2 size={20} />, label: "Tạo người dùng", roles: ["ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Phân quyền (RBAC)", roles: ["ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/activity", icon: <Activity size={20} />, label: "Hoạt động", roles: ["MANAGER", "ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/settings", icon: <Settings size={20} />, label: "Cài đặt", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
   ];
 
-  const hasAccess = (allowedRoles: string[]) => {
-    if (expandedCurrentRoles.has('SYSTEM_ADMIN')) return true;
-
-    return allowedRoles.some((role) => {
-      const expandedAllowed = expandRoles(role);
-      return Array.from(expandedAllowed).some((item) => expandedCurrentRoles.has(item));
-    });
-  };
-
+  // ==========================================
+  // BỘ LỌC PHÂN QUYỀN
+  // ==========================================
   const visibleExecutionItems = useMemo(() => {
-    return executionItems.filter((item) => hasAccess(item.roles));
-  }, [currentRole]);
+    return executionItems.filter(item => hasAccess(item.roles));
+  }, [hasAccess]); // Chỉ phụ thuộc vào hàm hasAccess
 
   const visibleManagementItems = useMemo(() => {
-    return managementItems.filter((item) => hasAccess(item.roles));
-  }, [currentRole]);
+    return managementItems.filter(item => hasAccess(item.roles));
+  }, [hasAccess]);
 
-  const NavItem = ({ item, isAiHighlight }: { item: MenuItem; isAiHighlight?: boolean }) => (
+  // Component Item con (giữ nguyên logic, điều chỉnh style)
+  const NavItem = ({ item, isAiHighlight }: { item: MenuItem, isAiHighlight?: boolean }) => (
     <NavLink
       to={item.path}
       className={({ isActive }) =>
@@ -188,6 +92,8 @@ const Sidebar = () => {
   return (
     <aside className="fixed bottom-0 left-0 w-full z-50 bg-white/90 backdrop-blur-md border-t border-slate-200/80 flex flex-row md:relative md:w-64 md:h-screen md:flex-col md:border-t-0 md:border-r md:border-slate-200/80 shrink-0 transition-all shadow-[-2px_0_10px_rgba(0,0,0,0.05)] md:shadow-none">
       <div className="flex-1 flex flex-row md:flex-col gap-1 md:gap-4 overflow-x-auto md:overflow-y-auto no-scrollbar px-3 py-2 md:px-4 md:py-6 pb-20 md:pb-6">
+        
+        {/* SECTION EXECUTION */}
         {visibleExecutionItems.length > 0 && (
           <div className="flex flex-row md:flex-col gap-1.5">
             <p className="hidden md:block text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-3 mt-2">
@@ -204,6 +110,7 @@ const Sidebar = () => {
           </div>
         )}
 
+        {/* SECTION MANAGEMENT */}
         {visibleManagementItems.length > 0 && (
           <div className="flex flex-row md:flex-col gap-1.5 md:mt-2">
             <p className="hidden md:block text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-3 mt-6">
@@ -216,6 +123,7 @@ const Sidebar = () => {
           </div>
         )}
 
+        {/* Nút Đăng xuất đưa ra ngoài cùng để luôn hiện */}
         <button
           type="button"
           onClick={logout}

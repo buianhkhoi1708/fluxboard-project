@@ -53,11 +53,13 @@ public class ProjectController {
         );
     }
 
+    // 🚀 ĐÃ SỬA: Thêm biến authUser và truyền xuống Service
     @RequirePermission("PROJECT_VIEW")
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjects(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<ProjectResponse> page = projectService.getPage(pageable);
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        Page<ProjectResponse> page = projectService.getPage(authUser, pageable);
         return ResponseFactory.paged("Projects retrieved successfully.", page);
     }
 
@@ -73,21 +75,25 @@ public class ProjectController {
         return ResponseFactory.ok("Project overview retrieved successfully.", projectService.getOverview(projectId));
     }
 
+    // 🚀 ĐÃ SỬA: Thêm biến authUser và truyền xuống Service
     @RequirePermission("PROJECT_VIEW")
     @GetMapping("/overviews")
     public ResponseEntity<ApiResponse<List<ProjectOverviewResponse>>> getProjectOverviews(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
         
-        Page<ProjectOverviewResponse> page = projectService.getPageOverview(pageable);
+        Page<ProjectOverviewResponse> page = projectService.getPageOverview(authUser, pageable);
         return ResponseFactory.paged("Project overviews retrieved successfully.", page);
     }
 
+    // 🚀 ĐÃ SỬA: Thêm biến authUser và truyền xuống Service
     @RequirePermission("PROJECT_VIEW")
     @GetMapping("/departments/{departmentId}")
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getProjectsByDepartment(
             @PathVariable String departmentId,
-                @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<ProjectResponse> page = projectService.getPageByDepartment(departmentId, pageable);
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
+        Page<ProjectResponse> page = projectService.getPageByDepartment(departmentId, authUser, pageable);
         return ResponseFactory.paged("Department projects retrieved successfully.", page);
     }
 

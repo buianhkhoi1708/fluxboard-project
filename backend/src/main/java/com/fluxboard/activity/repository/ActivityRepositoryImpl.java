@@ -28,7 +28,7 @@ public class ActivityRepositoryImpl implements ActivityRepositoryCustom {
         return PageableExecutionUtils.getPage(content, pageable, () -> mongoTemplate.count(countQuery, ActivityEntity.class));
     }
 
-    private Criteria buildCriteria(ActivityFilterRequest filter) {
+   private Criteria buildCriteria(ActivityFilterRequest filter) {
         List<Criteria> and = new ArrayList<>();
         and.add(Criteria.where("is_deleted").is(false));
 
@@ -40,6 +40,12 @@ public class ActivityRepositoryImpl implements ActivityRepositoryCustom {
             if (filter.targetUserIds() != null && !filter.targetUserIds().isEmpty()) and.add(Criteria.where("target_user_id").in(filter.targetUserIds()));
             if (filter.sourceId() != null) and.add(Criteria.where("source_id").is(filter.sourceId()));
             if (filter.projectId() != null) and.add(Criteria.where("project_id").is(filter.projectId()));
+            
+            // 🚀 BỔ SUNG: Nếu có truyền 1 danh sách Project ID thì quét lệnh $in
+            if (filter.projectIds() != null && !filter.projectIds().isEmpty()) {
+                and.add(Criteria.where("project_id").in(filter.projectIds()));
+            }
+            
             if (filter.boardId() != null) and.add(Criteria.where("board_id").is(filter.boardId()));
             if (filter.taskId() != null) and.add(Criteria.where("task_id").is(filter.taskId()));
 

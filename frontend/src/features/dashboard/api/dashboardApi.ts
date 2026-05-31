@@ -65,7 +65,8 @@ export interface MemberDashboardData {
 }
 
 // Kiểu dữ liệu gộp chung (Tùy role mà Backend sẽ trả về trường tương ứng)
-export type DashboardResponse = AdminDashboardData & ManagerDashboardData & MemberDashboardData;
+// Sửa thành thế này để giao diện không bị crash nếu thiếu Data:
+export type DashboardResponse = Partial<AdminDashboardData> & Partial<ManagerDashboardData> & Partial<MemberDashboardData>;
 
 // ==========================================
 // API CALL - 1 ĐƯỜNG DẪN DUY NHẤT

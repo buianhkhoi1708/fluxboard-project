@@ -29,4 +29,6 @@ public interface ActivityRepository extends MongoRepository<ActivityEntity, Stri
     Page<ActivityEntity> findByProjectIdAndDeletedFalse(String projectId, Pageable pageable);
 
     Page<ActivityEntity> findBySourceTypeAndSourceIdAndDeletedFalse(ActivitySource sourceType, String sourceId, Pageable pageable);
+    // 🚀 Dành cho Bảng tin chung của Manager/Member
+    Page<ActivityEntity> findByProjectIdInAndDeletedFalse(List<String> projectIds, Pageable pageable);
 }

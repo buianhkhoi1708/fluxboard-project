@@ -18,6 +18,8 @@ public interface ProjectMemberRepository extends MongoRepository<ProjectMember, 
 
     List<ProjectMember> findByProjectIdAndIsActiveTrue(String projectId);
 
+    List<ProjectMember> findByUserIdAndDeletedFalse(String userId);
+
     @Query("{ 'project_id': ?0, 'user_id': ?1, 'is_active': true, 'is_deleted': false }")
     Optional<ProjectMember> findActiveByProjectIdAndUserId(String projectId, String userId);
 

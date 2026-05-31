@@ -25,6 +25,9 @@ import com.fluxboard.project.projectmember.entity.ProjectMember;
 import com.fluxboard.project.projectmember.repository.ProjectMemberRepository;
 import com.fluxboard.project.repository.ProjectRepository;
 import com.fluxboard.user.repository.UserRepository;
+import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.rbac.entity.RoleEntity;
+import com.fluxboard.rbac.repository.RoleRepository;
 import com.fluxboard.activity.enums.ActivityAction;
 import com.fluxboard.activity.enums.ActivitySource;
 import com.fluxboard.activity.event.ActivityCreatedEvent;
@@ -50,25 +53,28 @@ public class ProjectService
     private final ApplicationEventPublisher eventPublisher;
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    
+    // 🚀 THÊM MỚI: RoleRepository để check quyền hạn cho Get List
+    private final RoleRepository roleRepository;
 
     public ProjectService(
             ProjectRepository projectRepository,
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
             TaskRepository taskRepository,
-
             ApplicationEventPublisher eventPublisher,
             UserRepository userRepository,
-            ProjectMemberRepository projectMemberRepository
+            ProjectMemberRepository projectMemberRepository,
+            RoleRepository roleRepository // 🚀 Khai báo thêm
     ) {
         this.projectRepository = projectRepository;
         this.boardRepository = boardRepository;
         this.boardColumnRepository = boardColumnRepository;
         this.taskRepository = taskRepository;
-
         this.eventPublisher = eventPublisher;
         this.userRepository = userRepository;
         this.projectMemberRepository = projectMemberRepository;
+        this.roleRepository = roleRepository;
     }
 
     @Override
@@ -82,7 +88,6 @@ public class ProjectService
         String normalizedOwnerId = requireAuthenticatedUserId(ownerUserId);
         validateUserExists(normalizedOwnerId, "Owner user does not exist.");
 
-        // 1. Lưu ProjectEntity
         ProjectEntity entity = new ProjectEntity();
         entity.setName(TextUtils.trim(request.name()));
         entity.setOwnerId(normalizedOwnerId);
@@ -90,7 +95,6 @@ public class ProjectService
         entity.setStatus(TextUtils.trim(request.status()));
         ProjectEntity savedProject = projectRepository.save(entity);
 
-        // 2. Tự động thêm Owner vào bảng ProjectMember để Frontend có danh sách thành viên
         ProjectMember membership = new ProjectMember();
         membership.setProjectId(savedProject.getId());
         membership.setUserId(normalizedOwnerId);
@@ -105,11 +109,7 @@ public class ProjectService
         return toResponse(savedProject);
     }
 
-    /**
-     * API quan trọng để Frontend fetch danh sách "danh bạ" thành viên
-     */
     public List<TaskUserSummaryResponse> getProjectMembers(String projectId) {
-        // Lấy danh sách ID từ bảng trung gian
         List<ProjectMember> memberships = projectMemberRepository.findByProjectIdAndIsActiveTrue(projectId);
         
         if (memberships.isEmpty()) {
@@ -120,7 +120,6 @@ public class ProjectService
                 .map(ProjectMember::getUserId)
                 .toList();
 
-        // Lấy thông tin chi tiết (FullName, Avatar) từ bảng User
         return userRepository.findByIdInAndDeletedFalse(userIds).stream()
                 .map(user -> new TaskUserSummaryResponse(
                         user.getId(), 
@@ -130,9 +129,6 @@ public class ProjectService
                 .toList();
     }
 
-    // =========================================================================
-    // 🚀 BỔ SUNG HÀM ADD MEMBER TỪ REQUEST CỦA FRONTEND AI_GENERATOR
-    // =========================================================================
     @Transactional
     public void addProjectMember(String projectId, AddProjectMemberRequest request) {
         addProjectMember(projectId, request, null);
@@ -142,19 +138,14 @@ public class ProjectService
     public void addProjectMember(String projectId, AddProjectMemberRequest request, String actorUserId) {
         String normalizedUserId = TextUtils.trim(request.userId());
 
-        // 1. Kiểm tra dự án
         validateProjectExists(projectId);
-
-        // 2. Kiểm tra User có tồn tại không
         validateUserExists(normalizedUserId, "User ID to add does not exist.");
 
-        // 3. Chặn thêm trùng lặp (Idempotent)
         boolean alreadyExists = projectMemberRepository.existsByProjectIdAndUserIdAndDeletedFalse(projectId, normalizedUserId);
         if (alreadyExists) {
-            return; // Nếu có rồi thì im lặng bỏ qua, không crash luồng AI của sếp
+            return; 
         }
 
-        // 4. Đăng ký hộ khẩu mới cho User
         ProjectMember newMember = new ProjectMember();
         newMember.setProjectId(projectId);
         newMember.setUserId(normalizedUserId);
@@ -176,22 +167,87 @@ public class ProjectService
                 TextUtils.trimToNull(actorUserId), ActivityAction.ADD_MEMBER, "memberId", null, normalizedUserId, msg
         ));
     }
-    // =========================================================================
 
     @Override
     public ProjectResponse getById(String id) {
         return toResponse(findProjectById(id));
     }
 
+    // =========================================================================
+    // 🚀 LÕI PHÂN QUYỀN TRUY XUẤT PROJECT DÀNH CHO GET LIST
+    // =========================================================================
+    
+    // Bọc thép check System Admin, y hệt logic bên Dashboard
+    private boolean isSystemAdmin(String roleId) {
+        if (roleId == null) return false;
+        try {
+            RoleEntity role = roleRepository.findById(roleId).orElse(null);
+            return role != null && role.getName() != null && role.getName().name().toUpperCase().contains("ADMIN");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // Hàm lấy danh sách Project có giới hạn quyền
+    private Page<ProjectEntity> getAccessibleProjects(AuthenticatedUser user, Pageable pageable) {
+        // Nếu là ADMIN, trả về toàn bộ
+        if (isSystemAdmin(user.roleId())) {
+            return projectRepository.findByDeletedFalse(pageable);
+        }
+
+        // Nếu là Manager/Member, lấy các dự án mà user đang tham gia
+        List<String> myProjectIds = projectMemberRepository.findByUserIdAndDeletedFalse(user.userId()).stream()
+                .filter(ProjectMember::isActive)
+                .map(ProjectMember::getProjectId)
+                .distinct()
+                .toList();
+
+        // Không tham gia dự án nào thì trả về rỗng
+        if (myProjectIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return projectRepository.findByIdInAndDeletedFalse(myProjectIds, pageable);
+    }
+
+    // 🚀 CẬP NHẬT: API getPage chính, tiêm AuthenticatedUser vào
+    public Page<ProjectResponse> getPage(AuthenticatedUser user, Pageable pageable) {
+        return getAccessibleProjects(user, pageable).map(this::toResponse);
+    }
+
+    // Cái này interface CrudService ép buộc phải có, không dùng trên Controller nữa
     @Override
     public Page<ProjectResponse> getPage(Pageable pageable) {
         return projectRepository.findByDeletedFalse(pageable).map(this::toResponse);
     }
 
-    public Page<ProjectResponse> getPageByDepartment(String departmentId, Pageable pageable) {
-        return projectRepository.findByDepartmentIdAndDeletedFalse(TextUtils.trim(departmentId), pageable)
+    // 🚀 CẬP NHẬT: Lọc Overview
+    public Page<ProjectOverviewResponse> getPageOverview(AuthenticatedUser user, Pageable pageable) {
+        return getAccessibleProjects(user, pageable).map(entity -> getOverview(entity.getId()));
+    }
+
+    // 🚀 CẬP NHẬT: Lọc Department theo quyền
+    public Page<ProjectResponse> getPageByDepartment(String departmentId, AuthenticatedUser user, Pageable pageable) {
+        if (isSystemAdmin(user.roleId())) {
+            return projectRepository.findByDepartmentIdAndDeletedFalse(TextUtils.trim(departmentId), pageable)
+                    .map(this::toResponse);
+        }
+
+        List<String> myProjectIds = projectMemberRepository.findByUserIdAndDeletedFalse(user.userId()).stream()
+                .filter(ProjectMember::isActive)
+                .map(ProjectMember::getProjectId)
+                .distinct()
+                .toList();
+
+        if (myProjectIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return projectRepository.findByDepartmentIdAndIdInAndDeletedFalse(TextUtils.trim(departmentId), myProjectIds, pageable)
                 .map(this::toResponse);
     }
+
+    // =========================================================================
 
     public ProjectOverviewResponse getOverview(String projectId) {
         ProjectEntity project = findProjectById(TextUtils.trim(projectId));
@@ -326,7 +382,6 @@ public class ProjectService
         return normalizedOwnerUserId;
     }
 
-    // 🚀 MỚI THÊM: Hàm check Project có tồn tại không
     private void validateProjectExists(String projectId) {
         if (!projectRepository.existsByIdAndDeletedFalse(projectId)) {
             throw new AppException(ErrorCode.NOT_FOUND, "Project not found.");
@@ -379,10 +434,5 @@ public class ProjectService
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
-    }
-
-    public Page<ProjectOverviewResponse> getPageOverview(Pageable pageable) {
-        return projectRepository.findByDeletedFalse(pageable)
-                .map(entity -> getOverview(entity.getId()));
     }
 }

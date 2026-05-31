@@ -38,21 +38,7 @@ const { mutate: logout } = useLogout(); // Lấy hàm kích hoạt đăng xuất
       </div>
 
       {/* MIDDLE SECTION: Search Bar */}
-      <div className="flex-1 max-w-md hidden lg:block px-6">
-        <div className="relative group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-          </div>
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm thẻ, bảng, thành viên..." 
-            className="w-full bg-slate-100/70 border border-transparent text-sm text-slate-800 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all placeholder:text-slate-400"
-          />
-          <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-            <span className="text-[10px] font-bold text-slate-400 border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white shadow-sm">⌘K</span>
-          </div>
-        </div>
-      </div>
+    
 
       {/* RIGHT SECTION: Notifications & Profile */}
       <div className="flex items-center gap-4 md:gap-5">
