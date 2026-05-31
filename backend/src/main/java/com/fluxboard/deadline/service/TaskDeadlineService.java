@@ -30,11 +30,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class TaskDeadlineService {
+    private static final Duration EXTENSION_REVIEW_TIMEOUT = Duration.ofDays(3);
+    private static final String SYSTEM_AUTO_REJECT = "SYSTEM_AUTO_REJECT";
+
     private final TaskDeadlineRepository deadlineRepository;
     private final TaskRepository taskRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -78,37 +86,77 @@ public class TaskDeadlineService {
         boolean hasPermission = member.getRoleIds() != null && member.getRoleIds().stream()
                 .anyMatch(roleId -> permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG"));
 
-        if (!hasPermission) throw new AppException(ErrorCode.FORBIDDEN, "Access denied. You do not have permission to configure deadlines.");
+        if (!hasPermission) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Access denied. You do not have permission to configure deadlines.");
+        }
     }
 
     private TaskDeadlineEntity.DeadlineStatus calculateDynamicStatus(TaskDeadlineEntity deadline) {
         if (deadline.getActualCompletedAt() != null) {
             return deadline.getDueDate() != null && deadline.getActualCompletedAt().isAfter(deadline.getDueDate())
-                    ? TaskDeadlineEntity.DeadlineStatus.LATE : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+                    ? TaskDeadlineEntity.DeadlineStatus.LATE
+                    : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
         }
-        Instant now = Instant.now(), due = deadline.getDueDate();
+
+        Instant now = Instant.now();
+        Instant due = deadline.getDueDate();
+
         if (due == null) return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
         if (now.isAfter(due)) return TaskDeadlineEntity.DeadlineStatus.OVERDUE;
-        return now.isAfter(due.minus(Duration.ofHours(24))) ? TaskDeadlineEntity.DeadlineStatus.AT_RISK : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+        return now.isAfter(due.minus(Duration.ofHours(24)))
+                ? TaskDeadlineEntity.DeadlineStatus.AT_RISK
+                : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
     }
 
-    private void validateDeadlineConfigData(Instant currentStart, Instant currentDue, Instant newStart, Instant newDue, Integer reminderOffset, Integer extensionLimit) {
-        if (reminderOffset != null && reminderOffset < 0) throw new AppException(ErrorCode.BAD_REQUEST, "Reminder offset must be a non-negative integer.");
-        if (extensionLimit != null && extensionLimit < 0) throw new AppException(ErrorCode.BAD_REQUEST, "Extension limit must be a non-negative integer.");
+    private void validateDeadlineConfigData(
+            Instant currentStart,
+            Instant currentDue,
+            Instant newStart,
+            Instant newDue,
+            Integer reminderOffset,
+            Integer extensionLimit
+    ) {
+        if (reminderOffset != null && reminderOffset < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Reminder offset must be a non-negative integer.");
+        }
+
+        if (extensionLimit != null && extensionLimit < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Extension limit must be a non-negative integer.");
+        }
+
         Instant start = newStart != null ? newStart : currentStart;
         Instant due = newDue != null ? newDue : currentDue;
-        if (start != null && due != null && !start.isBefore(due)) throw new AppException(ErrorCode.BAD_REQUEST, "Start date must be strictly before due date.");
+
+        if (start != null && due != null && !start.isBefore(due)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Start date must be strictly before due date.");
+        }
     }
 
     @Transactional
-    public Map<String, Object> updateDeadlineConfig(String taskId, String userId, Instant startDate, Instant dueDate, Integer reminderOffset, Integer extensionLimit) {
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+    public Map<String, Object> updateDeadlineConfig(
+            String taskId,
+            String userId,
+            Instant startDate,
+            Instant dueDate,
+            Integer reminderOffset,
+            Integer extensionLimit
+    ) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
         validateManagerAccess(task.getProjectId(), userId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
-        validateDeadlineConfigData(deadline.getStartDate(), deadline.getDueDate(), startDate, dueDate, reminderOffset, extensionLimit);
+        validateDeadlineConfigData(
+                deadline.getStartDate(),
+                deadline.getDueDate(),
+                startDate,
+                dueDate,
+                reminderOffset,
+                extensionLimit
+        );
 
         Instant oldDueDate = deadline.getDueDate();
         boolean dueChanged = dueDate != null && !dueDate.equals(oldDueDate);
@@ -129,14 +177,19 @@ public class TaskDeadlineService {
         taskRepository.save(task);
 
         notificationDispatcher.scheduleDeadlineUpdateNotification(taskId);
-        if (dueChanged) eventPublisher.publishEvent(new DeadlineConfigChangedEvent(this, taskId, userId, oldDueDate, dueDate));
+
+        if (dueChanged) {
+            eventPublisher.publishEvent(new DeadlineConfigChangedEvent(this, taskId, userId, oldDueDate, dueDate));
+        }
 
         return toResponse(deadline);
     }
 
     @Transactional
     public Map<String, Object> completeTaskKPI(String taskId, String userId) {
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
         validateTaskAccess(task, userId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
@@ -144,11 +197,13 @@ public class TaskDeadlineService {
 
         Instant now = Instant.now();
         deadline.setActualCompletedAt(now);
+
         TaskDeadlineEntity.DeadlineStatus finalStatus = calculateDynamicStatus(deadline);
         deadline.setStatus(finalStatus);
         deadlineRepository.save(deadline);
 
         boolean late = finalStatus == TaskDeadlineEntity.DeadlineStatus.LATE;
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("task_id", taskId);
         result.put("due_date", deadline.getDueDate());
@@ -158,9 +213,13 @@ public class TaskDeadlineService {
         if (late && deadline.getDueDate() != null) {
             Duration duration = Duration.between(deadline.getDueDate(), now);
             long totalMinutes = duration.toMinutes();
+
             result.put("late_duration_formatted", duration.toHours() + "h " + duration.toMinutesPart() + "m");
             result.put("late_duration_minutes", totalMinutes);
-            eventPublisher.publishEvent(new TaskCompletedLateEvent(this, taskId, userId, task.getProjectId(), totalMinutes));
+
+            eventPublisher.publishEvent(
+                    new TaskCompletedLateEvent(this, taskId, userId, task.getProjectId(), totalMinutes)
+            );
         } else {
             result.put("late_duration_formatted", "0h 0m");
             result.put("late_duration_minutes", 0);
@@ -170,49 +229,83 @@ public class TaskDeadlineService {
     }
 
     @Transactional
-    public Map<String, Object> requestExtension(String taskId, String userId, Instant requestedDueDate, String reason) {
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+    public Map<String, Object> requestExtension(
+            String taskId,
+            String userId,
+            Instant requestedDueDate,
+            String reason
+    ) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
         validateTaskAccess(task, userId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
-        if (requestedDueDate == null) throw new AppException(ErrorCode.BAD_REQUEST, "New deadline is required.");
+        if (requestedDueDate == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "New deadline is required.");
+        }
+
         if (deadline.getDueDate() != null && !requestedDueDate.isAfter(deadline.getDueDate())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "New deadline must be after current deadline.");
         }
-        if (reason == null || reason.trim().isEmpty()) throw new AppException(ErrorCode.BAD_REQUEST, "Extension reason is required.");
-        if (Boolean.TRUE.equals(deadline.getIsExtensionPending())) throw new AppException(ErrorCode.CONFLICT, "An extension request is already pending for this task.");
+
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Extension reason is required.");
+        }
+
+        if (Boolean.TRUE.equals(deadline.getIsExtensionPending())) {
+            throw new AppException(ErrorCode.CONFLICT, "An extension request is already pending for this task.");
+        }
 
         int used = deadline.getExtensionCount() == null ? 0 : deadline.getExtensionCount();
         int limit = deadline.getExtensionLimit() == null ? 2 : deadline.getExtensionLimit();
-        if (used >= limit) throw new AppException(ErrorCode.BAD_REQUEST, "Deadline extension limit reached.");
+
+        if (used >= limit) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Deadline extension limit reached.");
+        }
 
         String cleanReason = reason.trim();
         String targetManagerId = resolveTargetManagerId(task, userId);
+        Instant requestedAt = Instant.now();
 
         deadline.setIsExtensionPending(true);
         deadline.setPendingRequestedDate(requestedDueDate);
         deadline.setExtensionStatus(TaskDeadlineEntity.ExtensionStatus.PENDING);
         deadline.setExtensionRequestedBy(userId);
-        deadline.setExtensionRequestedAt(Instant.now());
+        deadline.setExtensionRequestedAt(requestedAt);
         deadline.setExtensionReason(cleanReason);
         deadline.setExtensionReviewedBy(null);
         deadline.setExtensionReviewedAt(null);
         deadline.setExtensionRejectReason(null);
         deadlineRepository.save(deadline);
 
-        eventPublisher.publishEvent(new ExtensionRequestedEvent(this, taskId, task.getProjectId(), userId, targetManagerId, deadline.getDueDate(), requestedDueDate, cleanReason));
+        eventPublisher.publishEvent(
+                new ExtensionRequestedEvent(
+                        this,
+                        taskId,
+                        task.getProjectId(),
+                        userId,
+                        targetManagerId,
+                        deadline.getDueDate(),
+                        requestedDueDate,
+                        cleanReason
+                )
+        );
 
         Map<String, Object> result = toResponse(deadline);
         result.put("target_manager_id", targetManagerId);
         result.put("status", "PENDING_APPROVAL");
+        result.put("extension_expires_at", requestedAt.plus(EXTENSION_REVIEW_TIMEOUT));
         return result;
     }
 
     @Transactional
     public Map<String, Object> approveExtension(String taskId, String managerId) {
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
         validateManagerAccess(task.getProjectId(), managerId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
@@ -242,7 +335,19 @@ public class TaskDeadlineService {
         task.setDueDate(newDueDate);
         taskRepository.save(task);
 
-        eventPublisher.publishEvent(new ExtensionApprovedEvent(this, taskId, task.getProjectId(), managerId, resolveTargets(requesterId, task), oldDueDate, newDueDate, requestReason, requesterId));
+        eventPublisher.publishEvent(
+                new ExtensionApprovedEvent(
+                        this,
+                        taskId,
+                        task.getProjectId(),
+                        managerId,
+                        resolveTargets(requesterId, task),
+                        oldDueDate,
+                        newDueDate,
+                        requestReason,
+                        requesterId
+                )
+        );
 
         Map<String, Object> result = toResponse(deadline);
         result.put("old_due_date", oldDueDate);
@@ -253,21 +358,67 @@ public class TaskDeadlineService {
 
     @Transactional
     public Map<String, Object> rejectExtension(String taskId, String managerId, String reason) {
-        TaskEntity task = taskRepository.findById(taskId).orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
         validateManagerAccess(task.getProjectId(), managerId);
 
         TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
 
+        return rejectPendingExtension(task, deadline, managerId, reason, false);
+    }
+
+    @Transactional
+    public Map<String, Object> autoRejectExpiredExtension(String taskId) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Task not found."));
+
+        TaskDeadlineEntity deadline = deadlineRepository.findActiveByTaskId(taskId)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Deadline record missing."));
+
+        if (!Boolean.TRUE.equals(deadline.getIsExtensionPending())) {
+            Map<String, Object> result = toResponse(deadline);
+            result.put("status", "NO_PENDING_EXTENSION");
+            return result;
+        }
+
+        Instant requestedAt = deadline.getExtensionRequestedAt();
+
+        if (requestedAt != null && requestedAt.plus(EXTENSION_REVIEW_TIMEOUT).isAfter(Instant.now())) {
+            Map<String, Object> result = toResponse(deadline);
+            result.put("status", "NOT_EXPIRED");
+            return result;
+        }
+
+        return rejectPendingExtension(
+                task,
+                deadline,
+                SYSTEM_AUTO_REJECT,
+                "Yêu cầu dời deadline đã quá hạn 3 ngày nên hệ thống tự động từ chối.",
+                true
+        );
+    }
+
+    private Map<String, Object> rejectPendingExtension(
+            TaskEntity task,
+            TaskDeadlineEntity deadline,
+            String managerId,
+            String reason,
+            boolean autoRejected
+    ) {
         if (!Boolean.TRUE.equals(deadline.getIsExtensionPending())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "No pending extension request found.");
         }
 
+        String taskId = task.getId();
         String requesterId = deadline.getExtensionRequestedBy();
         Instant currentDueDate = deadline.getDueDate();
         Instant requestedDueDate = deadline.getPendingRequestedDate();
         String requestReason = deadline.getExtensionReason();
-        String rejectReason = reason == null ? "" : reason.trim();
+        String rejectReason = reason == null || reason.trim().isEmpty()
+                ? "Extension request rejected."
+                : reason.trim();
 
         deadline.setIsExtensionPending(false);
         deadline.setPendingRequestedDate(null);
@@ -277,10 +428,26 @@ public class TaskDeadlineService {
         deadline.setExtensionRejectReason(rejectReason);
         deadlineRepository.save(deadline);
 
-        eventPublisher.publishEvent(new ExtensionRejectedEvent(this, taskId, task.getProjectId(), managerId, resolveTargets(requesterId, task), currentDueDate, requestedDueDate, requestReason, rejectReason, requesterId));
+        eventPublisher.publishEvent(
+                new ExtensionRejectedEvent(
+                        this,
+                        taskId,
+                        task.getProjectId(),
+                        managerId,
+                        resolveTargets(requesterId, task),
+                        currentDueDate,
+                        requestedDueDate,
+                        requestReason,
+                        rejectReason,
+                        requesterId
+                )
+        );
 
         Map<String, Object> result = toResponse(deadline);
-        result.put("status", "REJECTED");
+        result.put("status", autoRejected ? "AUTO_REJECTED" : "REJECTED");
+        result.put("current_due_date", currentDueDate);
+        result.put("requested_due_date", requestedDueDate);
+        result.put("reject_reason", rejectReason);
         return result;
     }
 
@@ -295,6 +462,7 @@ public class TaskDeadlineService {
         }
 
         User requester = userRepository.findByIdAndDeletedFalse(requesterId).orElse(null);
+
         if (requester != null && requester.getTeamId() != null) {
             TeamEntity team = teamRepository.findByIdAndDeletedFalse(requester.getTeamId()).orElse(null);
             if (team != null && validManager(team.getLeadId(), requesterId)) return team.getLeadId();
@@ -304,25 +472,31 @@ public class TaskDeadlineService {
 
         for (ProjectMember member : projectMemberRepository.findActiveByProjectId(task.getProjectId())) {
             if (!validManager(member.getUserId(), requesterId) || member.getRoleIds() == null) continue;
+
             boolean canManageDeadline = member.getRoleIds().stream()
                     .anyMatch(roleId -> permissionEvaluatorService.hasPermission(roleId, "TASK_DEADLINE_CONFIG"));
+
             if (canManageDeadline) return member.getUserId();
         }
 
         if (task.getAuthorUserId() != null && !task.getAuthorUserId().isBlank()) return task.getAuthorUserId();
+
         throw new AppException(ErrorCode.BAD_REQUEST, "No manager found for this extension request.");
     }
 
     private boolean validManager(String candidateId, String requesterId) {
-        return candidateId != null && !candidateId.isBlank()
+        return candidateId != null
+                && !candidateId.isBlank()
                 && !same(candidateId, requesterId)
                 && userRepository.existsByIdAndDeletedFalse(candidateId);
     }
 
     private List<String> resolveTargets(String requesterId, TaskEntity task) {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
+
         if (requesterId != null && !requesterId.isBlank()) ids.add(requesterId);
         if (task.getAssigneesUserId() != null) ids.addAll(task.getAssigneesUserId());
+
         return new ArrayList<>(ids);
     }
 
@@ -330,8 +504,15 @@ public class TaskDeadlineService {
         return a != null && b != null && a.equals(b);
     }
 
+    private Instant extensionExpiresAt(TaskDeadlineEntity d) {
+        return d.getExtensionRequestedAt() == null
+                ? null
+                : d.getExtensionRequestedAt().plus(EXTENSION_REVIEW_TIMEOUT);
+    }
+
     private Map<String, Object> toResponse(TaskDeadlineEntity d) {
         Map<String, Object> r = new LinkedHashMap<>();
+
         r.put("id", d.getId());
         r.put("task_id", d.getTaskId());
         r.put("start_date", d.getStartDate());
@@ -347,10 +528,12 @@ public class TaskDeadlineService {
         r.put("extension_status", d.getExtensionStatus() == null ? null : d.getExtensionStatus().name());
         r.put("extension_requested_by", d.getExtensionRequestedBy());
         r.put("extension_requested_at", d.getExtensionRequestedAt());
+        r.put("extension_expires_at", extensionExpiresAt(d));
         r.put("extension_reason", d.getExtensionReason());
         r.put("extension_reviewed_by", d.getExtensionReviewedBy());
         r.put("extension_reviewed_at", d.getExtensionReviewedAt());
         r.put("extension_reject_reason", d.getExtensionRejectReason());
+
         return r;
     }
 }

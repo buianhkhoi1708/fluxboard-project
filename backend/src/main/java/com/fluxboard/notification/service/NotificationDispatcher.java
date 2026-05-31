@@ -1,5 +1,7 @@
 package com.fluxboard.notification.service;
 
+import com.fluxboard.board.column.entity.BoardColumnEntity;
+import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.email.service.EmailService;
@@ -19,6 +21,7 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,7 +38,6 @@ import java.util.concurrent.ScheduledFuture;
 @Service
 @RequiredArgsConstructor
 public class NotificationDispatcher {
-
     private static final long TASK_UPDATE_MOVE_DEBOUNCE_MS = 60_000L;
 
     private static final Set<String> IMMEDIATE_EMAIL_TYPES = Set.of(
@@ -61,17 +63,13 @@ public class NotificationDispatcher {
     private final UserNotificationPrefService prefService;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
+    private final BoardColumnRepository boardColumnRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationDebounceService debounceService;
     private final TaskScheduler taskScheduler;
 
     private final Map<String, ScheduledFuture<?>> pendingDeadlineUpdateEmails = new ConcurrentHashMap<>();
 
-    /**
-     * Long-polling waiters theo user.
-     * Mỗi request /notifications/long-polling sẽ đăng ký 1 CompletableFuture.
-     * Khi có notification mới thì complete ngay.
-     */
     private final Map<String, CopyOnWriteArrayList<CompletableFuture<List<NotificationEntity>>>> realtimeWaiters =
             new ConcurrentHashMap<>();
 
@@ -88,9 +86,7 @@ public class NotificationDispatcher {
                 .add(future);
 
         taskScheduler.schedule(() -> {
-            if (!future.isDone()) {
-                future.complete(List.of());
-            }
+            if (!future.isDone()) future.complete(List.of());
         }, Instant.now().plusMillis(timeoutMs));
 
         future.whenComplete((result, error) -> {
@@ -98,10 +94,7 @@ public class NotificationDispatcher {
 
             if (waiters != null) {
                 waiters.remove(future);
-
-                if (waiters.isEmpty()) {
-                    realtimeWaiters.remove(userId);
-                }
+                if (waiters.isEmpty()) realtimeWaiters.remove(userId);
             }
         });
 
@@ -110,9 +103,7 @@ public class NotificationDispatcher {
 
     public void dispatchTaskCreated(String taskId, String actorId) {
         TaskEntity task = getTask(taskId);
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         debounceService.markTaskRecentlyCreated(taskId);
 
@@ -153,15 +144,11 @@ public class NotificationDispatcher {
     }
 
     public void dispatchTaskUpdated(String taskId, String actorId) {
-        if (debounceService.isTaskRecentlyCreated(taskId) || debounceService.isTaskRecentlyCompleted(taskId)) {
-            return;
-        }
+        if (debounceService.isTaskRecentlyCreated(taskId) || debounceService.isTaskRecentlyCompleted(taskId)) return;
 
         debounceService.debounce("TASK_UPDATE_" + taskId, () -> {
             TaskEntity task = getTask(taskId);
-            if (task == null) {
-                return;
-            }
+            if (task == null) return;
 
             String actionUrl = getTaskActionUrl(task);
             Map<String, Object> metadata = buildTaskMetadata(task);
@@ -201,15 +188,11 @@ public class NotificationDispatcher {
     }
 
     public void dispatchTaskMoved(String taskId, String actorId, String destinationColumnId, String destinationColumnName) {
-        if (debounceService.isTaskRecentlyCreated(taskId) || debounceService.isTaskRecentlyCompleted(taskId)) {
-            return;
-        }
+        if (debounceService.isTaskRecentlyCreated(taskId) || debounceService.isTaskRecentlyCompleted(taskId)) return;
 
         debounceService.debounce("TASK_MOVE_" + taskId, () -> {
             TaskEntity task = getTask(taskId);
-            if (task == null) {
-                return;
-            }
+            if (task == null) return;
 
             String actionUrl = getTaskActionUrl(task);
             Map<String, Object> metadata = buildTaskMetadata(task);
@@ -257,14 +240,10 @@ public class NotificationDispatcher {
     }
 
     public void dispatchTaskCompleted(String taskId, String actorId) {
-        if (!debounceService.markTaskCompletedOnce(taskId)) {
-            return;
-        }
+        if (!debounceService.markTaskCompletedOnce(taskId)) return;
 
         TaskEntity task = getTask(taskId);
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
         String actorName = resolveUserDisplayName(actorId, "Một thành viên");
@@ -299,9 +278,6 @@ public class NotificationDispatcher {
         }
     }
 
-    /**
-     * Giữ compatibility với code cũ.
-     */
     public void dispatchTaskMovedNotification(String recipientId, String taskId, String taskName, String boardId) {
         String actionUrl = buildActionUrl(boardId, taskId);
 
@@ -309,6 +285,8 @@ public class NotificationDispatcher {
         putTaskNavigationMetadata(metadata, taskId, boardId, taskName);
         metadata.put("task_title", taskName);
         metadata.put("taskTitle", taskName);
+        putIfPresent(metadata, "action_url", actionUrl);
+        putIfPresent(metadata, "actionUrl", actionUrl);
 
         dispatch(
                 recipientId,
@@ -325,13 +303,8 @@ public class NotificationDispatcher {
         );
     }
 
-    /**
-     * Giữ compatibility với code cũ: giao task cho user.
-     */
     public void notifyTaskAssigned(String userId, TaskEntity task) {
-        if (userId == null || task == null) {
-            return;
-        }
+        if (userId == null || task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
         Map<String, Object> metadata = buildTaskMetadata(task);
@@ -357,21 +330,23 @@ public class NotificationDispatcher {
 
     public void dispatchUpcomingAlert(String taskId) {
         TaskEntity task = getTask(taskId);
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
         Map<String, Object> metadata = buildTaskMetadata(task);
-        metadata.put("due_date", readInstant(task, "getDueDate", "getDueAt"));
+        Instant dueDate = readInstant(task, "getDueDate", "getDueAt");
+
+        metadata.put("due_date", dueDate);
+        metadata.put("dueDate", dueDate);
         metadata.put("is_overdue", false);
+        metadata.put("isOverdue", false);
 
         for (String userId : resolveTaskAssignees(task)) {
             dispatch(
                     userId,
                     null,
                     "Công việc sắp đến hạn",
-                    "Deadline của công việc \"" + safeTaskTitle(task) + "\" đang sắp đến hạn.",
+                    "Deadline của công việc \"" + safeTaskTitle(task) + "\" còn dưới 24 giờ.",
                     null,
                     "TASK_DEADLINE_REMINDER",
                     task.getId(),
@@ -385,20 +360,22 @@ public class NotificationDispatcher {
 
     public void dispatchOverdueAlert(String taskId) {
         TaskEntity task = getTask(taskId);
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
         Map<String, Object> metadata = buildTaskMetadata(task);
-        metadata.put("due_date", readInstant(task, "getDueDate", "getDueAt"));
+        Instant dueDate = readInstant(task, "getDueDate", "getDueAt");
+
+        metadata.put("due_date", dueDate);
+        metadata.put("dueDate", dueDate);
         metadata.put("is_overdue", true);
+        metadata.put("isOverdue", true);
 
         for (String userId : resolveTaskAssignees(task)) {
             dispatch(
                     userId,
                     null,
-                    "Task Overdue Notice",
+                    "Task đã quá hạn",
                     "Task \"" + safeTaskTitle(task) + "\" đã quá hạn!",
                     null,
                     "TASK_OVERDUE",
@@ -431,9 +408,7 @@ public class NotificationDispatcher {
 
     private void executeDeadlineUpdatedNotification(String taskId) {
         TaskEntity task = getTask(taskId);
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
         Map<String, Object> metadata = buildTaskMetadata(task);
@@ -464,11 +439,11 @@ public class NotificationDispatcher {
             Instant requestedDueDate,
             String reason
     ) {
-        if (managerId == null || task == null) {
-            return;
-        }
+        if (managerId == null || managerId.isBlank() || task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
+        Instant requestedAt = Instant.now();
+        Instant expiresAt = requestedAt.plus(3, ChronoUnit.DAYS);
 
         Map<String, Object> metadata = buildTaskMetadata(task);
         putIfPresent(metadata, "requester_id", requesterId);
@@ -480,6 +455,14 @@ public class NotificationDispatcher {
         metadata.put("requested_due_date", requestedDueDate);
         metadata.put("requestedDueDate", requestedDueDate);
         metadata.put("reason", reason == null ? "" : reason);
+        metadata.put("extension_status", "PENDING");
+        metadata.put("extensionStatus", "PENDING");
+        metadata.put("extension_requested_at", requestedAt);
+        metadata.put("extensionRequestedAt", requestedAt);
+        metadata.put("expires_at", expiresAt);
+        metadata.put("expiresAt", expiresAt);
+        metadata.put("can_review", true);
+        metadata.put("canReview", true);
 
         dispatch(
                 managerId,
@@ -498,6 +481,10 @@ public class NotificationDispatcher {
         );
 
         if (requesterId != null && !requesterId.isBlank()) {
+            Map<String, Object> requesterMetadata = new LinkedHashMap<>(metadata);
+            requesterMetadata.put("can_review", false);
+            requesterMetadata.put("canReview", false);
+
             dispatch(
                     requesterId,
                     requesterId,
@@ -508,16 +495,12 @@ public class NotificationDispatcher {
                     task.getId(),
                     "TASK",
                     actionUrl,
-                    metadata,
+                    requesterMetadata,
                     true
             );
         }
     }
 
-    /**
-     * Giữ compatibility với listener cũ, nhưng không đủ dữ liệu để đi tới task.
-     * Listener mới bên dưới nên gọi overload có TaskEntity.
-     */
     public void notifyExtensionRequested(
             String managerId,
             String requesterName,
@@ -533,6 +516,10 @@ public class NotificationDispatcher {
         metadata.put("requested_due_date", requestedDueDate);
         metadata.put("requestedDueDate", requestedDueDate);
         metadata.put("reason", reason == null ? "" : reason);
+        metadata.put("extension_status", "PENDING");
+        metadata.put("extensionStatus", "PENDING");
+        metadata.put("can_review", true);
+        metadata.put("canReview", true);
 
         dispatch(
                 managerId,
@@ -557,9 +544,7 @@ public class NotificationDispatcher {
             Instant newDueDate,
             String reason
     ) {
-        if (userId == null || task == null) {
-            return;
-        }
+        if (userId == null || userId.isBlank() || task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
 
@@ -573,6 +558,10 @@ public class NotificationDispatcher {
         metadata.put("requested_due_date", newDueDate);
         metadata.put("requestedDueDate", newDueDate);
         metadata.put("reason", reason == null ? "" : reason);
+        metadata.put("extension_status", "APPROVED");
+        metadata.put("extensionStatus", "APPROVED");
+        metadata.put("can_review", false);
+        metadata.put("canReview", false);
 
         dispatch(
                 userId,
@@ -611,6 +600,8 @@ public class NotificationDispatcher {
         metadata.put("taskTitle", taskTitle);
         metadata.put("approved_due_date", newDueDate);
         metadata.put("approvedDueDate", newDueDate);
+        metadata.put("extension_status", "APPROVED");
+        metadata.put("extensionStatus", "APPROVED");
 
         dispatch(
                 userId,
@@ -636,9 +627,7 @@ public class NotificationDispatcher {
             String reason,
             String rejectReason
     ) {
-        if (userId == null || task == null) {
-            return;
-        }
+        if (userId == null || userId.isBlank() || task == null) return;
 
         String actionUrl = getTaskActionUrl(task);
 
@@ -652,6 +641,10 @@ public class NotificationDispatcher {
         metadata.put("reason", reason == null ? "" : reason);
         metadata.put("reject_reason", rejectReason == null ? "" : rejectReason);
         metadata.put("rejectReason", rejectReason == null ? "" : rejectReason);
+        metadata.put("extension_status", "REJECTED");
+        metadata.put("extensionStatus", "REJECTED");
+        metadata.put("can_review", false);
+        metadata.put("canReview", false);
 
         dispatch(
                 userId,
@@ -667,7 +660,7 @@ public class NotificationDispatcher {
                 true
         );
 
-        if (managerId != null && !managerId.isBlank()) {
+        if (managerId != null && !managerId.isBlank() && !"SYSTEM_AUTO_REJECT".equals(managerId)) {
             dispatch(
                     managerId,
                     managerId,
@@ -697,6 +690,8 @@ public class NotificationDispatcher {
         metadata.put("currentDueDate", currentDueDate);
         metadata.put("reject_reason", managerReason == null ? "" : managerReason);
         metadata.put("rejectReason", managerReason == null ? "" : managerReason);
+        metadata.put("extension_status", "REJECTED");
+        metadata.put("extensionStatus", "REJECTED");
 
         dispatch(
                 userId,
@@ -726,13 +721,8 @@ public class NotificationDispatcher {
             Map<String, Object> metadata,
             boolean emitRealtime
     ) {
-        if (recipientId == null || recipientId.isBlank()) {
-            return null;
-        }
-
-        if (!isUserExisting(recipientId)) {
-            return null;
-        }
+        if (recipientId == null || recipientId.isBlank()) return null;
+        if (!isUserExisting(recipientId)) return null;
 
         Object preferences = getPreferences(recipientId);
 
@@ -758,6 +748,7 @@ public class NotificationDispatcher {
                 preferences,
                 true,
                 "inAppNotificationsEnabled",
+                "in_app_notifications_enabled",
                 "pushNotifications",
                 "pushNotificationsEnabled"
         );
@@ -770,6 +761,7 @@ public class NotificationDispatcher {
                 preferences,
                 true,
                 "emailNotificationsEnabled",
+                "email_notifications_enabled",
                 "emailNotifications"
         );
 
@@ -795,11 +787,11 @@ public class NotificationDispatcher {
         Optional<NotificationEntity> existing = referenceId == null || referenceId.isBlank()
                 ? Optional.empty()
                 : notificationRepository.findByRecipientIdAndReferenceIdAndTypeAndStatus(
-                        recipientId,
-                        referenceId,
-                        type,
-                        NotificationStatus.PENDING
-                );
+                recipientId,
+                referenceId,
+                type,
+                NotificationStatus.PENDING
+        );
 
         NotificationEntity notification = existing.orElseGet(NotificationEntity::new);
         notification.setRecipientId(recipientId);
@@ -810,7 +802,7 @@ public class NotificationDispatcher {
         notification.setReferenceId(referenceId);
         notification.setReferenceType(referenceType == null ? "TASK" : referenceType);
         notification.setActionUrl(actionUrl);
-        notification.setMetadata(metadata == null ? new LinkedHashMap<>() : metadata);
+        notification.setMetadata(metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata));
         notification.setEmailHtml(emailHtml);
         notification.setRead(false);
         notification.setStatus(NotificationStatus.SENT);
@@ -820,9 +812,7 @@ public class NotificationDispatcher {
     }
 
     private void emitRealtimeNotification(String recipientId, NotificationEntity notification) {
-        if (recipientId == null || notification == null) {
-            return;
-        }
+        if (recipientId == null || notification == null) return;
 
         Map<String, Object> payload = toClientPayload(notification);
 
@@ -838,9 +828,7 @@ public class NotificationDispatcher {
 
         if (waiters != null) {
             for (CompletableFuture<List<NotificationEntity>> waiter : waiters) {
-                if (!waiter.isDone()) {
-                    waiter.complete(List.of(notification));
-                }
+                if (!waiter.isDone()) waiter.complete(List.of(notification));
             }
         }
     }
@@ -864,23 +852,25 @@ public class NotificationDispatcher {
         payload.put("action_url", notification.getActionUrl());
         payload.put("metadata", notification.getMetadata());
         payload.put("timestamp", notification.getCreatedAt());
+        payload.put("createdAt", notification.getCreatedAt());
         payload.put("created_at", notification.getCreatedAt());
+        payload.put("updatedAt", notification.getUpdatedAt());
+        payload.put("updated_at", notification.getUpdatedAt());
+        payload.put("status", notification.getStatus() == null ? null : notification.getStatus().name());
         payload.put("isRead", notification.isRead());
         payload.put("is_read", notification.isRead());
         return payload;
     }
 
     private boolean shouldSendEmailImmediately(String type) {
-        return IMMEDIATE_EMAIL_TYPES.contains(type);
+        return IMMEDIATE_EMAIL_TYPES.contains(type) || DEADLINE_REMINDER_TYPES.contains(type);
     }
 
     private void sendEmailSafely(String recipientId, String title, String message, String emailHtml) {
         try {
             User user = userRepository.findById(recipientId).orElse(null);
 
-            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
-                return;
-            }
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) return;
 
             String subject = "[Fluxboard] " + title;
             String html = emailHtml == null || emailHtml.isBlank()
@@ -894,10 +884,7 @@ public class NotificationDispatcher {
     }
 
     private TaskEntity getTask(String taskId) {
-        if (taskId == null || taskId.isBlank()) {
-            return null;
-        }
-
+        if (taskId == null || taskId.isBlank()) return null;
         return taskRepository.findById(taskId).orElse(null);
     }
 
@@ -918,20 +905,14 @@ public class NotificationDispatcher {
     }
 
     private boolean readBooleanPreference(Object target, boolean defaultValue, String... methodNames) {
-        if (target == null) {
-            return defaultValue;
-        }
+        if (target == null) return defaultValue;
 
         for (String methodName : methodNames) {
             try {
                 Method method = target.getClass().getMethod(methodName);
                 Object value = method.invoke(target);
-
-                if (value instanceof Boolean bool) {
-                    return bool;
-                }
+                if (value instanceof Boolean bool) return bool;
             } catch (Exception ignored) {
-                // Try next method.
             }
         }
 
@@ -945,9 +926,7 @@ public class NotificationDispatcher {
         if (assignees instanceof Iterable<?> iterable) {
             for (Object item : iterable) {
                 String id = toIdString(item);
-                if (id != null) {
-                    recipients.add(id);
-                }
+                if (id != null) recipients.add(id);
             }
         }
 
@@ -963,26 +942,40 @@ public class NotificationDispatcher {
     }
 
     private void addIfPresent(Set<String> set, String value) {
-        if (value != null && !value.isBlank()) {
-            set.add(value);
-        }
+        if (value != null && !value.isBlank()) set.add(value);
     }
 
     private Map<String, Object> buildTaskMetadata(TaskEntity task) {
         Map<String, Object> metadata = new LinkedHashMap<>();
 
         String taskId = task == null ? null : task.getId();
-        String boardId = task == null ? null : readString(task, "getBoardId", "getBoard_id");
+        String boardId = resolveBoardId(task);
+        String actionUrl = buildActionUrl(boardId, taskId);
         String title = safeTaskTitle(task);
         Object priority = task == null ? null : readObject(task, "getPriority");
+        Instant dueDate = task == null ? null : readInstant(task, "getDueDate", "getDueAt");
 
         putTaskNavigationMetadata(metadata, taskId, boardId, title);
 
         metadata.put("task_title", title);
         metadata.put("taskTitle", title);
 
+        if (task != null) {
+            putIfPresent(metadata, "column_id", task.getColumnId());
+            putIfPresent(metadata, "columnId", task.getColumnId());
+            putIfPresent(metadata, "project_id", task.getProjectId());
+            putIfPresent(metadata, "projectId", task.getProjectId());
+            putIfPresent(metadata, "action_url", actionUrl);
+            putIfPresent(metadata, "actionUrl", actionUrl);
+        }
+
         if (priority != null) {
             metadata.put("priority", String.valueOf(priority));
+        }
+
+        if (dueDate != null) {
+            metadata.put("due_date", dueDate);
+            metadata.put("dueDate", dueDate);
         }
 
         return metadata;
@@ -998,31 +991,35 @@ public class NotificationDispatcher {
     }
 
     private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
-        if (metadata == null || key == null || value == null) {
-            return;
-        }
-
-        if (value instanceof String str && str.isBlank()) {
-            return;
-        }
-
+        if (metadata == null || key == null || value == null) return;
+        if (value instanceof String str && str.isBlank()) return;
         metadata.put(key, value);
     }
 
     private String getTaskActionUrl(TaskEntity task) {
-        if (task == null) {
+        if (task == null) return null;
+        return buildActionUrl(resolveBoardId(task), task.getId());
+    }
+
+    private String resolveBoardId(TaskEntity task) {
+        if (task == null) return null;
+
+        String directBoardId = readString(task, "getBoardId", "getBoard_id");
+        if (directBoardId != null && !directBoardId.isBlank()) return directBoardId;
+
+        String columnId = task.getColumnId();
+        if (columnId == null || columnId.isBlank()) return null;
+
+        try {
+            BoardColumnEntity column = boardColumnRepository.findByIdAndDeletedFalse(columnId).orElse(null);
+            return column == null ? null : column.getBoardId();
+        } catch (Exception ignored) {
             return null;
         }
-
-        String boardId = readString(task, "getBoardId", "getBoard_id");
-        return buildActionUrl(boardId, task.getId());
     }
 
     private String buildActionUrl(String boardId, String taskId) {
-        if (boardId == null || boardId.isBlank() || taskId == null || taskId.isBlank()) {
-            return null;
-        }
-
+        if (boardId == null || boardId.isBlank() || taskId == null || taskId.isBlank()) return null;
         return "/board/" + boardId + "?taskId=" + taskId;
     }
 
@@ -1035,52 +1032,31 @@ public class NotificationDispatcher {
     }
 
     private String resolveUserDisplayName(String userId, String fallback) {
-        if (userId == null || userId.isBlank()) {
-            return fallback;
-        }
+        if (userId == null || userId.isBlank()) return fallback;
 
         try {
             User user = userRepository.findById(userId).orElse(null);
 
-            if (user == null) {
-                return fallback;
-            }
-
-            if (user.getFullName() != null && !user.getFullName().isBlank()) {
-                return user.getFullName();
-            }
-
-            if (user.getEmail() != null && !user.getEmail().isBlank()) {
-                return user.getEmail();
-            }
+            if (user == null) return fallback;
+            if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
+            if (user.getEmail() != null && !user.getEmail().isBlank()) return user.getEmail();
         } catch (Exception ignored) {
-            // Return fallback.
         }
 
         return fallback;
     }
 
     private boolean idsEqual(String a, String b) {
-        if (a == null || b == null) {
-            return false;
-        }
-
+        if (a == null || b == null) return false;
         return a.equals(b);
     }
 
     private String toIdString(Object value) {
-        if (value == null) {
-            return null;
-        }
-
-        if (value instanceof String str) {
-            return str;
-        }
+        if (value == null) return null;
+        if (value instanceof String str) return str;
 
         Object id = readObject(value, "getId");
-        if (id != null) {
-            return String.valueOf(id);
-        }
+        if (id != null) return String.valueOf(id);
 
         return String.valueOf(value);
     }
@@ -1092,25 +1068,18 @@ public class NotificationDispatcher {
 
     private Instant readInstant(Object target, String... methodNames) {
         Object value = readObject(target, methodNames);
-
-        if (value instanceof Instant instant) {
-            return instant;
-        }
-
+        if (value instanceof Instant instant) return instant;
         return null;
     }
 
     private Object readObject(Object target, String... methodNames) {
-        if (target == null) {
-            return null;
-        }
+        if (target == null) return null;
 
         for (String methodName : methodNames) {
             try {
                 Method method = target.getClass().getMethod(methodName);
                 return method.invoke(target);
             } catch (Exception ignored) {
-                // Try next method.
             }
         }
 
@@ -1138,9 +1107,7 @@ public class NotificationDispatcher {
     }
 
     private String escapeHtml(String value) {
-        if (value == null) {
-            return "";
-        }
+        if (value == null) return "";
 
         return value
                 .replace("&", "&amp;")
@@ -1151,9 +1118,7 @@ public class NotificationDispatcher {
     }
 
     public String formatInstantForDisplay(Instant instant) {
-        if (instant == null) {
-            return "Không rõ";
-        }
+        if (instant == null) return "Không rõ";
 
         return DateTimeFormatter
                 .ofPattern("HH:mm dd/MM/yyyy")

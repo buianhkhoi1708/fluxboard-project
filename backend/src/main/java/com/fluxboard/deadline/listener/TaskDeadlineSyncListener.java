@@ -29,7 +29,8 @@ public class TaskDeadlineSyncListener {
     @EventListener
     public void onTaskCreated(TaskCreatedEvent event) {
         if (event.getDueDate() == null) return;
-        deadlineRepository.findByTaskId(event.getTaskId()).ifPresentOrElse(deadline -> {
+
+        deadlineRepository.findActiveByTaskId(event.getTaskId()).ifPresentOrElse(deadline -> {
             deadline.setStartDate(event.getStartDate());
             deadline.setDueDate(event.getDueDate());
             deadline.setStatus(calculateStatus(deadline));
@@ -55,29 +56,51 @@ public class TaskDeadlineSyncListener {
     @EventListener
     public void onTaskUpdated(TaskUpdatedEvent event) {
         if (event.getDueDate() == null) return;
-        deadlineRepository.findByTaskId(event.getTaskId()).ifPresentOrElse(deadline -> {
+
+        deadlineRepository.findActiveByTaskId(event.getTaskId()).ifPresentOrElse(deadline -> {
             boolean dueChanged = deadline.getDueDate() == null || !deadline.getDueDate().equals(event.getDueDate());
+
             deadline.setStartDate(event.getStartDate());
             deadline.setDueDate(event.getDueDate());
             deadline.setStatus(calculateStatus(deadline));
-            if (dueChanged) deadline.setIsReminderSent(false);
+
+            if (dueChanged) {
+                deadline.setIsReminderSent(false);
+            }
+
             deadlineRepository.save(deadline);
-        }, () -> onTaskCreated(new TaskCreatedEvent(this, event.getTaskId(), event.getStartDate(), event.getDueDate())));
+        }, () -> onTaskCreated(new TaskCreatedEvent(
+                this,
+                event.getTaskId(),
+                event.getStartDate(),
+                event.getDueDate()
+        )));
     }
 
     @Async
     @EventListener
     public void onTaskDeleted(TaskDeletedEvent event) {
-        deadlineRepository.findByTaskId(event.getTaskId()).ifPresent(deadlineRepository::delete);
+        deadlineRepository.findActiveByTaskId(event.getTaskId()).ifPresent(deadline -> {
+            deadline.markDeleted();
+            deadlineRepository.save(deadline);
+        });
     }
 
-    private TaskDeadlineEntity.DeadlineStatus calculateStatus(TaskDeadlineEntity d) {
-        if (d.getActualCompletedAt() != null) {
-            return d.getDueDate() != null && d.getActualCompletedAt().isAfter(d.getDueDate()) ? TaskDeadlineEntity.DeadlineStatus.LATE : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+    private TaskDeadlineEntity.DeadlineStatus calculateStatus(TaskDeadlineEntity deadline) {
+        if (deadline.getActualCompletedAt() != null) {
+            return deadline.getDueDate() != null && deadline.getActualCompletedAt().isAfter(deadline.getDueDate())
+                    ? TaskDeadlineEntity.DeadlineStatus.LATE
+                    : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
         }
-        if (d.getDueDate() == null) return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+
+        if (deadline.getDueDate() == null) return TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+
         Instant now = Instant.now();
-        if (now.isAfter(d.getDueDate())) return TaskDeadlineEntity.DeadlineStatus.OVERDUE;
-        return now.isAfter(d.getDueDate().minus(Duration.ofHours(24))) ? TaskDeadlineEntity.DeadlineStatus.AT_RISK : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
+
+        if (now.isAfter(deadline.getDueDate())) return TaskDeadlineEntity.DeadlineStatus.OVERDUE;
+
+        return now.isAfter(deadline.getDueDate().minus(Duration.ofHours(24)))
+                ? TaskDeadlineEntity.DeadlineStatus.AT_RISK
+                : TaskDeadlineEntity.DeadlineStatus.ON_TRACK;
     }
 }

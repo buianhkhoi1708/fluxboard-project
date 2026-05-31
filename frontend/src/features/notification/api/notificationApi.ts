@@ -1,70 +1,127 @@
 import axiosClient from '../../../lib/axiosClient';
+import { AppNotification, NotificationPageResponse } from '../types/notificationTypes';
 
-export interface Notification {
-  id: string;
-  recipientId: string;
-  type:
-    | 'TASK_ASSIGNED'
-    | 'TASK_MOVED'
-    | 'DEADLINE_APPROACHING'
-    | 'TASK_OVERDUE'
-    | 'DEADLINE_UPDATED'
-    | 'EXTENSION_APPROVED'
-    | 'EXTENSION_REJECTED'
-    | 'EXTENSION_REQUESTED';
+const unwrapApiData = (res: any) => {
+  if (res?.data !== undefined) return res.data;
+  return res;
+};
 
-  title: string;
-  message: string;
+const normalizeArray = (payload: any): AppNotification[] => {
+  const data = unwrapApiData(payload);
 
-  isRead: boolean;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  if (Array.isArray(payload?.content)) return payload.content;
 
-  metadata?: {
-    taskId?: string;
-    boardId?: string;
-    [key: string]: any;
+  return [];
+};
+
+const normalizePage = (payload: any, page = 0, size = 20): NotificationPageResponse => {
+  const root = payload || {};
+  const data = unwrapApiData(root);
+  const content = normalizeArray(root);
+  const meta = root?.meta || data?.meta || root?.pageable || {};
+
+  return {
+    content,
+    page: meta.page ?? meta.page_number ?? root.page ?? data?.page ?? page,
+    size: meta.size ?? meta.page_size ?? root.size ?? data?.size ?? size,
+    totalElements:
+      meta.total_elements ??
+      meta.totalElements ??
+      root.totalElements ??
+      data?.totalElements ??
+      content.length,
+    totalPages:
+      meta.total_pages ??
+      meta.totalPages ??
+      root.totalPages ??
+      data?.totalPages ??
+      1,
+    hasNext:
+      meta.has_next ??
+      meta.hasNext ??
+      false,
   };
-
-  createdAt: string;
-}
-
-export interface NotificationPageResponse {
-  content: Notification[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-}
+};
 
 export const notificationApi = {
-  /**
-   * 🔔 Lấy danh sách notifications
-   */
-  getNotifications: (
+  getNotifications: async (
     params?: {
       page?: number;
       size?: number;
       unreadOnly?: boolean;
     }
-  ) =>
-    axiosClient.get('/notifications', {
-      params,
-    }),
+  ): Promise<NotificationPageResponse> => {
+    const page = params?.page ?? 0;
+    const size = params?.size ?? 20;
 
-  /**
-   * 🔴 Badge unread count
-   */
-  getUnreadCount: () =>
-    axiosClient.get('/notifications/unread-count'),
+    const res: any = await axiosClient.get('/notifications', { params });
+    return normalizePage(res, page, size);
+  },
 
-  /**
-   * ✔️ Đánh dấu 1 notification đã đọc
-   */
-  markAsRead: (id: string) =>
-    axiosClient.patch(`/notifications/${id}/read`),
+  getUnreadCount: async (): Promise<number> => {
+    const res: any = await axiosClient.get('/notifications/unread-count');
+    const data = unwrapApiData(res);
+    return Number(data ?? 0);
+  },
 
-  /**
-   * ✔️ Đánh dấu tất cả đã đọc
-   */
-  markAllAsRead: () =>
-    axiosClient.patch('/notifications/read-all'),
+  markAsRead: async (id: string): Promise<AppNotification | null> => {
+    const res: any = await axiosClient.patch(`/notifications/${id}/read`);
+    return unwrapApiData(res) || null;
+  },
+
+  markAllAsRead: async (): Promise<void> => {
+    await axiosClient.patch('/notifications/read-all');
+  },
+
+  longPolling: async (): Promise<AppNotification[]> => {
+    const res: any = await axiosClient.get('/notifications/long-polling');
+    return normalizeArray(res);
+  },
+
+  requestDeadlineExtension: async (
+    taskId: string,
+    payload: {
+      requestedDueDate?: string;
+      requested_due_date?: string;
+      newDueDate?: string;
+      new_due_date?: string;
+      reason: string;
+    }
+  ) => {
+    const finalPayload = {
+      requested_due_date:
+        payload.requested_due_date ||
+        payload.requestedDueDate ||
+        payload.new_due_date ||
+        payload.newDueDate,
+      reason: payload.reason,
+    };
+
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions`, finalPayload);
+    return unwrapApiData(res);
+  },
+
+  approveDeadlineExtension: async (taskId: string) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/approve`);
+    return unwrapApiData(res);
+  },
+
+  rejectDeadlineExtension: async (
+    taskId: string,
+    payload?: {
+      reason?: string;
+      rejectReason?: string;
+      reject_reason?: string;
+    }
+  ) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/reject`, {
+      reject_reason: payload?.reject_reason || payload?.rejectReason || payload?.reason || '',
+    });
+
+    return unwrapApiData(res);
+  },
 };

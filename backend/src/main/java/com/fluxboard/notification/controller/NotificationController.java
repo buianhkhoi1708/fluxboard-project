@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -22,19 +23,9 @@ import java.util.concurrent.CompletableFuture;
 @RequestMapping("/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
-
     private final NotificationRepository notificationRepository;
     private final NotificationDispatcher notificationDispatcher;
 
-    /**
-     * GET /notifications
-     *
-     * FE dùng cho:
-     * - Trang tất cả thông báo.
-     * - Topbar load lịch sử ban đầu.
-     *
-     * Notification trả về luôn có actionUrl + metadata để click là đi tới task.
-     */
     @GetMapping
     public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @RequestAttribute("userId") String userId,
@@ -56,27 +47,12 @@ public class NotificationController {
         );
     }
 
-    /**
-     * GET /notifications/unread-count
-     *
-     * Dùng cho badge icon chuông.
-     */
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Long>> getUnreadCount(
-            @RequestAttribute("userId") String userId
-    ) {
+    public ResponseEntity<ApiResponse<Long>> getUnreadCount(@RequestAttribute("userId") String userId) {
         long count = notificationRepository.countByRecipientIdAndIsReadFalse(userId);
         return ResponseFactory.success("Fetch unread count successfully", count);
     }
 
-    /**
-     * GET /notifications/long-polling
-     *
-     * Pipeline realtime giống Change_code:
-     * - FE gọi giữ request.
-     * - Nếu có notification mới thì trả về ngay.
-     * - Nếu không có gì thì hết vòng polling trả [].
-     */
     @GetMapping("/long-polling")
     public DeferredResult<ResponseEntity<ApiResponse<List<NotificationResponse>>>> longPollingNotifications(
             @RequestAttribute("userId") String userId
@@ -88,25 +64,18 @@ public class NotificationController {
                 notificationDispatcher.waitForRealtimeNotifications(userId, 30_000L);
 
         future.whenComplete((notifications, error) -> {
-            if (result.isSetOrExpired()) {
-                return;
-            }
+            if (result.isSetOrExpired()) return;
 
             if (error != null) {
-                result.setResult(
-                        ResponseFactory.success(
-                                "Polling cycle completed",
-                                List.of()
-                        )
-                );
+                result.setResult(ResponseFactory.success("Polling cycle completed", List.of()));
                 return;
             }
 
             List<NotificationResponse> payload = notifications == null
                     ? List.of()
                     : notifications.stream()
-                            .map(NotificationResponse::fromEntity)
-                            .toList();
+                    .map(NotificationResponse::fromEntity)
+                    .toList();
 
             result.setResult(
                     ResponseFactory.success(
@@ -119,26 +88,16 @@ public class NotificationController {
         });
 
         result.onTimeout(() -> {
-            if (!future.isDone()) {
-                future.complete(List.of());
-            }
+            if (!future.isDone()) future.complete(List.of());
         });
 
         result.onError(error -> {
-            if (!future.isDone()) {
-                future.complete(List.of());
-            }
+            if (!future.isDone()) future.complete(List.of());
         });
 
         return result;
     }
 
-    /**
-     * PATCH /notifications/{id}/read
-     *
-     * Đánh dấu đã đọc khi FE click notification.
-     * Chỉ owner của notification mới được mark read.
-     */
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<NotificationResponse>> markAsRead(
             @RequestAttribute("userId") String userId,
@@ -160,13 +119,8 @@ public class NotificationController {
         );
     }
 
-    /**
-     * PATCH /notifications/read-all
-     */
     @PatchMapping("/read-all")
-    public ResponseEntity<ApiResponse<Void>> markAllAsRead(
-            @RequestAttribute("userId") String userId
-    ) {
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") String userId) {
         List<NotificationEntity> unreadNotifications =
                 notificationRepository.findByRecipientIdAndIsReadFalse(userId);
 
@@ -175,12 +129,10 @@ public class NotificationController {
         }
 
         notificationRepository.saveAll(unreadNotifications);
-
         return ResponseFactory.success("All notifications marked as read successfully");
     }
 
     public static class NotificationResponse {
-
         private String id;
         private String recipientId;
         private String senderId;
@@ -192,12 +144,14 @@ public class NotificationController {
         private String actionUrl;
         private Map<String, Object> metadata;
         private Instant timestamp;
+        private Instant createdAt;
+        private Instant updatedAt;
+        private Instant sendAt;
+        private String status;
         private boolean isRead;
 
         public static NotificationResponse fromEntity(NotificationEntity entity) {
-            if (entity == null) {
-                return null;
-            }
+            if (entity == null) return null;
 
             NotificationResponse response = new NotificationResponse();
             response.id = entity.getId();
@@ -209,8 +163,14 @@ public class NotificationController {
             response.referenceId = entity.getReferenceId();
             response.referenceType = entity.getReferenceType();
             response.actionUrl = entity.getActionUrl();
-            response.metadata = entity.getMetadata();
+            response.metadata = entity.getMetadata() == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(entity.getMetadata());
             response.timestamp = entity.getCreatedAt();
+            response.createdAt = entity.getCreatedAt();
+            response.updatedAt = entity.getUpdatedAt();
+            response.sendAt = entity.getSendAt();
+            response.status = entity.getStatus() == null ? null : entity.getStatus().name();
             response.isRead = entity.isRead();
             return response;
         }
@@ -257,6 +217,22 @@ public class NotificationController {
 
         public Instant getTimestamp() {
             return timestamp;
+        }
+
+        public Instant getCreatedAt() {
+            return createdAt;
+        }
+
+        public Instant getUpdatedAt() {
+            return updatedAt;
+        }
+
+        public Instant getSendAt() {
+            return sendAt;
+        }
+
+        public String getStatus() {
+            return status;
         }
 
         public boolean isRead() {

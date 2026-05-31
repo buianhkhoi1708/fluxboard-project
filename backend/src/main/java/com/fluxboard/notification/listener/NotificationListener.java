@@ -17,12 +17,12 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class NotificationListener {
-
     private final NotificationDispatcher notificationDispatcher;
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
@@ -32,7 +32,6 @@ public class NotificationListener {
     public void handleTaskCreated(TaskCreatedEvent event) {
         String taskId = readString(event, "getTaskId", "taskId");
         String actorId = readString(event, "getActorUserId", "getUserId", "getCreatedBy", "getSenderId");
-
         notificationDispatcher.dispatchTaskCreated(taskId, actorId);
     }
 
@@ -64,17 +63,18 @@ public class NotificationListener {
         TaskEntity task = taskRepository.findById(event.getTaskId()).orElse(null);
         User requester = userRepository.findById(event.getRequesterId()).orElse(null);
 
-        if (task == null || requester == null) {
-            return;
-        }
+        if (task == null || requester == null) return;
 
         Instant currentDueDate = readInstant(event, "getCurrentDueDate", "getOriginalDueDate");
         Instant requestedDueDate = event.getRequestedDueDate();
+        String requesterName = requester.getFullName() != null && !requester.getFullName().isBlank()
+                ? requester.getFullName()
+                : requester.getEmail();
 
         notificationDispatcher.notifyExtensionRequested(
                 event.getTargetManagerId(),
                 event.getRequesterId(),
-                requester.getFullName() != null ? requester.getFullName() : requester.getEmail(),
+                requesterName,
                 task,
                 currentDueDate,
                 requestedDueDate,
@@ -86,17 +86,14 @@ public class NotificationListener {
     @EventListener
     public void handleExtensionApproved(ExtensionApprovedEvent event) {
         TaskEntity task = taskRepository.findById(event.getTaskId()).orElse(null);
-
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String managerId = readString(event, "getManagerId", "getReviewerId", "getUserId", "getSenderId");
-        Instant originalDueDate = readInstant(event, "getOriginalDueDate", "getCurrentDueDate");
+        Instant originalDueDate = readInstant(event, "getOriginalDueDate", "getCurrentDueDate", "getOldDueDate");
         Instant newDueDate = event.getNewDueDate();
         String reason = readString(event, "getReason", "getRequestReason");
 
-        for (String userId : event.getTargetUserIds()) {
+        for (String userId : safeTargets(event.getTargetUserIds(), event.getRequesterId(), task)) {
             notificationDispatcher.notifyExtensionApproved(
                     userId,
                     managerId,
@@ -112,10 +109,7 @@ public class NotificationListener {
     @EventListener
     public void handleExtensionRejected(ExtensionRejectedEvent event) {
         TaskEntity task = taskRepository.findById(event.getTaskId()).orElse(null);
-
-        if (task == null) {
-            return;
-        }
+        if (task == null) return;
 
         String managerId = readString(event, "getManagerId", "getReviewerId", "getUserId", "getSenderId");
         Instant originalDueDate = event.getCurrentDueDate();
@@ -123,9 +117,7 @@ public class NotificationListener {
         String reason = readString(event, "getReason", "getRequestReason");
         String rejectReason = event.getManagerReason();
 
-        List<String> targetUserIds = event.getTargetUserIds();
-
-        for (String userId : targetUserIds) {
+        for (String userId : safeTargets(event.getTargetUserIds(), event.getRequesterId(), task)) {
             notificationDispatcher.notifyExtensionRejected(
                     userId,
                     managerId,
@@ -138,48 +130,51 @@ public class NotificationListener {
         }
     }
 
-    private boolean isCompletedEvent(String eventType, Object event) {
-        if (eventType != null && eventType.toUpperCase().contains("COMPLETE")) {
-            return true;
-        }
+    private List<String> safeTargets(List<String> eventTargets, String requesterId, TaskEntity task) {
+        List<String> targets = new ArrayList<>();
 
-        Object isDone = readObject(event, "isDone", "getIsDone", "getDone", "isCompleted", "getCompleted");
-
-        if (isDone instanceof Boolean bool) {
-            return bool;
-        }
-
-        String status = readString(event, "getStatus", "getNewStatus");
-
-        return status != null && (
-                status.equalsIgnoreCase("DONE")
-                        || status.equalsIgnoreCase("COMPLETED")
-                        || status.equalsIgnoreCase("COMPLETE")
-        );
-    }
-
-    private boolean isMoveEvent(
-            String eventType,
-            Object event,
-            String destinationColumnId,
-            String destinationColumnName
-    ) {
-        if (eventType != null) {
-            String normalized = eventType.toUpperCase();
-
-            if (normalized.contains("MOVE") || normalized.contains("COLUMN") || normalized.contains("STATUS")) {
-                return true;
+        if (eventTargets != null) {
+            for (String id : eventTargets) {
+                if (id != null && !id.isBlank() && !targets.contains(id)) targets.add(id);
             }
         }
 
-        if (destinationColumnId != null || destinationColumnName != null) {
-            return true;
+        if (requesterId != null && !requesterId.isBlank() && !targets.contains(requesterId)) {
+            targets.add(requesterId);
         }
 
-        String fromColumn = readString(event, "getSourceColumnId", "getFromColumnId");
-        String toColumn = readString(event, "getDestColumnId", "getDestinationColumnId", "getToColumnId");
+        if (targets.isEmpty() && task.getAssigneesUserId() != null) {
+            for (String id : task.getAssigneesUserId()) {
+                if (id != null && !id.isBlank() && !targets.contains(id)) targets.add(id);
+            }
+        }
 
-        return fromColumn != null || toColumn != null;
+        return targets;
+    }
+
+    private boolean isCompletedEvent(String eventType, Object event) {
+        if (eventType != null) {
+            String normalized = eventType.trim().toUpperCase();
+            if (normalized.contains("COMPLETE") || normalized.contains("DONE")) return true;
+        }
+
+        String status = readString(event, "getStatus", "getNewStatus", "getToStatus");
+        return status != null && "DONE".equalsIgnoreCase(status.trim());
+    }
+
+    private boolean isMoveEvent(String eventType, Object event, String destinationColumnId, String destinationColumnName) {
+        if (eventType != null) {
+            String normalized = eventType.trim().toUpperCase();
+            if (normalized.contains("MOVE") || normalized.contains("COLUMN")) return true;
+        }
+
+        if (destinationColumnId != null && !destinationColumnId.isBlank()) return true;
+        if (destinationColumnName != null && !destinationColumnName.isBlank()) return true;
+
+        String oldColumnId = readString(event, "getOldColumnId", "getSourceColumnId", "getFromColumnId");
+        String newColumnId = readString(event, "getNewColumnId", "getDestinationColumnId", "getToColumnId");
+
+        return oldColumnId != null && newColumnId != null && !oldColumnId.equals(newColumnId);
     }
 
     private String readString(Object target, String... methodNames) {
@@ -189,25 +184,17 @@ public class NotificationListener {
 
     private Instant readInstant(Object target, String... methodNames) {
         Object value = readObject(target, methodNames);
-
-        if (value instanceof Instant instant) {
-            return instant;
-        }
-
-        return null;
+        return value instanceof Instant instant ? instant : null;
     }
 
     private Object readObject(Object target, String... methodNames) {
-        if (target == null) {
-            return null;
-        }
+        if (target == null) return null;
 
         for (String methodName : methodNames) {
             try {
                 Method method = target.getClass().getMethod(methodName);
                 return method.invoke(target);
             } catch (Exception ignored) {
-                // Try next method.
             }
         }
 

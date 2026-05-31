@@ -27,4 +27,7 @@ public interface TaskDeadlineRepository extends MongoRepository<TaskDeadlineEnti
 
     @Query("{ 'is_extension_pending': true, 'is_deleted': { $ne: true } }")
     List<TaskDeadlineEntity> findPendingExtensionRequests();
+
+    @Query("{ 'is_extension_pending': true, 'extension_status': 'PENDING', 'extension_requested_at': { $lte: ?0 }, 'is_deleted': { $ne: true } }")
+    List<TaskDeadlineEntity> findPendingExtensionRequestsOlderThan(Instant expiredBefore);
 }
