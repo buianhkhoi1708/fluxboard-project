@@ -1,25 +1,22 @@
 import React, { useState, memo, useMemo } from 'react';
-import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock, Check } from 'lucide-react';
+import { Trash2, Edit2, AlignLeft, Flag, CheckSquare, Square, Calendar, Clock, Check, MessageSquare } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
 import { useBoardStore } from '../stores/useBoardStore';
-import { useUserStore } from '../../user/store/useUserStore'; 
+import { useUserStore } from '../../user/store/useUserStore';
 import { useDeleteTask, useUpdateTask, useGetBoardDetail } from '../hooks/useBoardQueries';
-
-import DeleteConfirmModal from './DeleteConfirmModal'; 
-
-import { TaskItemProps as BaseTaskItemProps, Task } from '../types/index';
+import DeleteConfirmModal from './DeleteConfirmModal';
+import { TaskItemProps as BaseTaskItemProps, Task, TaskComment } from '../types/index';
 
 interface TaskItemProps extends BaseTaskItemProps {
-  onOpenTaskDetail?: (taskId: string) => void;
+  onOpenTaskDetail?: (taskId: string, openCommentPanel?: boolean) => void;
 }
 
-const priorityColors: Record<string, string> = { 
-  LOW: 'bg-blue-100 text-blue-700',  
-  MEDIUM: 'bg-yellow-100 text-yellow-700', 
-  HIGH: 'bg-orange-100 text-orange-700', 
-  CRITICAL: 'bg-red-100 text-red-700' 
+const priorityColors: Record<string, string> = {
+  LOW: 'bg-blue-100 text-blue-700',
+  MEDIUM: 'bg-yellow-100 text-yellow-700',
+  HIGH: 'bg-orange-100 text-orange-700',
+  CRITICAL: 'bg-red-100 text-red-700'
 };
 
 const formatDateForInput = (dateString?: string | null) => {
@@ -27,27 +24,26 @@ const formatDateForInput = (dateString?: string | null) => {
   return dateString.split('T')[0];
 };
 
+const isCommentActive = (comment: TaskComment) => {
+  return !comment.is_resolved && !comment.isResolved && !comment.resolved;
+};
+
 const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpenTaskDetail }) => {
   const { activeBoardId } = useBoardStore();
-  
   const { data: board } = useGetBoardDetail(activeBoardId as string);
   const projectId = board?.projectId || board?.project_id;
-
   const getUser = useUserStore((state) => state.getUser);
-  
   const { mutateAsync: deleteApiTask } = useDeleteTask();
   const { mutateAsync: updateApiTask } = useUpdateTask();
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  
-  const safeTaskId = String(task.id || task._id);
 
-  // 🚀 XÁC ĐỊNH TRẠNG THÁI TASK ĐÃ XONG HAY CHƯA
+  const safeTaskId = String(task.id || task._id);
   const isTaskDone = task.status === 'DONE' || task.is_done;
+  const activeComments = useMemo(() => (task.comments || []).filter(isCommentActive), [task.comments]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: safeTaskId, 
-    data: { type: 'Task', task, listId }
+    id: safeTaskId,
+    data: { type: 'Task', task, listId, columnId: listId }
   });
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
@@ -58,25 +54,22 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
       await deleteApiTask({ taskId: safeTaskId, boardId: activeBoardId });
       setIsDeleteModalOpen(false);
     } catch (error) {
-      console.error("Lỗi khi xóa Task:", error);
+      console.error('Lỗi khi xóa công việc:', error);
     }
   };
 
-  // Tìm hàm này trong TaskItem.tsx
   const handleToggleSubtask = async (e: React.MouseEvent, subtaskId: string) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     if (!activeBoardId) return;
 
     const subtask = task.subtasks?.find((st: Task) => st.id === subtaskId || st._id === subtaskId);
     if (!subtask) return;
 
     const newStatus = (subtask.status === 'DONE' || subtask.is_done) ? 'TODO' : 'DONE';
-
-    // 🚀 BÍ KÍP FIX LỖI: Làm sạch mảng Assignees (chỉ bóc lấy chuỗi ID, vứt bỏ Object)
     const rawAssignees = subtask.assignees_user_id || subtask.assigneesUserId || subtask.assignees || [];
     const cleanAssignees = rawAssignees
       .map((item: any) => typeof item === 'object' ? (item.user_id || item.id || item._id) : item)
-      .filter((id: any) => id && String(id) !== "undefined" && !String(id).startsWith('temp-'))
+      .filter((id: any) => id && String(id) !== 'undefined' && !String(id).startsWith('temp-'))
       .map((id: any) => String(id));
 
     try {
@@ -85,49 +78,38 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
         boardId: activeBoardId,
         updateData: {
           title: subtask.title,
-          description: subtask.description || "",
+          description: subtask.description || '',
           column_id: listId,
           parent_task_id: safeTaskId,
           status: newStatus,
-          
-          // 🚀 BÍ KÍP FIX LỖI ENUM: Ép chuỗi thành in hoa toàn bộ (toUpperCase)
-          priority: subtask.priority ? String(subtask.priority).toUpperCase() : "MEDIUM",
-          
+          priority: subtask.priority ? String(subtask.priority).toUpperCase() : 'MEDIUM',
           story_point: Number(subtask.story_point || subtask.story_points) || 0,
-          assignees_user_id: cleanAssignees, 
-          start_date: subtask.start_date || null, 
+          assignees_user_id: cleanAssignees,
+          start_date: subtask.start_date || null,
           due_date: subtask.due_date || null
         }
       });
     } catch (error) {
-      console.error("Lỗi khi cập nhật Subtask:", error);
+      console.error('Lỗi khi cập nhật việc con:', error);
     }
+  };
+
+  const openDetail = (openCommentPanel = false) => {
+    if (!isOverlay && onOpenTaskDetail) onOpenTaskDetail(safeTaskId, openCommentPanel);
   };
 
   return (
     <>
-      <div 
-        ref={isOverlay ? null : setNodeRef} 
-        style={style} 
-        {...attributes} 
-        {...listeners} 
-        onClick={() => {
-          if (!isOverlay && onOpenTaskDetail) {
-            onOpenTaskDetail(safeTaskId);
-          }
-        }}
-        // 🚀 ĐỔI STYLE NỀN, VIỀN VÀ ĐỘ MỜ THEO TRẠNG THÁI DONE
-        className={`group relative flex flex-col p-3.5 sm:p-4 rounded-xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all 
-          ${isTaskDone 
-            ? 'bg-slate-50/80 border-slate-200/60 opacity-85 hover:border-slate-300' 
-            : 'bg-white border-slate-200 hover:border-indigo-300'} 
-          ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
+      <div
+        ref={isOverlay ? null : setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        onClick={() => openDetail(false)}
+        className={`group relative flex flex-col p-3.5 sm:p-4 rounded-xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all ${isTaskDone ? 'bg-slate-50/80 border-slate-200/60 opacity-85 hover:border-slate-300' : 'bg-white border-slate-200 hover:border-indigo-300'} ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
       >
-        {/* 🚀 KHỐI TIÊU ĐỀ: TỰ ĐỘNG GẠCH NGANG VÀ THÊM ICON HOÀN THÀNH BIẾN ĐỘNG */}
-        <div className="flex justify-between items-start gap-2 pr-14">
-          <h4 className={`text-sm font-semibold break-words leading-snug transition-all 
-            ${isTaskDone ? 'line-through text-slate-400 font-medium' : 'text-slate-800'}`}
-          >
+        <div className="flex justify-between items-start gap-2 pr-20">
+          <h4 className={`text-sm font-semibold break-words leading-snug transition-all ${isTaskDone ? 'line-through text-slate-400 font-medium' : 'text-slate-800'}`}>
             {task.title}
           </h4>
           {isTaskDone && (
@@ -136,37 +118,40 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
             </span>
           )}
         </div>
-        
+
         {task.description && (
           <div className="mt-2 flex items-start gap-1.5 text-slate-500">
             <AlignLeft size={12} className="shrink-0 mt-0.5 text-slate-400" />
-            <p className={`text-xs line-clamp-2 leading-relaxed ${isTaskDone ? 'text-slate-400/70' : ''}`}>{task.description}</p>
+            <p className={`text-xs line-clamp-2 leading-relaxed ${isTaskDone ? 'text-slate-400/70' : ''}`}>
+              {task.description}
+            </p>
           </div>
         )}
 
-        {(task.due_date || (task.estimated_days && task.estimated_days > 0)) && (
+        {(task.due_date || task.dueDate || (task.estimated_days && task.estimated_days > 0)) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] font-medium text-slate-500">
-            {task.due_date && (
+            {(task.due_date || task.dueDate) && (
               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 whitespace-nowrap">
                 <Calendar size={10} className="text-slate-400" />
-                <span>{formatDateForInput(task.due_date)}</span>
+                <span>{formatDateForInput(task.due_date || task.dueDate)}</span>
               </div>
             )}
-            {task.estimated_days && task.estimated_days > 0 ? (
+            {task.estimated_days && task.estimated_days > 0 && (
               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-100 whitespace-nowrap">
                 <Clock size={10} />
-                <span>{task.estimated_days} days</span>
+                <span>{task.estimated_days} ngày</span>
               </div>
-            ) : null}
+            )}
           </div>
         )}
 
         {task.subtasks && task.subtasks.length > 0 && (
           <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2 cursor-default">
             {task.subtasks.map((st: Task) => (
-              <div 
-                key={String(st.id || st._id)} 
-                onClick={(e) => handleToggleSubtask(e, String(st.id || st._id))} 
+              <div
+                key={String(st.id || st._id)}
+                onClick={(e) => handleToggleSubtask(e, String(st.id || st._id))}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors"
               >
                 {st.status === 'DONE' ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
@@ -182,82 +167,98 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
           <div className="flex items-center gap-2">
             {task.priority && (
               <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${isTaskDone ? 'bg-slate-100 text-slate-400 border border-slate-200/60' : (priorityColors[String(task.priority).toUpperCase()] || priorityColors.MEDIUM)}`}>
-                <Flag size={10} /> 
+                <Flag size={10} />
                 <span className="text-[10px] font-bold uppercase">{task.priority}</span>
               </span>
+            )}
+
+            {activeComments.length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openDetail(true); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100 hover:bg-violet-100 transition-colors"
+                title="Mở bình luận"
+              >
+                <MessageSquare size={10} />
+                <span className="text-[10px] font-bold">{activeComments.length}</span>
+              </button>
             )}
           </div>
 
           <div className="flex items-center gap-2">
             {(() => {
               const assigneeArray = task.assignees_user_id || task.assigneesUserId || task.assignees || [];
+              if (assigneeArray.length === 0) return null;
 
-              if (assigneeArray.length > 0) {
-                return (
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    {assigneeArray.map((item: any, idx: number) => {
-                      const userId = typeof item === 'object' ? (item.id || item._id) : item;
-                      const member = getUser(userId, projectId); 
-                      
-                      const displayName = member?.full_name || 'Unnamed';
-                      const avatarUrl = member?.avatar_url;
-                      const initial = displayName.charAt(0).toUpperCase();
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                  {assigneeArray.map((item: any, idx: number) => {
+                    const userId = typeof item === 'object' ? (item.user_id || item.id || item._id) : item;
+                    const member = getUser(userId, projectId);
+                    const displayName = member?.full_name || member?.full_name || 'Không rõ';
+                    const avatarUrl = member?.avatar_url || member?.avatar_url;
+                    const initial = displayName.charAt(0).toUpperCase();
 
-                      return (
-                        <span
-                          key={userId || idx}
-                          title={displayName} 
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all shadow-sm ${isTaskDone ? 'bg-slate-100 text-slate-400 border-slate-200/60' : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'}`}
-                        >
-                          {avatarUrl ? (
-                            <img 
-                              src={avatarUrl} 
-                              alt={displayName} 
-                              className={`w-4 h-4 rounded-full object-cover border shrink-0 ${isTaskDone ? 'border-slate-200/80 grayscale' : 'border-indigo-200'}`}
-                            />
-                          ) : (
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shrink-0 ${isTaskDone ? 'bg-slate-300' : 'bg-indigo-600'}`}>
-                              {initial}
-                            </div>
-                          )}
-                          <span className="truncate max-w-[80px]">
-                            {displayName}
-                          </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                );
-              }
-              return null;
+                    return (
+                      <span
+                        key={userId || idx}
+                        title={displayName}
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all shadow-sm ${isTaskDone ? 'bg-slate-100 text-slate-400 border-slate-200/60' : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'}`}
+                      >
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={displayName} className={`w-4 h-4 rounded-full object-cover border shrink-0 ${isTaskDone ? 'border-slate-200/80 grayscale' : 'border-indigo-200'}`} />
+                        ) : (
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shrink-0 ${isTaskDone ? 'bg-slate-300' : 'bg-indigo-600'}`}>
+                            {initial}
+                          </div>
+                        )}
+                        <span className="truncate max-w-[80px]">{displayName}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              );
             })()}
           </div>
         </div>
 
         <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm rounded-lg p-0.5 shadow-sm border border-slate-100">
-          <button 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (onOpenTaskDetail) onOpenTaskDetail(safeTaskId);
-            }} 
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); openDetail(true); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-2 md:p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors"
+            title="Bình luận nhanh"
+          >
+            <MessageSquare size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); openDetail(false); }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-2 md:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+            title="Mở chi tiết"
           >
             <Edit2 size={14} />
           </button>
-          <button 
-            onClick={(e) => { e.stopPropagation(); setIsDeleteModalOpen(true); }} 
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIsDeleteModalOpen(true); }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-2 md:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            title="Xóa công việc"
           >
             <Trash2 size={14} />
           </button>
         </div>
       </div>
 
-      <DeleteConfirmModal 
-        isOpen={isDeleteModalOpen} 
-        onClose={() => setIsDeleteModalOpen(false)} 
-        onConfirm={handleDeleteTask} 
-        taskTitle={task.title} 
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteTask}
+        taskTitle={task.title}
       />
     </>
   );

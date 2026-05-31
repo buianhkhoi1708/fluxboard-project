@@ -11,34 +11,24 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ActivityRepository extends MongoRepository<ActivityEntity, String>, ActivityRepositoryCustom {
-
-    // ========================================================================
-    // 1. DASHBOARD & FEED APIs
-    // ========================================================================
     List<ActivityEntity> findAllByProjectIdOrderByCreatedAtDesc(String projectId, Pageable pageable);
 
     List<ActivityEntity> findTop10ByOrderByCreatedAtDesc();
 
-    // ========================================================================
-    // 2. SPECIFIC FEATURE APIs
-    // ========================================================================
-    @Query(value = "{ 'userId': ?0, 'action': 'LOGIN' }", fields = "{ 'createdAt': 1, 'ipAddress': 1, 'deviceInfo': 1 }")
+    @Query(value = "{ 'actor_user_id': ?0, 'action': 'LOGIN', 'is_deleted': false }")
     Page<ActivityEntity> findLoginHistoriesByUserId(String userId, Pageable pageable);
 
-    // ========================================================================
-    // 3. STANDARD QUERIES (SOFT DELETE APPLIED)
-    // ========================================================================
     Optional<ActivityEntity> findByIdAndDeletedFalse(String id);
 
     Page<ActivityEntity> findByDeletedFalse(Pageable pageable);
+
+    Page<ActivityEntity> findByActivityTypeAndDeletedFalseOrderByCreatedAtDesc(ActivityEntity.ActivityType activityType, Pageable pageable);
 
     Page<ActivityEntity> findByTaskIdAndDeletedFalse(String taskId, Pageable pageable);
 
     Page<ActivityEntity> findByProjectIdAndDeletedFalse(String projectId, Pageable pageable);
 
-    Page<ActivityEntity> findBySourceTypeAndSourceIdAndDeletedFalse(
-            ActivitySource sourceType, 
-            String sourceId, 
-            Pageable pageable
-    );
+    Page<ActivityEntity> findBySourceTypeAndSourceIdAndDeletedFalse(ActivitySource sourceType, String sourceId, Pageable pageable);
+    // 🚀 Dành cho Bảng tin chung của Manager/Member
+    Page<ActivityEntity> findByProjectIdInAndDeletedFalse(List<String> projectIds, Pageable pageable);
 }

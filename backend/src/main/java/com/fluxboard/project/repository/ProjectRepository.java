@@ -3,7 +3,7 @@ package com.fluxboard.project.repository;
 import com.fluxboard.project.entity.ProjectEntity;
 
 import java.util.List;
-import java.util.Optional; // Đảm bảo đã import cái này
+import java.util.Optional; 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -25,6 +25,14 @@ public interface ProjectRepository extends MongoRepository<ProjectEntity, String
     // Đếm số lượng project chưa bị xóa (Dùng cho DashboardService)
     long countByDeletedFalse();
 
-    // Lấy danh sách tất cả project chưa bị xóa (Dùng cho DashboardService)
+    // =========================================================================
+    // 🚀 BỔ SUNG: CÁC HÀM PHỤC VỤ PHÂN LẬP DỮ LIỆU (DATA ISOLATION)
+    // =========================================================================
+    
+    // Lấy danh sách Project phân trang dựa trên danh sách ID (Dành cho Manager/Member)
+    Page<ProjectEntity> findByIdInAndDeletedFalse(List<String> ids, Pageable pageable);
+
+    // Lấy danh sách Project phân trang theo phòng ban VÀ danh sách ID (Dành cho Manager/Member)
+    Page<ProjectEntity> findByDepartmentIdAndIdInAndDeletedFalse(String departmentId, List<String> ids, Pageable pageable);
 
 }

@@ -4,353 +4,507 @@ import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.exception.AppException;
 import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.rbac.entity.RoleEntity;
+import com.fluxboard.rbac.enums.Role;
 import com.fluxboard.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
-import org.springframework.data.mongodb.core.aggregation.AggregationResults;
-import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
-
+    private static final long DEFAULT_CAPACITY_POINTS = 20;
     private final MongoTemplate mongoTemplate;
     private final RoleRepository roleRepository;
 
-    /**
-     * Entry point: Phân quyền và điều hướng dữ liệu Dashboard
-     */
-    public Object getDashboardMetrics(String timeRange, String departmentId, String teamId, AuthenticatedUser currentUser) {
-        RoleEntity roleEntity = roleRepository.findById(currentUser.roleId())
+    public Map<String, Object> getDashboardMetrics(String timeRange, String departmentId, String teamId, AuthenticatedUser currentUser) {
+        RoleEntity role = roleRepository.findById(currentUser.roleId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Không tìm thấy quyền hạn người dùng."));
-        
-        String roleName = roleEntity.getName().name().toUpperCase();
+        String roleName = role.getName().name().toUpperCase();
 
-        if (roleName.contains("ADMIN")) {
-            return getAdminMetrics(timeRange, departmentId);
-        } else if (roleName.contains("MANAGER") || roleName.contains("LEAD")) {
-            
-            // Tìm ID phòng ban mà Manager quản lý
-            Query deptQuery = new Query(Criteria.where("manager_id").is(currentUser.userId()).and("is_deleted").ne(true));
-            Map managedDept = mongoTemplate.findOne(deptQuery, Map.class, "departments");
-            
-            String managedDeptId = null;
-            if (managedDept != null && managedDept.get("_id") != null) {
-                managedDeptId = managedDept.get("_id").toString();
-            } else {
-                return Map.of(
-                    "message", "Tài khoản chưa được chỉ định quản lý phòng ban cụ thể.", 
-                    "team_workload_capacity", List.of(), 
-                    "at_risk_tasks", List.of(),
-                    "ai_efficiency", List.of()
-                );
-            }
-
-            return getManagerMetrics(timeRange, teamId, managedDeptId);
-            
-        } else {
-            return getMemberMetrics(currentUser.userId());
+        if ("SYSTEM_ADMIN".equals(roleName) || "ADMIN".equals(roleName)) return getAdminMetrics(timeRange, departmentId);
+        if (roleName.contains("MANAGER") || roleName.contains("LEAD") || roleName.contains("PM") || roleName.contains("PROJECT_ADMIN")) {
+            String managedDeptId = trimToNull(departmentId);
+            if (managedDeptId == null) managedDeptId = findManagedDepartmentId(currentUser.userId());
+            return getManagerMetrics(timeRange, managedDeptId, teamId, currentUser.userId());
         }
+        return getMemberMetrics(currentUser.userId(), timeRange);
     }
 
-    /**
-     * ADMIN: Nhìn tổng quan toàn bộ tổ chức
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private Map<String, Object> getAdminMetrics(String timeRange, String departmentId) {
-        Map<String, Object> result = new HashMap<>();
+        Instant from = resolveFrom(timeRange);
+        Map<String, Object> result = new LinkedHashMap<>();
 
-        // 1. Organization KPI 
-        long totalUsers = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "users");
-        long totalDepartments = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "departments");
-        long totalTeams = mongoTemplate.count(new Query(Criteria.where("is_deleted").is(false)), "teams");
+        long totalUsers = countActive("users");
+        long totalDepartments = countActive("departments");
+        long totalTeams = countActive("teams");
+        long totalProjects = countActive("projects");
         result.put("organization_kpi", Map.of(
                 "total_users", totalUsers,
                 "total_departments", totalDepartments,
-                "total_teams", totalTeams
+                "total_teams", totalTeams,
+                "total_projects", totalProjects
         ));
 
-        // 2. Company Deadline Health 
-        Aggregation healthAgg = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("is_deleted").is(false)),
-                Aggregation.group()
-                        .sum(ConditionalOperators.when(Criteria.where("status").is("ON_TRACK")).then(1).otherwise(0)).as("on_track")
-                        .sum(ConditionalOperators.when(Criteria.where("status").is("AT_RISK")).then(1).otherwise(0)).as("at_risk")
-                        .sum(ConditionalOperators.when(Criteria.where("status").in("OVERDUE", "LATE")).then(1).otherwise(0)).as("overdue")
-                        .sum("extension_count").as("total_extensions")
+        List<Map> deadlines = findActive("task_deadlines", from);
+        long onTrack = deadlines.stream().filter(d -> "ON_TRACK".equals(str(d.get("status")))).count();
+        long atRisk = deadlines.stream().filter(d -> "AT_RISK".equals(str(d.get("status")))).count();
+        long overdue = deadlines.stream().filter(d -> Set.of("OVERDUE", "LATE").contains(str(d.get("status")))).count();
+        long totalExtensions = deadlines.stream().mapToLong(d -> longVal(d.get("extension_count"))).sum();
+
+        List<Map<String, Object>> chartSegments = List.of(
+                chartSegment("on_track", "Đúng hạn", onTrack, "#22c55e"),
+                chartSegment("at_risk", "Có rủi ro", atRisk, "#f59e0b"),
+                chartSegment("overdue", "Quá hạn", overdue, "#ef4444"),
+                chartSegment("total_extensions", "Dời hạn", totalExtensions, "#3b82f6")
         );
-        AggregationResults<Map> healthResults = mongoTemplate.aggregate(healthAgg, "task_deadlines", Map.class);
-        Map<String, Object> healthMap = healthResults.getUniqueMappedResult() != null 
-                ? new HashMap<>(healthResults.getUniqueMappedResult()) 
-                : new HashMap<>(Map.of("on_track", 0, "at_risk", 0, "overdue", 0, "total_extensions", 0));
-        healthMap.remove("_id");
-        result.put("company_deadline_health", healthMap);
-
-        // 3. Department Points Distribution
-        List<AggregationOperation> deptOps = new ArrayList<>();
-        deptOps.add(Aggregation.match(Criteria.where("is_deleted").is(false).and("story_point").ne(null)));
-        deptOps.add(Aggregation.unwind("assignees_user_id"));
-        
-        // 🛡️ Ép kiểu 1: ID User từ String sang ObjectId
-        deptOps.add(context -> new org.bson.Document("$addFields",
-                new org.bson.Document("assignee_obj_id", 
-                        new org.bson.Document("$convert", new org.bson.Document("input", "$assignees_user_id")
-                                .append("to", "objectId").append("onError", null).append("onNull", null))
-                )
+        result.put("company_deadline_health", Map.of(
+                "on_track", onTrack,
+                "at_risk", atRisk,
+                "overdue", overdue,
+                "total_extensions", totalExtensions,
+                "chart_segments", chartSegments
         ));
-        deptOps.add(Aggregation.lookup("users", "assignee_obj_id", "_id", "user_info"));
-        deptOps.add(Aggregation.unwind("user_info", true));
 
-        // 🛡️ Ép kiểu 2: ID Department (từ bảng user) sang ObjectId
-        deptOps.add(context -> new org.bson.Document("$addFields",
-                new org.bson.Document("dept_obj_id", 
-                        new org.bson.Document("$convert", new org.bson.Document("input", "$user_info.department_id")
-                                .append("to", "objectId").append("onError", null).append("onNull", null))
-                )
-        ));
-        deptOps.add(Aggregation.lookup("departments", "dept_obj_id", "_id", "dept_info"));
-        deptOps.add(Aggregation.unwind("dept_info", true));
+        List<Map> users = findActive("users", null);
+        List<Map> departments = findActive("departments", null);
+        List<Map> tasks = findActive("tasks", from);
+        Map<String, Map> usersById = indexById(users);
+        Map<String, String> deptNames = departments.stream()
+                .filter(d -> idOf(d) != null)
+                .collect(Collectors.toMap(this::idOf, d -> firstNonBlank(str(d.get("name")), "Chưa phân bổ"), (a, b) -> a, LinkedHashMap::new));
 
-        // Chuẩn bị các trường cần thiết trước khi gom nhóm
-        deptOps.add(Aggregation.project("story_point", "status")
-                .and("dept_info._id").as("dept_id")
-                .and("dept_info.name").as("dept_name"));
+        Map<String, DepartmentAgg> deptAgg = new LinkedHashMap<>();
+        for (Map task : tasks) {
+            if (task.get("story_point") == null) continue;
 
-        // 🚀 BƯỚC KHỬ TRÙNG LẶP: Nhóm theo Task + Phòng ban. 
-        // Đảm bảo 1 Task giao cho nhiều người cùng 1 phòng thì phòng đó chỉ được cộng điểm 1 lần.
-        deptOps.add(Aggregation.group("$_id", "dept_id")
-                .first("story_point").as("story_point")
-                .first("status").as("status")
-                .first("dept_name").as("dept_name")
-                .first("dept_id").as("real_dept_id"));
+            Set<String> taskDeptIds = assignees(task).stream()
+                    .map(usersById::get)
+                    .filter(Objects::nonNull)
+                    .map(u -> str(u.get("department_id")))
+                    .filter(Objects::nonNull)
+                    .filter(id -> trimToNull(departmentId) == null || id.equals(departmentId))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        // 🚀 BƯỚC GOM NHÓM CHÍNH TỔNG KẾT: Gom theo Phòng ban
-        deptOps.add(Aggregation.group("real_dept_id")
-                .first("dept_name").as("department_name")
-                .sum("story_point").as("total_points")
-                .sum(ConditionalOperators.when(Criteria.where("status").is("DONE")).thenValueOf("story_point").otherwise(0)).as("completed_points"));
+            if (taskDeptIds.isEmpty()) taskDeptIds.add("Unassigned");
 
-        Aggregation deptPointsAgg = Aggregation.newAggregation(deptOps);
-        AggregationResults<Map> deptPointsResults = mongoTemplate.aggregate(deptPointsAgg, "tasks", Map.class);
-        
-        List<Map<String, Object>> deptPoints = deptPointsResults.getMappedResults().stream().map(doc -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("department_id", doc.get("_id") != null ? doc.get("_id").toString() : "Unassigned");
-            
-            // Lấy tên thật của phòng ban ném ra cho Frontend
-            map.put("department_name", doc.get("department_name") != null ? doc.get("department_name") : "Chưa phân bổ");
-            
-            map.put("total_points", ((Number) doc.getOrDefault("total_points", 0)).longValue());
-            map.put("completed_points", ((Number) doc.getOrDefault("completed_points", 0)).longValue());
-            return map;
-        }).collect(Collectors.toList());
-        
-        result.put("department_points_distribution", deptPoints);
+            for (String deptId : taskDeptIds) {
+                DepartmentAgg agg = deptAgg.computeIfAbsent(deptId, id -> new DepartmentAgg(id, deptNames.getOrDefault(id, "Chưa phân bổ")));
+                long point = longVal(task.get("story_point"));
+                agg.totalPoints += point;
+                if ("DONE".equals(str(task.get("status")))) agg.completedPoints += point;
+                if (isTaskOverdue(task, deadlines)) agg.overdueTasks++;
+            }
+        }
 
+        List<Map<String, Object>> departmentPerformance = deptAgg.values().stream().map(agg -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("department_id", agg.departmentId);
+            m.put("department_name", agg.departmentName);
+            m.put("total_points", agg.totalPoints);
+            m.put("completed_points", agg.completedPoints);
+            m.put("overdue_tasks", agg.overdueTasks);
+            m.put("completion_rate", percent(agg.completedPoints, agg.totalPoints));
+            return m;
+        }).toList();
+
+        result.put("department_performance", departmentPerformance);
+        result.put("department_points_distribution", departmentPerformance);
+
+        Query logQuery = activeQuery(null).with(Sort.by(Sort.Direction.DESC, "created_at")).limit(10);
+        List<Map> logs = mongoTemplate.find(logQuery, Map.class, "activities");
+        result.put("critical_audit_logs", logs.stream().map(this::activitySummary).toList());
         return result;
     }
 
-    /**
-     * MANAGER/LEAD: Quản lý khối lượng công việc và rủi ro team
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Map<String, Object> getManagerMetrics(String timeRange, String teamId, String managedDeptId) {
-        Map<String, Object> result = new HashMap<>();
+    private Map<String, Object> getManagerMetrics(String timeRange, String managedDeptId, String teamId, String managerId) {
+        Instant from = resolveFrom(timeRange);
+        Map<String, Object> result = new LinkedHashMap<>();
 
-        // 1. Team Workload Capacity 
-        List<AggregationOperation> workloadOps = new ArrayList<>();
-        workloadOps.add(Aggregation.match(Criteria.where("is_deleted").is(false).and("status").ne("DONE").and("story_point").ne(null)));
-        
-        workloadOps.add(Aggregation.unwind("assignees_user_id"));
-        
-        workloadOps.add(context -> new org.bson.Document("$addFields",
-                new org.bson.Document("assignee_obj_id", 
-                        new org.bson.Document("$convert", new org.bson.Document("input", "$assignees_user_id")
-                                .append("to", "objectId")
-                                .append("onError", null)
-                                .append("onNull", null))
-                )
-        ));
+        List<Map> users = findActive("users", null);
+        List<Map> allTasks = findActive("tasks", from);
+        List<Map> deadlines = findActive("task_deadlines", null);
+        Map<String, Map> usersById = indexById(users);
+        Map<String, Map> deadlineByTaskId = deadlines.stream()
+                .filter(d -> str(d.get("task_id")) != null)
+                .collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
 
-        workloadOps.add(Aggregation.lookup("users", "assignee_obj_id", "_id", "user_details"));
-        workloadOps.add(Aggregation.unwind("user_details", true)); 
-
-        if (managedDeptId != null) {
-            workloadOps.add(Aggregation.match(Criteria.where("user_details.department_id").is(managedDeptId)));
+        Set<String> managedProjectIds = resolveManagedProjectIds(managerId, managedDeptId);
+        if (managedProjectIds.isEmpty()) {
+            result.put("team_workload_capacity", List.of());
+            result.put("team_deadline_status", Map.of("on_track", 0, "at_risk", 0, "overdue", 0, "late", 0));
+            result.put("at_risk_tasks", List.of());
+            result.put("ai_efficiency", List.of());
+            return result;
         }
 
-        if (teamId != null && !teamId.isEmpty()) {
-            workloadOps.add(Aggregation.match(Criteria.where("user_details.team_id").is(teamId)));
-        }
-        
-        workloadOps.add(Aggregation.project("assignees_user_id", "story_point", "user_details.full_name"));
-        workloadOps.add(Aggregation.group("assignees_user_id")
-                .first("full_name").as("full_name")
-                .sum("story_point").as("current_points"));
+        List<Map> projectTasks = allTasks.stream()
+                .filter(task -> managedProjectIds.contains(str(task.get("project_id"))))
+                .toList();
 
-        Aggregation workloadAgg = Aggregation.newAggregation(workloadOps);
-        AggregationResults<Map> workloadResults = mongoTemplate.aggregate(workloadAgg, "tasks", Map.class);
-        List<Map<String, Object>> teamWorkload = workloadResults.getMappedResults().stream().map(doc -> {
-            long points = ((Number) doc.getOrDefault("current_points", 0)).longValue();
-            Map<String, Object> map = new HashMap<>();
-            
-            String userId = doc.get("_id") != null ? doc.get("_id").toString() : "Unknown";
-            map.put("user_id", userId);
-            map.put("full_name", doc.get("full_name") != null ? doc.get("full_name") : "Thành viên " + (userId.length() >= 4 ? userId.substring(0, 4) : userId));
-            map.put("current_points", points);
-            map.put("status", points > 20 ? "OVERLOADED" : "AVAILABLE");
-            return map;
-        }).collect(Collectors.toList());
-        result.put("team_workload_capacity", teamWorkload);
+        Set<String> scopedUserIds = projectTasks.stream()
+                .flatMap(task -> assignees(task).stream())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        // 2. At Risk Tasks 
-        List<AggregationOperation> atRiskOps = new ArrayList<>();
-        atRiskOps.add(Aggregation.match(Criteria.where("is_deleted").is(false).and("status").in("AT_RISK", "OVERDUE", "LATE")));
-        
-        atRiskOps.add(context -> new org.bson.Document("$addFields",
-                new org.bson.Document("task_obj_id", 
-                        new org.bson.Document("$convert", new org.bson.Document("input", "$task_id")
-                                .append("to", "objectId")
-                                .append("onError", null)
-                                .append("onNull", null))
-                )
-        ));
-        
-        atRiskOps.add(Aggregation.lookup("tasks", "task_obj_id", "_id", "task_info"));
-        atRiskOps.add(Aggregation.unwind("task_info", true));
-        
-        atRiskOps.add(Aggregation.unwind("task_info.assignees_user_id", true));
-        atRiskOps.add(context -> new org.bson.Document("$addFields",
-                new org.bson.Document("task_user_obj_id", 
-                        new org.bson.Document("$convert", new org.bson.Document("input", "$task_info.assignees_user_id")
-                                .append("to", "objectId")
-                                .append("onError", null)
-                                .append("onNull", null))
-                )
-        ));
-        
-        atRiskOps.add(Aggregation.lookup("users", "task_user_obj_id", "_id", "task_user_info"));
-        atRiskOps.add(Aggregation.unwind("task_user_info", true));
-        
-        if (managedDeptId != null) {
-            atRiskOps.add(Aggregation.match(Criteria.where("task_user_info.department_id").is(managedDeptId)));
-        }
-        if (teamId != null && !teamId.isEmpty()) {
-            atRiskOps.add(Aggregation.match(Criteria.where("task_user_info.team_id").is(teamId)));
+        scopedUserIds.removeIf(userId -> {
+            Map user = usersById.get(userId);
+            if (user == null) return true;
+            if (isSystemAccount(user)) return true;
+            if (managedDeptId != null && !managedDeptId.equals(str(user.get("department_id")))) return true;
+            return trimToNull(teamId) != null && !teamId.equals(str(user.get("team_id")));
+        });
+
+        List<Map> scopedTasks = projectTasks.stream()
+                .filter(task -> assignees(task).stream().anyMatch(scopedUserIds::contains))
+                .toList();
+
+        Map<String, Long> pointByUser = new LinkedHashMap<>();
+        for (String uid : scopedUserIds) pointByUser.put(uid, 0L);
+
+        for (Map task : scopedTasks) {
+            if ("DONE".equals(str(task.get("status")))) continue;
+            long point = longVal(task.get("story_point"));
+            for (String uid : assignees(task)) {
+                if (scopedUserIds.contains(uid)) pointByUser.put(uid, pointByUser.getOrDefault(uid, 0L) + point);
+            }
         }
 
-        atRiskOps.add(Aggregation.project("task_id", "due_date", "status", "extension_count")
-                .and("task_info.title").as("title")
-                .and("task_info.story_point").as("story_point")
-                .and("task_info.priority").as("priority"));
-        
-        atRiskOps.add(Aggregation.group("task_id")
-                .first("title").as("title")
-                .first("story_point").as("story_point")
-                .first("priority").as("priority")
-                .first("due_date").as("due_date")
-                .first("status").as("deadline_status")
-                .first("extension_count").as("extension_count"));
-                
-        atRiskOps.add(Aggregation.limit(10));
+        List<Map<String, Object>> workload = pointByUser.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .map(e -> {
+                    Map user = usersById.get(e.getKey());
+                    long points = e.getValue();
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("user_id", e.getKey());
+                    m.put("full_name", user != null ? firstNonBlank(str(user.get("full_name")), str(user.get("name")), "Thành viên " + shortId(e.getKey())) : "Thành viên " + shortId(e.getKey()));
+                    m.put("current_points", points);
+                    m.put("capacity_points", DEFAULT_CAPACITY_POINTS);
+                    m.put("load_percentage", percent(points, DEFAULT_CAPACITY_POINTS));
+                    m.put("status", points > DEFAULT_CAPACITY_POINTS ? "OVERLOADED" : "AVAILABLE");
+                    return m;
+                }).toList();
 
-        Aggregation atRiskAgg = Aggregation.newAggregation(atRiskOps);
-        AggregationResults<Map> atRiskResults = mongoTemplate.aggregate(atRiskAgg, "task_deadlines", Map.class);
-        List<Map<String, Object>> atRiskTasks = atRiskResults.getMappedResults().stream().map(doc -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("task_id", doc.get("_id"));
-            map.put("title", doc.get("title") != null ? doc.get("title") : "Chưa có tiêu đề");
-            map.put("story_point", doc.get("story_point") != null ? ((Number) doc.get("story_point")).intValue() : 0);
-            map.put("priority", doc.get("priority") != null ? doc.get("priority") : "NORMAL");
-            map.put("due_date", doc.get("due_date"));
-            map.put("deadline_status", doc.get("deadline_status"));
-            map.put("extension_count", ((Number) doc.getOrDefault("extension_count", 0)).intValue());
-            return map;
-        }).collect(Collectors.toList());
+        result.put("team_workload_capacity", workload);
+
+        long onTrack = 0, atRisk = 0, overdue = 0, late = 0;
+        List<Map<String, Object>> atRiskTasks = new ArrayList<>();
+
+        for (Map task : scopedTasks) {
+            Map deadline = deadlineByTaskId.get(idOf(task));
+            String status = deadline != null ? str(deadline.get("status")) : str(task.get("status"));
+
+            if ("ON_TRACK".equals(status)) onTrack++;
+            else if ("AT_RISK".equals(status)) atRisk++;
+            else if ("OVERDUE".equals(status)) overdue++;
+            else if ("LATE".equals(status)) late++;
+
+            if (Set.of("AT_RISK", "OVERDUE", "LATE").contains(status) && atRiskTasks.size() < 10) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("task_id", idOf(task));
+                m.put("title", firstNonBlank(str(task.get("title")), "Chưa có tiêu đề"));
+                m.put("story_point", intVal(task.get("story_point")));
+                m.put("priority", firstNonBlank(str(task.get("priority")), "NORMAL"));
+                m.put("due_date", deadline != null ? deadline.get("due_date") : task.get("due_date"));
+                m.put("deadline_status", status);
+                m.put("extension_count", deadline != null ? intVal(deadline.get("extension_count")) : 0);
+                m.put("action_url", buildTaskUrl(task));
+                atRiskTasks.add(m);
+            }
+        }
+
+        result.put("team_deadline_status", Map.of("on_track", onTrack, "at_risk", atRisk, "overdue", overdue, "late", late));
         result.put("at_risk_tasks", atRiskTasks);
 
-        // 3. AI Efficiency 
-        Aggregation aiAgg = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("is_deleted").is(false).and("ai_suggested_point").ne(null).and("story_point").ne(null)),
-                Aggregation.project("title", "ai_suggested_point", "story_point", "created_at"),
-                Aggregation.sort(Sort.Direction.DESC, "created_at"),
-                Aggregation.limit(10)
-        );
-        AggregationResults<Map> aiResults = mongoTemplate.aggregate(aiAgg, "tasks", Map.class);
-        List<Map<String, Object>> aiEfficiency = aiResults.getMappedResults().stream().map(doc -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("task_title", doc.get("title"));
-            map.put("ai_suggested_point", doc.get("ai_suggested_point"));
-            map.put("actual_point", doc.get("story_point"));
-            return map;
-        }).collect(Collectors.toList());
+        List<Map<String, Object>> aiEfficiency = scopedTasks.stream()
+                .filter(t -> t.get("ai_suggested_point") != null && t.get("story_point") != null)
+                .sorted((a, b) -> compareCreatedAtDesc(a.get("created_at"), b.get("created_at")))
+                .limit(10)
+                .map(task -> {
+                    double ai = doubleVal(task.get("ai_suggested_point"));
+                    double actual = doubleVal(task.get("story_point"));
+                    double deviation = ai > 0 ? ((actual - ai) / ai) * 100.0 : 0.0;
+                    double accuracy = Math.max(0.0, 100.0 - Math.abs(deviation));
+                    String status = Math.abs(deviation) <= 10 ? "ACCURATE" : deviation > 10 ? "UNDERESTIMATED" : "OVERESTIMATED";
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("task_id", idOf(task));
+                    m.put("task_title", firstNonBlank(str(task.get("title")), "Untitled Task"));
+                    m.put("ai_suggested_point", round(ai));
+                    m.put("actual_point", round(actual));
+                    m.put("manual_point", round(actual));
+                    m.put("deviation_point", round(actual - ai));
+                    m.put("deviation_percentage", round(deviation));
+                    m.put("accuracy_score", round(accuracy));
+                    m.put("deviation_status", status);
+                    m.put("evaluation_comment", buildAiEvaluationComment(status, deviation));
+                    return m;
+                }).toList();
+
         result.put("ai_efficiency", aiEfficiency);
-
         return result;
     }
 
-    /**
-     * MEMBER: Cá nhân tập trung vào task được giao
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Map<String, Object> getMemberMetrics(String userId) {
-        Map<String, Object> result = new HashMap<>();
+    private Map<String, Object> getMemberMetrics(String userId, String timeRange) {
+        Instant from = resolveFrom(timeRange);
+        Map<String, Object> result = new LinkedHashMap<>();
 
-        // 1. Contribution
-        Aggregation contribAgg = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("is_deleted").is(false).and("assignees_user_id").is(userId)),
-                Aggregation.group()
-                        .count().as("total_assigned")
-                        .sum(ConditionalOperators.when(Criteria.where("status").is("DONE")).then(1).otherwise(0)).as("completed_tasks")
-        );
-        AggregationResults<Map> contribResults = mongoTemplate.aggregate(contribAgg, "tasks", Map.class);
-        Map<String, Object> contribMap = contribResults.getUniqueMappedResult() != null 
-                ? new HashMap<>(contribResults.getUniqueMappedResult()) 
-                : new HashMap<>(Map.of("completed_tasks", 0, "total_assigned", 0));
-        contribMap.remove("_id");
-        result.put("my_contribution", contribMap);
+        List<Map> tasks = findActive("tasks", from).stream()
+                .filter(t -> assignees(t).contains(userId))
+                .toList();
 
-        // 2. Focus Board 
-        Aggregation focusAgg = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("is_deleted").is(false)
-                        .and("assignees_user_id").is(userId)
-                        .and("status").ne("DONE")
-                        .and("priority").in("HIGH", "CRITICAL")),
-                Aggregation.lookup("task_deadlines", "_id", "task_id", "deadline_info"),
-                Aggregation.unwind("deadline_info", true),
-                Aggregation.project("title", "priority", "story_point", "deadline_info.due_date", "deadline_info.status", "deadline_info.extension_count"),
-                Aggregation.sort(Sort.Direction.ASC, "deadline_info.due_date"),
-                Aggregation.limit(5)
-        );
-        AggregationResults<Map> focusResults = mongoTemplate.aggregate(focusAgg, "tasks", Map.class);
-        List<Map<String, Object>> focusTasks = focusResults.getMappedResults().stream().map(doc -> {
-            Map<String, Object> deadlineInfo = (Map<String, Object>) doc.get("deadline_info");
-            Map<String, Object> map = new HashMap<>();
-            map.put("task_id", doc.get("_id") != null ? doc.get("_id").toString() : "Unknown");
-            map.put("title", doc.get("title"));
-            map.put("priority", doc.get("priority"));
-            map.put("story_point", ((Number) doc.getOrDefault("story_point", 0)).intValue());
-            map.put("due_date", deadlineInfo != null ? deadlineInfo.get("due_date") : null);
-            map.put("deadline_status", deadlineInfo != null ? deadlineInfo.get("status") : "ON_TRACK");
-            map.put("extensions_used", deadlineInfo != null ? ((Number) deadlineInfo.getOrDefault("extension_count", 0)).intValue() : 0);
-            return map;
-        }).collect(Collectors.toList());
-        result.put("my_focus_board", focusTasks);
+        List<Map> deadlines = findActive("task_deadlines", null);
+        Map<String, Map> deadlineByTaskId = deadlines.stream()
+                .filter(d -> str(d.get("task_id")) != null)
+                .collect(Collectors.toMap(d -> str(d.get("task_id")), Function.identity(), (a, b) -> a));
 
+        long total = tasks.size();
+        long completed = tasks.stream().filter(t -> "DONE".equals(str(t.get("status")))).count();
+        long totalPoints = tasks.stream().mapToLong(t -> longVal(t.get("story_point"))).sum();
+        long completedPoints = tasks.stream().filter(t -> "DONE".equals(str(t.get("status")))).mapToLong(t -> longVal(t.get("story_point"))).sum();
+
+        result.put("my_contribution", Map.of(
+                "completed_tasks", completed,
+                "total_assigned", total,
+                "completion_rate", percent(completed, total),
+                "completed_points", completedPoints,
+                "total_points", totalPoints
+        ));
+
+        List<Map<String, Object>> focus = tasks.stream()
+                .filter(t -> !"DONE".equals(str(t.get("status"))))
+                .filter(t -> Set.of("HIGH", "CRITICAL").contains(str(t.get("priority"))))
+                .sorted(Comparator.comparing(t -> instantVal(deadlineByTaskId.get(idOf(t)) != null ? deadlineByTaskId.get(idOf(t)).get("due_date") : t.get("due_date")), Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(5)
+                .map(t -> {
+                    Map d = deadlineByTaskId.get(idOf(t));
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("task_id", idOf(t));
+                    m.put("title", t.get("title"));
+                    m.put("priority", t.get("priority"));
+                    m.put("story_point", intVal(t.get("story_point")));
+                    m.put("due_date", d != null ? d.get("due_date") : t.get("due_date"));
+                    m.put("deadline_status", d != null ? d.get("status") : "ON_TRACK");
+                    m.put("extensions_used", d != null ? intVal(d.get("extension_count")) : 0);
+                    m.put("extension_limit", d != null ? intVal(d.get("extension_limit")) : 0);
+                    m.put("action_url", buildTaskUrl(t));
+                    return m;
+                }).toList();
+
+        result.put("my_focus_board", focus);
         return result;
     }
-} 
+
+    private Set<String> resolveManagedProjectIds(String managerId, String managedDeptId) {
+        Set<String> ids = new LinkedHashSet<>();
+
+        for (Map project : findActive("projects", null)) {
+            String projectId = idOf(project);
+            if (projectId == null) continue;
+
+            boolean ownedByManager = managerId != null && managerId.equals(str(project.get("owner_id")));
+            boolean inManagedDepartment = managedDeptId != null && managedDeptId.equals(str(project.get("department_id")));
+            if (ownedByManager || inManagedDepartment) ids.add(projectId);
+        }
+
+        Query memberQuery = new Query(Criteria.where("user_id").is(managerId)
+                .and("is_active").is(true)
+                .and("is_deleted").ne(true));
+
+        List<Map> memberships = mongoTemplate.find(memberQuery, Map.class, "project_members");
+        if (memberships.isEmpty()) memberships = mongoTemplate.find(memberQuery, Map.class, "projectmembers");
+
+        for (Map member : memberships) {
+            String projectId = str(member.get("project_id"));
+            if (projectId != null && !projectId.isBlank()) ids.add(projectId);
+        }
+
+        return ids;
+    }
+
+    private String findManagedDepartmentId(String userId) {
+        Query q = new Query(Criteria.where("manager_id").is(userId).and("is_deleted").ne(true)).limit(1);
+        Map dept = mongoTemplate.findOne(q, Map.class, "departments");
+        return dept == null ? null : idOf(dept);
+    }
+
+    private boolean isSystemAccount(Map user) {
+        if (user == null) return false;
+        String roleId = str(user.get("role_id"));
+        if (roleId == null || roleId.isBlank()) return false;
+
+        RoleEntity role = roleRepository.findById(roleId).orElse(null);
+        if (role == null || role.getName() == null) return false;
+
+        Role name = role.getName();
+        return name == Role.SYSTEM_ADMIN || name == Role.ADMIN;
+    }
+
+    private boolean isTaskOverdue(Map task, List<Map> deadlines) {
+        String taskId = idOf(task);
+        return deadlines.stream().anyMatch(d -> taskId.equals(str(d.get("task_id"))) && Set.of("OVERDUE", "LATE").contains(str(d.get("status"))));
+    }
+
+    private List<String> assignees(Map task) {
+        Object raw = task.get("assignees_user_id");
+        if (!(raw instanceof Collection<?> c)) return List.of();
+        return c.stream().map(String::valueOf).filter(s -> !s.isBlank()).distinct().toList();
+    }
+
+    private String buildTaskUrl(Map task) {
+        Object boardId = task.get("board_id");
+        if (boardId == null && task.get("column_id") != null) {
+            Map col = mongoTemplate.findOne(new Query(Criteria.where("_id").is(toId(task.get("column_id")))), Map.class, "board_column");
+            if (col == null) col = mongoTemplate.findOne(new Query(Criteria.where("_id").is(toId(task.get("column_id")))), Map.class, "board_columns");
+            if (col != null) boardId = col.get("board_id");
+        }
+        String taskId = idOf(task);
+        return boardId == null || taskId == null ? null : "/board/" + boardId + "?taskId=" + taskId;
+    }
+
+    private List<Map> findActive(String collection, Instant from) {
+        Query q = activeQuery(from);
+        return mongoTemplate.find(q, Map.class, collection);
+    }
+
+    private Query activeQuery(Instant from) {
+        Criteria c = Criteria.where("is_deleted").ne(true);
+        if (from != null) c = c.and("created_at").gte(from);
+        return new Query(c);
+    }
+
+    private long countActive(String collection) {
+        return mongoTemplate.count(activeQuery(null), collection);
+    }
+
+    private Map<String, Map> indexById(List<Map> docs) {
+        return docs.stream()
+                .filter(d -> idOf(d) != null)
+                .collect(Collectors.toMap(this::idOf, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+    }
+
+    private Map<String, Object> chartSegment(String key, String label, long value, String color) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("key", key);
+        m.put("label", label);
+        m.put("value", value);
+        m.put("color", color);
+        return m;
+    }
+
+    private Map<String, Object> activitySummary(Map log) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", idOf(log));
+        m.put("source_type", log.get("source_type"));
+        m.put("action", log.get("action"));
+        m.put("description", firstNonBlank(str(log.get("description")), str(log.get("message"))));
+        m.put("created_at", log.get("created_at"));
+        m.put("actor_user_id", log.get("actor_user_id"));
+        return m;
+    }
+
+    private String buildAiEvaluationComment(String status, double deviation) {
+        if ("ACCURATE".equals(status)) return "AI ước lượng sát với story point thực tế của team.";
+        if ("UNDERESTIMATED".equals(status)) return "AI ước lượng thấp hơn thực tế, task tốn thêm " + round(Math.abs(deviation)) + "% nỗ lực.";
+        return "AI ước lượng cao hơn thực tế, team làm ít hơn " + round(Math.abs(deviation)) + "% so với dự đoán.";
+    }
+
+    private Instant resolveFrom(String timeRange) {
+        if (timeRange == null || timeRange.isBlank() || "all".equalsIgnoreCase(timeRange)) return null;
+        String v = timeRange.trim().toLowerCase();
+        if (v.contains("7")) return Instant.now().minus(7, ChronoUnit.DAYS);
+        if (v.contains("90")) return Instant.now().minus(90, ChronoUnit.DAYS);
+        return Instant.now().minus(30, ChronoUnit.DAYS);
+    }
+
+    private Object toId(Object value) {
+        if (value instanceof ObjectId) return value;
+        if (value instanceof String s && ObjectId.isValid(s)) return new ObjectId(s);
+        return value;
+    }
+
+    private String idOf(Map doc) {
+        if (doc == null) return null;
+        Object id = doc.get("_id");
+        return id == null ? null : id.toString();
+    }
+
+    private String str(Object v) {
+        return v == null ? null : String.valueOf(v);
+    }
+
+    private String trimToNull(String v) {
+        if (v == null) return null;
+        String s = v.trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String v : values) {
+            String s = trimToNull(v);
+            if (s != null) return s;
+        }
+        return null;
+    }
+
+    private String shortId(String id) {
+        return id == null ? "unknown" : id.substring(0, Math.min(4, id.length()));
+    }
+
+    private int intVal(Object v) {
+        return v instanceof Number n ? n.intValue() : 0;
+    }
+
+    private long longVal(Object v) {
+        return v instanceof Number n ? n.longValue() : 0L;
+    }
+
+    private double doubleVal(Object v) {
+        return v instanceof Number n ? n.doubleValue() : 0.0;
+    }
+
+    private double round(double v) {
+        return Math.round(v * 100.0) / 100.0;
+    }
+
+    private double percent(double part, double total) {
+        return total <= 0 ? 0.0 : round((part / total) * 100.0);
+    }
+
+    private Instant instantVal(Object v) {
+        return v instanceof Date d ? d.toInstant() : v instanceof Instant i ? i : null;
+    }
+
+    private int compareCreatedAtDesc(Object a, Object b) {
+        Instant ia = instantVal(a), ib = instantVal(b);
+        if (ia == null && ib == null) return 0;
+        if (ia == null) return 1;
+        if (ib == null) return -1;
+        return ib.compareTo(ia);
+    }
+
+    private static class DepartmentAgg {
+        final String departmentId;
+        final String departmentName;
+        long totalPoints;
+        long completedPoints;
+        long overdueTasks;
+
+        DepartmentAgg(String departmentId, String departmentName) {
+            this.departmentId = departmentId;
+            this.departmentName = departmentName;
+        }
+    }
+}

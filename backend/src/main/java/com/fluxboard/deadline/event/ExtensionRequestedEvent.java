@@ -2,6 +2,7 @@ package com.fluxboard.deadline.event;
 
 import lombok.Getter;
 import org.springframework.context.ApplicationEvent;
+
 import java.time.Instant;
 
 @Getter
@@ -23,5 +24,9 @@ public class ExtensionRequestedEvent extends ApplicationEvent {
         this.currentDueDate = currentDueDate;
         this.requestedDueDate = requestedDueDate;
         this.reason = reason;
+    }
+
+    public Instant getOriginalDueDate() {
+        return currentDueDate;
     }
 }

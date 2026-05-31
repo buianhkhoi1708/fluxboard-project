@@ -6,67 +6,107 @@ import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.deadline.service.TaskDeadlineService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/tasks")
 @RequiredArgsConstructor
 public class TaskDeadlineController {
-    
     private final TaskDeadlineService deadlineService;
 
-    private String getCurrentUserId() {
-        var request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+    private String getCurrentUserId(HttpServletRequest request) {
+        Object directUserId = request.getAttribute("userId");
+        if (directUserId != null) return String.valueOf(directUserId);
+
         AuthenticatedUser user = (AuthenticatedUser) request.getAttribute(AuthRequestContext.AUTH_USER_ATTR);
         return user.userId();
     }
 
-    @PutMapping("/{taskId}/deadline")
+    @GetMapping({"/deadlines/task/{taskId}", "/tasks/{taskId}/deadline"})
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDeadlineByTask(@PathVariable String taskId) {
+        return ResponseFactory.ok("Deadline fetched successfully.", deadlineService.getDeadlineByTask(taskId));
+    }
+
+    @PutMapping("/tasks/{taskId}/deadline")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateDeadlineConfig(
             @PathVariable String taskId,
-            @RequestBody DeadlineConfigRequest request) {
+            @RequestBody DeadlineConfigRequest body,
+            HttpServletRequest request
+    ) {
         Map<String, Object> result = deadlineService.updateDeadlineConfig(
-                taskId, getCurrentUserId(), request.startDate(), request.dueDate(), request.reminderOffset(), request.extensionLimit()
+                taskId,
+                getCurrentUserId(request),
+                body.startDate(),
+                body.dueDate(),
+                body.reminderOffset(),
+                body.extensionLimit()
         );
+
         return ResponseFactory.ok("Deadline configuration updated successfully.", result);
     }
 
-    @PutMapping("/{taskId}/complete")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> completeTask(@PathVariable String taskId) {
-        Map<String, Object> result = deadlineService.completeTaskKPI(taskId, getCurrentUserId());
-        return ResponseFactory.ok("Task completed.", result);
+    @PutMapping("/tasks/{taskId}/complete")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> completeTask(
+            @PathVariable String taskId,
+            HttpServletRequest request
+    ) {
+        return ResponseFactory.ok("Task completed.", deadlineService.completeTaskKPI(taskId, getCurrentUserId(request)));
     }
 
-    // 1. API: Nhân viên xin dời hạn
-    @PostMapping("/{taskId}/deadline/extensions")
+    @PostMapping({"/deadlines/task/{taskId}/extend", "/tasks/{taskId}/deadline/extensions"})
     public ResponseEntity<ApiResponse<Map<String, Object>>> requestExtension(
             @PathVariable String taskId,
-            @RequestBody ExtensionRequest request) {
-        Map<String, Object> result = deadlineService.requestExtension(taskId, getCurrentUserId(), request.requestedDueDate(), request.reason());
+            @RequestBody ExtensionRequest body,
+            HttpServletRequest request
+    ) {
+        Instant newDueDate = body.newDueDate() != null ? body.newDueDate() : body.requestedDueDate();
+
+        Map<String, Object> result = deadlineService.requestExtension(
+                taskId,
+                getCurrentUserId(request),
+                newDueDate,
+                body.reason()
+        );
+
         return ResponseFactory.ok("Extension requested successfully. Pending manager approval.", result);
     }
 
-    // 2. API: Quản lý phê duyệt yêu cầu dời hạn
-    @PostMapping("/{taskId}/deadline/extensions/approve")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> approveExtension(@PathVariable String taskId) {
-        Map<String, Object> result = deadlineService.approveExtension(taskId, getCurrentUserId());
-        return ResponseFactory.ok("Deadline extension approved successfully.", result);
+    @RequestMapping(
+            value = {"/deadlines/task/{taskId}/approve", "/tasks/{taskId}/deadline/extensions/approve"},
+            method = {RequestMethod.PUT, RequestMethod.POST}
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> approveExtension(
+            @PathVariable String taskId,
+            HttpServletRequest request
+    ) {
+        return ResponseFactory.ok(
+                "Deadline extension approved successfully.",
+                deadlineService.approveExtension(taskId, getCurrentUserId(request))
+        );
     }
 
-    // 3. API: Quản lý từ chối yêu cầu dời hạn
-    @PostMapping("/{taskId}/deadline/extensions/reject")
+    @RequestMapping(
+            value = {"/deadlines/task/{taskId}/reject", "/tasks/{taskId}/deadline/extensions/reject"},
+            method = {RequestMethod.PUT, RequestMethod.POST}
+    )
     public ResponseEntity<ApiResponse<Map<String, Object>>> rejectExtension(
             @PathVariable String taskId,
-            @RequestBody RejectExtensionRequest request) {
-        Map<String, Object> result = deadlineService.rejectExtension(taskId, getCurrentUserId(), request.reason());
-        return ResponseFactory.ok("Deadline extension request rejected.", result);
+            @RequestBody(required = false) RejectExtensionRequest body,
+            HttpServletRequest request
+    ) {
+        String reason = body == null
+                ? ""
+                : body.rejectReason() != null ? body.rejectReason() : body.reason();
+
+        return ResponseFactory.ok(
+                "Deadline extension request rejected.",
+                deadlineService.rejectExtension(taskId, getCurrentUserId(request), reason)
+        );
     }
 
     public record DeadlineConfigRequest(
@@ -77,11 +117,13 @@ public class TaskDeadlineController {
     ) {}
 
     public record ExtensionRequest(
+            @JsonProperty("new_due_date") Instant newDueDate,
             @JsonProperty("requested_due_date") Instant requestedDueDate,
             String reason
     ) {}
 
     public record RejectExtensionRequest(
-            String reason
+            String reason,
+            @JsonProperty("reject_reason") String rejectReason
     ) {}
 }

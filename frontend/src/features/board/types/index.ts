@@ -1,64 +1,142 @@
-// features/board/types/boardTypes.ts
+export type PriorityLevel =
+  | 'LOW'
+  | 'MEDIUM'
+  | 'HIGH'
+  | 'CRITICAL'
+  | 'Low'
+  | 'Medium'
+  | 'High'
+  | 'Critical'
+  | string;
 
-// 1. CÁC TYPE CƠ BẢN
-export type PriorityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | string;
 
-// 2. INTERFACE CHO TASK & SUBTASK
+export interface TaskUserSummary {
+  id?: string;
+  user_id?: string;
+  full_name?: string;
+  fullName?: string;
+  avatar_url?: string | null;
+  avatarUrl?: string | null;
+  email?: string;
+  [key: string]: any;
+}
+
+export interface TaskAttachment {
+  attachment_id?: string;
+  id?: string;
+  file_name?: string;
+  fileName?: string;
+  file_url?: string;
+  fileUrl?: string;
+  content_type?: string;
+  contentType?: string;
+  file_size?: number;
+  fileSize?: number;
+  uploaded_by?: string;
+  uploadedBy?: string;
+  uploaded_at?: string;
+  uploadedAt?: string;
+  [key: string]: any;
+}
+
+export interface TaskComment {
+  id?: string;
+  comment_id?: string;
+  task_id?: string;
+  taskId?: string;
+  user_id?: string;
+  userId?: string;
+  author_id?: string;
+  authorId?: string;
+  author_name?: string;
+  authorName?: string;
+  author_avatar_url?: string | null;
+  authorAvatarUrl?: string | null;
+  content: string;
+  is_resolved?: boolean;
+  isResolved?: boolean;
+  resolved?: boolean;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
 export interface Task {
   id?: string;
-  _id?: string; // Hỗ trợ cả MongoDB ID nếu backend trả về
+  _id?: string;
   title: string;
   description?: string;
-  priority?: PriorityLevel | string;
+  priority?: PriorityLevel;
   status?: TaskStatus;
-  
-  // Hỗ trợ cả 2 chuẩn naming convention (phòng ngừa backend trả về lệch)
+
   story_points?: number;
   story_point?: number;
+  storyPoint?: number;
   estimated_days?: number;
-  
+  estimated_date?: string | null;
+  estimatedDate?: string | null;
+
   start_date?: string | null;
+  startDate?: string | null;
   due_date?: string | null;
+  dueDate?: string | null;
+
   parent_task_id?: string | null;
+  parentTaskId?: string | null;
   column_id?: string;
-  
-  // Xử lý linh hoạt danh sách người được gán
+  columnId?: string;
+  board_id?: string;
+  boardId?: string;
+  project_id?: string;
+  projectId?: string;
+
   assignees_user_id?: string[] | any[];
   assigneesUserId?: string[] | any[];
   assignees?: any[];
-  
-  // Việc con và AI
-  subtasks?: Task[]; 
-  is_done?: boolean; // Dành cho subtask
+
+  subtasks?: Task[];
+  is_done?: boolean;
+  isDone?: boolean;
+
   ai_estimation_reason?: string;
+  aiEstimatedReason?: string;
   ai_suggested_points?: number;
+  ai_suggested_point?: number;
+  aiSuggestedPoint?: number;
+
+  attachments?: TaskAttachment[];
+  comments?: TaskComment[];
+
+  author?: TaskUserSummary | null;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
 }
 
-// 3. INTERFACE CHO COLUMN (LIST)
 export interface BoardColumn {
   id?: string;
   _id?: string;
   list_name: string;
+  name?: string;
   order?: number;
   tasks: Task[];
   project_id?: string;
   projectId?: string;
 }
 
-// 4. INTERFACE CHO BOARD
 export interface Board {
   id?: string;
   _id?: string;
   board_name: string;
+  name?: string;
   projectId?: string;
   project_id?: string;
   columns: BoardColumn[];
 }
-
-// ==========================================
-// 5. INTERFACES CHO COMPONENT PROPS
-// ==========================================
 
 export interface ColumnProps {
   list: BoardColumn;
@@ -68,6 +146,7 @@ export interface TaskItemProps {
   task: Task;
   listId: string;
   isOverlay?: boolean;
+  onOpenTaskDetail?: (taskId: string, openCommentPanel?: boolean) => void;
 }
 
 export interface TaskDetailModalProps {
@@ -75,6 +154,7 @@ export interface TaskDetailModalProps {
   onClose: () => void;
   task: Task | null;
   listId: string;
+  initialOpenComments?: boolean;
 }
 
 export interface DeleteConfirmModalProps {

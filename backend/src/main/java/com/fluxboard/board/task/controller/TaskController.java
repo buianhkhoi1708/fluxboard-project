@@ -4,6 +4,7 @@ import com.fluxboard.auth.model.AuthRequestContext;
 import com.fluxboard.auth.model.AuthenticatedUser;
 import com.fluxboard.board.task.dto.request.CreateTaskRequest;
 import com.fluxboard.board.task.dto.request.TaskAttachmentRequest;
+import com.fluxboard.board.task.dto.request.TaskCommentRequest;
 import com.fluxboard.board.task.dto.request.TaskMoveRequest;
 import com.fluxboard.board.task.dto.request.UpdateTaskRequest;
 import com.fluxboard.board.task.dto.response.TaskResponse;
@@ -12,7 +13,8 @@ import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.rbac.annotation.RequirePermission;
 import jakarta.validation.Valid;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -27,12 +29,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/tasks")
 public class TaskController {
-
     private final TaskService taskService;
 
     public TaskController(TaskService taskService) {
@@ -99,6 +101,15 @@ public class TaskController {
         return ResponseFactory.ok("Column tasks retrieved successfully.", taskService.getByColumnIdOrdered(columnId));
     }
 
+    @RequirePermission("TASK_VIEW")
+    @GetMapping("/my-tasks")
+    public ResponseEntity<ApiResponse<List<TaskResponse>>> getMyTasks(
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        List<TaskResponse> myTasks = taskService.getMyTasks(authUser.userId());
+        return ResponseFactory.ok("Fetched My Tasks successfully.", myTasks);
+    }
+
     @RequirePermission("TASK_UPDATE")
     @PutMapping("/{taskId}")
     public ResponseEntity<ApiResponse<TaskResponse>> updateTask(
@@ -116,8 +127,49 @@ public class TaskController {
             @Valid @RequestBody TaskMoveRequest request,
             @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
     ) {
-        TaskResponse response = taskService.moveTask(taskId, request, authUser.userId());
-        return ResponseFactory.ok("Task moved successfully.", response);
+        return ResponseFactory.ok("Task moved successfully.", taskService.moveTask(taskId, request, authUser.userId()));
+    }
+
+    @RequirePermission("TASK_UPDATE")
+    @PostMapping("/{taskId}/comments")
+    public ResponseEntity<ApiResponse<TaskResponse>> addComment(
+            @PathVariable String taskId,
+            @Valid @RequestBody TaskCommentRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.ok("Bình luận đã được thêm.", taskService.addCommentToTask(taskId, request, authUser.userId()));
+    }
+
+    @RequirePermission("TASK_UPDATE")
+    @PatchMapping("/{taskId}/comments/{commentId}/resolve")
+    public ResponseEntity<ApiResponse<TaskResponse>> resolveComment(
+            @PathVariable String taskId,
+            @PathVariable String commentId,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        return ResponseFactory.ok("Bình luận đã được giải quyết.", taskService.resolveComment(taskId, commentId, authUser.userId()));
+    }
+
+    @RequirePermission("ATTACHMENT_UPLOAD")
+    @PostMapping("/{taskId}/attachments")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> attachFileToTask(
+            @PathVariable String taskId,
+            @Valid @RequestBody TaskAttachmentRequest request,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        Map<String, Object> attachment = taskService.addAttachmentToTask(taskId, request, authUser.userId());
+        return ResponseFactory.ok("Đính kèm tài liệu thành công!", attachment);
+    }
+
+    @GetMapping("/{taskId}/attachments/presigned-url")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getTaskAttachmentPresignedUrl(
+            @PathVariable String taskId,
+            @RequestParam String fileName,
+            @RequestParam String contentType,
+            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
+    ) {
+        Map<String, String> result = taskService.getAttachmentPresignedUrl(taskId, fileName, contentType, authUser.userId());
+        return ResponseFactory.ok("Presigned URL generated successfully.", result);
     }
 
     @RequirePermission("TASK_DELETE")
@@ -128,26 +180,5 @@ public class TaskController {
     ) {
         taskService.delete(taskId, authUser.userId());
         return ResponseFactory.ok("Task deleted successfully.");
-    }
-
-    @GetMapping("/my-tasks")
-    public ResponseEntity<ApiResponse<List<TaskResponse>>> getMyTasks(
-            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser
-    ) {
-        List<TaskResponse> myTasks = taskService.getMyTasks(authUser.userId());
-        return ResponseFactory.ok("Fetched My Tasks successfully.", myTasks);
-    }
-
-    @PostMapping("/{taskId}/attachments")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> attachFileToTask(
-            @PathVariable String taskId,
-            @Valid @RequestBody TaskAttachmentRequest request,
-            // 🚀 ĐÃ ĐỒNG BỘ: Sử dụng chuẩn Auth của project sếp
-            @RequestAttribute(AuthRequestContext.AUTH_USER_ATTR) AuthenticatedUser authUser) {
-        
-        // Truyền ID của user đang đăng nhập vào Service
-        Map<String, Object> attachment = taskService.addAttachmentToTask(taskId, request, authUser.userId());
-        
-        return ResponseFactory.ok("Đính kèm tài liệu thành công!", attachment);
     }
 }

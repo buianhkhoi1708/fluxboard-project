@@ -1,70 +1,82 @@
 import axiosClient from '../../../lib/axiosClient';
+import { AppNotification, NotificationPageResponse } from '../types/notificationTypes';
 
-export interface Notification {
-  id: string;
-  recipientId: string;
-  type:
-    | 'TASK_ASSIGNED'
-    | 'TASK_MOVED'
-    | 'DEADLINE_APPROACHING'
-    | 'TASK_OVERDUE'
-    | 'DEADLINE_UPDATED'
-    | 'EXTENSION_APPROVED'
-    | 'EXTENSION_REJECTED'
-    | 'EXTENSION_REQUESTED';
+const unwrap = (res: any) => {
+  if (!res) return res;
+  if (res.data?.data !== undefined) return res.data.data;
+  if (res.data !== undefined) return res.data;
+  return res;
+};
 
-  title: string;
-  message: string;
+const normalizePage = (payload: any): NotificationPageResponse => {
+  const data = unwrap(payload);
 
-  isRead: boolean;
+  if (Array.isArray(data)) {
+    return {
+      content: data,
+      page: 0,
+      size: data.length,
+      totalElements: data.length,
+      totalPages: 1,
+      hasNext: false,
+    };
+  }
 
-  metadata?: {
-    taskId?: string;
-    boardId?: string;
-    [key: string]: any;
+  const content = data?.content || data?.data?.content || data?.notifications || [];
+
+  return {
+    content,
+    page: Number(data?.page ?? data?.number ?? 0),
+    size: Number(data?.size ?? content.length ?? 20),
+    totalElements: Number(data?.totalElements ?? data?.total_elements ?? content.length ?? 0),
+    totalPages: Number(data?.totalPages ?? data?.total_pages ?? 1),
+    hasNext: Boolean(data?.hasNext ?? data?.has_next ?? false),
   };
+};
 
-  createdAt: string;
-}
+const normalizeUnreadCount = (payload: any) => {
+  const data = unwrap(payload);
 
-export interface NotificationPageResponse {
-  content: Notification[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-}
+  if (typeof data === 'number') return data;
+  if (typeof data === 'string') return Number(data) || 0;
+
+  return Number(data?.count ?? data?.unread_count ?? data?.unreadCount ?? data?.total ?? 0);
+};
+
+const normalizeNotificationList = (payload: any): AppNotification[] => {
+  const data = unwrap(payload);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.notifications)) return data.notifications;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  return [];
+};
 
 export const notificationApi = {
-  /**
-   * 🔔 Lấy danh sách notifications
-   */
-  getNotifications: (
-    params?: {
-      page?: number;
-      size?: number;
-      unreadOnly?: boolean;
-    }
-  ) =>
-    axiosClient.get('/notifications', {
-      params,
-    }),
+  getNotifications: async (params?: { page?: number; size?: number; unreadOnly?: boolean }) => {
+    const res = await axiosClient.get('/notifications', { params });
+    return normalizePage(res);
+  },
 
-  /**
-   * 🔴 Badge unread count
-   */
-  getUnreadCount: () =>
-    axiosClient.get('/notifications/unread-count'),
+  getUnreadCount: async () => {
+    const res = await axiosClient.get('/notifications/unread-count');
+    return normalizeUnreadCount(res);
+  },
 
-  /**
-   * ✔️ Đánh dấu 1 notification đã đọc
-   */
-  markAsRead: (id: string) =>
-    axiosClient.patch(`/notifications/${id}/read`),
+  longPolling: async () => {
+    const res = await axiosClient.get('/notifications/long-polling');
+    return normalizeNotificationList(res);
+  },
 
-  /**
-   * ✔️ Đánh dấu tất cả đã đọc
-   */
-  markAllAsRead: () =>
-    axiosClient.patch('/notifications/read-all'),
+  markAsRead: async (id: string): Promise<AppNotification | null> => {
+    const res = await axiosClient.patch(`/notifications/${id}/read`);
+    const data = unwrap(res);
+    return data || null;
+  },
+
+  markAllAsRead: async () => {
+    const res = await axiosClient.patch('/notifications/read-all');
+    return unwrap(res);
+  },
 };

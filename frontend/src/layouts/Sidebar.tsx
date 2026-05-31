@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { NavLink } from "react-router-dom";
-import { useLogout } from "../features/auth/hooks/useAuthQueries"; 
+import { useAuthStore } from "../features/auth/store/useAuthStore";
+// 🚀 ĐẢM BẢO IMPORT ĐÚNG ĐƯỜNG DẪN CỦA HOOK ROLE ACCESS NÀY NHÉ SẾP
 import { useRoleAccess } from "../features/rbac/hooks/useRoleAccess";
 import {
   LayoutDashboard, Briefcase, KanbanSquare, ListTodo,
@@ -8,28 +9,35 @@ import {
   Bell,
 } from "lucide-react";
 
+type MenuItem = {
+  path: string;
+  icon: React.ReactNode;
+  label: string;
+  roles: string[];
+};
+
 const Sidebar = () => {
-  const { mutate: logout } = useLogout();
+  const { logout } = useAuthStore();
+  // 🚀 Tận dụng luôn hook hasAccess sếp đã viết rất xịn
   const { hasAccess } = useRoleAccess();
 
   // ==========================================
-  // DANH SÁCH MENU (đã dịch sang tiếng Việt)
+  // DANH SÁCH MENU 
   // ==========================================
-  const executionItems = [
-    { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Bảng điều khiển", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
-    { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
-    { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "Tạo Board AI", roles: ["LEAD", "MANAGER", "ADMIN"] }, 
-    { path: "/mytasks", icon: <ListTodo size={20} />, label: "Công việc của tôi", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
-    { path: "/notifications", icon: <Bell size={20} />, label: "Thông báo", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
-
+  const executionItems: MenuItem[] = [
+    { path: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Bảng điều khiển", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
+    { path: "/workspaces", icon: <Briefcase size={20} />, label: "Không gian làm việc", roles: ["EMPLOYEE", "LEAD", "MANAGER", "ADMIN", "MEMBER", "SYSTEM_ADMIN"] },
+    { path: "/aigenerateboard", icon: <KanbanSquare size={20} />, label: "Tạo Board AI", roles: ["LEAD", "MANAGER", "ADMIN", "SYSTEM_ADMIN"] }, 
+    { path: "/mytasks", icon: <ListTodo size={20} />, label: "Công việc của tôi", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
+    { path: "/notifications", icon: <Bell size={20} />, label: "Thông báo", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
   ];
 
-  const managementItems = [
-    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN"] },
-    { path: "/createuser", icon: <Building2 size={20} />, label: "Tạo người dùng", roles: ["ADMIN"] },
-    { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Phân quyền (RBAC)", roles: ["ADMIN"] },
-    { path: "/activity", icon: <Activity size={20} />, label: "Hoạt động", roles: ["MANAGER", "ADMIN"] },
-    { path: "/settings", icon: <Settings size={20} />, label: "Cài đặt", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN"] },
+  const managementItems: MenuItem[] = [
+    { path: "/organization", icon: <Building2 size={20} />, label: "Tổ chức", roles: ["ADMIN", "MANAGER", "SYSTEM_ADMIN"] },
+    { path: "/createuser", icon: <Building2 size={20} />, label: "Tạo người dùng", roles: ["ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/adminrbac", icon: <ShieldCheck size={20} />, label: "Phân quyền (RBAC)", roles: ["ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/activity", icon: <Activity size={20} />, label: "Hoạt động", roles: ["MANAGER", "ADMIN", "SYSTEM_ADMIN"] },
+    { path: "/settings", icon: <Settings size={20} />, label: "Cài đặt", roles: ["MEMBER", "LEAD", "MANAGER", "ADMIN", "EMPLOYEE", "SYSTEM_ADMIN"] },
   ];
 
   // ==========================================
@@ -37,30 +45,43 @@ const Sidebar = () => {
   // ==========================================
   const visibleExecutionItems = useMemo(() => {
     return executionItems.filter(item => hasAccess(item.roles));
-  }, [hasAccess]);
+  }, [hasAccess]); // Chỉ phụ thuộc vào hàm hasAccess
 
   const visibleManagementItems = useMemo(() => {
     return managementItems.filter(item => hasAccess(item.roles));
   }, [hasAccess]);
 
   // Component Item con (giữ nguyên logic, điều chỉnh style)
-  const NavItem = ({ item, isAiHighlight }: { item: any, isAiHighlight?: boolean }) => (
+  const NavItem = ({ item, isAiHighlight }: { item: MenuItem, isAiHighlight?: boolean }) => (
     <NavLink
       to={item.path}
       className={({ isActive }) =>
-        `flex flex-col md:flex-row items-center md:justify-start gap-1 md:gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-2xl transition-all duration-200 min-w-[64px] md:min-w-0 font-semibold ${
+        `group flex flex-col md:flex-row items-center md:justify-start gap-1 md:gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-2xl transition-all duration-200 min-w-[64px] md:min-w-0 font-semibold ${
           isActive
-            ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-200/50 scale-[1.02]"
-            : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
+            ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-200/50 scale-[1.02]'
+            : 'text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          <span className={`transition-all ${isActive ? "text-white" : isAiHighlight ? "text-amber-500" : "text-slate-400 group-hover:text-indigo-500"}`}>
+          <span
+            className={`transition-all ${
+              isActive
+                ? 'text-white'
+                : isAiHighlight
+                  ? 'text-amber-500'
+                  : 'text-slate-400 group-hover:text-indigo-500'
+            }`}
+          >
             {item.icon}
           </span>
-          <span className={`text-[10px] md:text-sm whitespace-nowrap ${isAiHighlight && !isActive ? "text-indigo-600 font-bold" : ""}`}>
+
+          <span
+            className={`text-[10px] md:text-sm whitespace-nowrap ${
+              isAiHighlight && !isActive ? 'text-indigo-600 font-bold' : ''
+            }`}
+          >
             {item.label}
           </span>
         </>
@@ -78,8 +99,13 @@ const Sidebar = () => {
             <p className="hidden md:block text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-3 mt-2">
               Thực thi
             </p>
+
             {visibleExecutionItems.map((item) => (
-              <NavItem key={item.path} item={item} isAiHighlight={item.path === "/aigenerateboard"} />
+              <NavItem
+                key={item.path}
+                item={item}
+                isAiHighlight={item.path === '/aigenerateboard'}
+              />
             ))}
           </div>
         )}
@@ -90,20 +116,22 @@ const Sidebar = () => {
             <p className="hidden md:block text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-3 mt-6">
               Quản trị
             </p>
+
             {visibleManagementItems.map((item) => (
               <NavItem key={item.path} item={item} />
             ))}
-            
-            {/* Nút Đăng xuất */}
-            <button 
-              onClick={logout} 
-              className="flex flex-col md:flex-row items-center justify-center md:justify-start w-full gap-1 md:gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-2xl text-[10px] md:text-sm font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0 border border-transparent mt-auto md:mb-6"
-            >
-              <LogOut size={20} className="group-hover:text-rose-500 transition-colors" />
-              <span className="whitespace-nowrap">Đăng xuất</span>
-            </button>
           </div>
         )}
+
+        {/* Nút Đăng xuất đưa ra ngoài cùng để luôn hiện */}
+        <button
+          type="button"
+          onClick={logout}
+          className="flex flex-col md:flex-row items-center justify-center md:justify-start w-full gap-1 md:gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-2xl text-[10px] md:text-sm font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all group min-w-[64px] md:min-w-0 border border-transparent md:mt-auto md:mb-6"
+        >
+          <LogOut size={20} className="group-hover:text-rose-500 transition-colors" />
+          <span className="whitespace-nowrap">Đăng xuất</span>
+        </button>
       </div>
     </aside>
   );

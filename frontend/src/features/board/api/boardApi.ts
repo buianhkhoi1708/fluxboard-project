@@ -6,93 +6,138 @@ export interface CreateBoardPayload {
   status: string;
 }
 
+const unwrap = (res: any) => {
+  if (!res) return res;
+  if (res.data?.data !== undefined) return res.data.data;
+  if (res.data !== undefined) return res.data;
+  return res;
+};
+
 export const boardApi = {
-  // --- BOARD ---
   createBoard: async (payload: CreateBoardPayload): Promise<any> => {
-    const response: any = await axiosClient.post('/boards', payload);
-    return response.data || response;
+    const res: any = await axiosClient.post('/boards', {
+      name: payload.name,
+      project_id: payload.projectId,
+      status: payload.status
+    });
+    return unwrap(res);
   },
 
   getBoardsByProject: async (projectId: string): Promise<any> => {
-    const response: any = await axiosClient.get(`/boards/projects/${projectId}`);
-    return response.data || response;
+    const res: any = await axiosClient.get(`/boards/projects/${projectId}`);
+    return unwrap(res);
   },
 
   getBoard: async (boardId: string): Promise<any> => {
-    const response: any = await axiosClient.get(`/boards/${boardId}`);
-    return response.data || response; 
+    const res: any = await axiosClient.get(`/boards/${boardId}`);
+    return unwrap(res);
   },
 
-  // --- COLUMN ---
-  // 🚀 ĐÃ TỐI ƯU: Chỉ lọc lấy name và board_id gửi đi, loại bỏ hoàn toàn trường 'order' để không bị gãy lỗi 400
   createColumn: async (payload: { name: string; board_id: string; order?: number }) => {
-    const finalPayload = {
+    const res: any = await axiosClient.post('/board-columns', {
       name: payload.name,
-      board_id: payload.board_id
-    };
-    const response: any = await axiosClient.post('/board-columns', finalPayload);
-    return response.data || response;
+      board_id: payload.board_id,
+      order: payload.order
+    });
+    return unwrap(res);
   },
 
-  // 🚀 ĐÃ FIX: Đồng bộ đổi list_name thành name gửi lên API cập nhật cột
   updateColumn: async (columnId: string, payload: { name: string }) => {
-    const response: any = await axiosClient.put(`/board-columns/${columnId}`, payload);
-    return response.data || response;
+    const res: any = await axiosClient.put(`/board-columns/${columnId}`, payload);
+    return unwrap(res);
   },
 
   deleteColumn: async (columnId: string) => {
-    const response: any = await axiosClient.delete(`/board-columns/${columnId}`);
-    return response.data || response;
+    const res: any = await axiosClient.delete(`/board-columns/${columnId}`);
+    return unwrap(res);
   },
 
-  // --- TASK ---
   createTask: async (taskData: any) => {
-    const response: any = await axiosClient.post('/tasks', taskData);
-    return response.data || response;
+    const res: any = await axiosClient.post('/tasks', taskData);
+    return unwrap(res);
   },
 
   updateTask: async (taskId: string, updateData: any) => {
-    const response: any = await axiosClient.put(`/tasks/${taskId}`, updateData);
-    return response.data || response;
+    const res: any = await axiosClient.put(`/tasks/${taskId}`, updateData);
+    return unwrap(res);
   },
 
   deleteTask: async (taskId: string) => {
-    const response: any = await axiosClient.delete(`/tasks/${taskId}`);
-    return response.data || response;
+    const res: any = await axiosClient.delete(`/tasks/${taskId}`);
+    return unwrap(res);
   },
 
   moveTask: async (taskId: string, columnId: string, order: number, boardId: string) => {
-    return await axiosClient.patch(`/tasks/${taskId}/move`, {
-      new_column_id: columnId, 
+    const res: any = await axiosClient.patch(`/tasks/${taskId}/move`, {
+      new_column_id: columnId,
       new_order: order,
-      board_id: boardId 
+      board_id: boardId
     });
+    return unwrap(res);
   },
 
-  // --- PROJECT MEMBERS ---
-  addProjectMember: async (projectId: string, userId: string, roleIds: string[] = ["MEMBER"]) => {
-    const payload = {
+  addCommentToTask: async (taskId: string, payload: { content: string }) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/comments`, {
+      content: payload.content
+    });
+    return unwrap(res);
+  },
+
+  resolveTaskComment: async (taskId: string, commentId: string) => {
+    const res: any = await axiosClient.patch(`/tasks/${taskId}/comments/${commentId}/resolve`);
+    return unwrap(res);
+  },
+
+  getTaskDeadline: async (taskId: string) => {
+    const res: any = await axiosClient.get(`/tasks/${taskId}/deadline`);
+    return unwrap(res);
+  },
+
+  requestDeadlineExtension: async (
+    taskId: string,
+    payload: { requested_due_date: string; reason: string }
+  ) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions`, {
+      requested_due_date: payload.requested_due_date,
+      reason: payload.reason
+    });
+    return unwrap(res);
+  },
+
+  approveDeadlineExtension: async (taskId: string) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/approve`);
+    return unwrap(res);
+  },
+
+  rejectDeadlineExtension: async (taskId: string, payload: { reject_reason?: string }) => {
+    const res: any = await axiosClient.post(`/tasks/${taskId}/deadline/extensions/reject`, {
+      reject_reason: payload.reject_reason || ''
+    });
+    return unwrap(res);
+  },
+
+  addProjectMember: async (projectId: string, userId: string, roleIds: string[] = ['MEMBER']) => {
+    const res: any = await axiosClient.post(`/projects/${projectId}/members`, {
       user_id: userId,
       role_ids: roleIds
-    };
-    const response: any = await axiosClient.post(`/projects/${projectId}/members`, payload);
-    return response.data || response;
+    });
+    return unwrap(res);
   },
 
-  getProjectMembers: (projectId: string) => {
-    return axiosClient.get(`/projects/${projectId}/members`);
+  getProjectMembers: async (projectId: string) => {
+    const res: any = await axiosClient.get(`/projects/${projectId}/members`);
+    return unwrap(res);
   },
 
-  // --- MEDIA & ATTACHMENT ---
   getPresignedUrl: async (fileName: string, contentType: string): Promise<any> => {
-    const response: any = await axiosClient.get(`/media/presigned-url`, {
+    const res: any = await axiosClient.get('/media/presigned-url', {
       params: { fileName, contentType }
     });
-    return response.data || response; 
+    return unwrap(res);
   },
 
   addAttachmentToTask: async (taskId: string, payload: any): Promise<any> => {
-    const response: any = await axiosClient.post(`/tasks/${taskId}/attachments`, payload);
-    return response.data || response;
-  },
+    const res: any = await axiosClient.post(`/tasks/${taskId}/attachments`, payload);
+    return unwrap(res);
+  }
 };

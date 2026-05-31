@@ -12,19 +12,18 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class DeadlineActivityListener {
-    
     private final ActivityService activityService;
 
     @Async
     @EventListener
     public void handleExtensionRequested(ExtensionRequestedEvent event) {
         activityService.logExtensionRequested(
-            event.getTaskId(),
-            event.getProjectId(),
-            event.getRequesterId(),
-            event.getCurrentDueDate() != null ? event.getCurrentDueDate().toString() : null,
-            event.getRequestedDueDate() != null ? event.getRequestedDueDate().toString() : null,
-            event.getReason()
+                event.getTaskId(),
+                event.getProjectId(),
+                event.getRequesterId(),
+                event.getCurrentDueDate() != null ? event.getCurrentDueDate().toString() : null,
+                event.getRequestedDueDate() != null ? event.getRequestedDueDate().toString() : null,
+                event.getReason()
         );
     }
 
@@ -32,11 +31,11 @@ public class DeadlineActivityListener {
     @EventListener
     public void handleExtensionApproved(ExtensionApprovedEvent event) {
         activityService.logExtensionApproved(
-            event.getTaskId(),
-            event.getProjectId(),
-            event.getManagerId(),
-            event.getOldDueDate() != null ? event.getOldDueDate().toString() : null,
-            event.getNewDueDate() != null ? event.getNewDueDate().toString() : null
+                event.getTaskId(),
+                event.getProjectId(),
+                event.getManagerId(),
+                event.getOriginalDueDate() != null ? event.getOriginalDueDate().toString() : null,
+                event.getNewDueDate() != null ? event.getNewDueDate().toString() : null
         );
     }
 
@@ -44,9 +43,12 @@ public class DeadlineActivityListener {
     @EventListener
     public void handleExtensionRejected(ExtensionRejectedEvent event) {
         activityService.logExtensionRejected(
-            event.getTaskId(),
-            event.getCurrentDueDate() != null ? event.getCurrentDueDate().toString() : null,
-            event.getManagerReason()
+                event.getTaskId(),
+                event.getProjectId(),
+                event.getManagerId(),
+                event.getCurrentDueDate() != null ? event.getCurrentDueDate().toString() : null,
+                event.getRequestedDueDate() != null ? event.getRequestedDueDate().toString() : null,
+                event.getManagerReason()
         );
     }
 }

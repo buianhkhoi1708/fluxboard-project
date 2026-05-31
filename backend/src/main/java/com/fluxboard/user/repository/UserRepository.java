@@ -8,12 +8,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface UserRepository extends MongoRepository<User, String> {
-
     Optional<User> findByEmail(String email);
+
+    Optional<User> findByEmailIgnoreCase(String email);
 
     Optional<User> findByIdAndDeletedFalse(String id);
 
     Optional<User> findByEmailAndDeletedFalse(String email);
+
+    Optional<User> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
     List<User> findByDeletedFalse();
 
@@ -23,14 +26,18 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     boolean existsByEmailAndDeletedFalse(String email);
 
+    boolean existsByEmailIgnoreCase(String email);
+
     boolean existsByEmailAndIdNotAndDeletedFalse(String email, String id);
+
+    boolean existsByEmailIgnoreCaseAndIdNot(String email, String id);
 
     boolean existsByIdAndDeletedFalse(String id);
 
     long countByDeletedFalse();
 
     Optional<User> findByResetTokenAndDeletedFalse(String resetToken);
-    
+
     long countByTeamIdInAndDeletedFalse(List<String> teamIds);
 
     List<User> findByTeamIdInAndDeletedFalse(List<String> teamIds);

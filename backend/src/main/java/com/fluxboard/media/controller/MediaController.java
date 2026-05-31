@@ -3,6 +3,8 @@ package com.fluxboard.media.controller;
 import com.fluxboard.common.dto.ApiResponse;
 import com.fluxboard.common.util.ResponseFactory;
 import com.fluxboard.media.service.MediaService;
+import com.fluxboard.rbac.annotation.RequirePermission;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,7 @@ public class MediaController {
         this.mediaService = mediaService;
     }
 
+    @RequirePermission("ATTACHMENT_UPLOAD")
     @GetMapping("/presigned-url")
     public ResponseEntity<ApiResponse<Map<String, String>>> getPresignedUrl(
             @RequestParam String fileName,

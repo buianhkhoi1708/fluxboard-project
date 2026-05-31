@@ -1,7 +1,15 @@
 package com.fluxboard.auth.filter;
 
+import com.fluxboard.auth.model.AuthRequestContext;
+import com.fluxboard.auth.model.AuthenticatedUser;
+import com.fluxboard.auth.service.JwtTokenService;
+import com.fluxboard.common.exception.AppException;
+import com.fluxboard.common.exception.ErrorCode;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -9,21 +17,9 @@ import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
-import com.fluxboard.auth.model.AuthRequestContext;
-import com.fluxboard.auth.model.AuthenticatedUser;
-import com.fluxboard.auth.service.JwtTokenService;
-import com.fluxboard.common.exception.AppException;
-import com.fluxboard.common.exception.ErrorCode;
-
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
 @Component
 @Order(2)
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
     private final JwtTokenService jwtTokenService;
     private final HandlerExceptionResolver handlerExceptionResolver;
 
@@ -34,15 +30,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-        return true;
-        }
-
-
-        if (CorsUtils.isPreFlightRequest(request)) {
-            return true;
-        }
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
+        if (CorsUtils.isPreFlightRequest(request)) return true;
 
         String servletPath = request.getServletPath();
         return "/health-check".equals(servletPath)
@@ -56,11 +45,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
             String authorization = request.getHeader("Authorization");
             if (!StringUtils.hasText(authorization) || !authorization.startsWith("Bearer ")) {
@@ -68,12 +53,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             String token = authorization.substring(7).trim();
-            if (!StringUtils.hasText(token)) {
-                throw new AppException(ErrorCode.UNAUTHORIZED, "Access token is required.");
-            }
+            if (!StringUtils.hasText(token)) throw new AppException(ErrorCode.UNAUTHORIZED, "Access token is required.");
 
             AuthenticatedUser authenticatedUser = jwtTokenService.parseAccessToken(token);
             request.setAttribute(AuthRequestContext.AUTH_USER_ATTR, authenticatedUser);
+            request.setAttribute("userId", authenticatedUser.userId());
+            request.setAttribute("roleId", authenticatedUser.roleId());
+            request.setAttribute("authorities", authenticatedUser.authorities());
+
             filterChain.doFilter(request, response);
         } catch (Exception ex) {
             handlerExceptionResolver.resolveException(request, response, null, ex);

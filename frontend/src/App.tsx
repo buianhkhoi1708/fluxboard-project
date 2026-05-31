@@ -4,8 +4,7 @@ import { NuqsAdapter } from "nuqs/adapters/react-router";
 import MainLayout from "./layouts/MainLayout";
 import BoardPage from "./pages/BoardPage";
 import { SocketProvider } from "./context/SocketContext";
-// 🚀 1. IMPORT TRẠM THU SÓNG NGẦM VÀO ĐÂY
-import { GlobalSocketListener } from "./pages/GlobalSocketListener"; 
+import { GlobalSocketListener } from "./pages/GlobalSocketListener";
 
 import AdminRBACPage from "./pages/AdminRBACPage";
 import WorkspacesPage from "./pages/WorkspacesPage";
@@ -28,53 +27,41 @@ import NotificationsPage from "./pages/NotificationsPage";
 function App() {
   return (
     <SocketProvider>
-      {/* 🚀 2. THẢ NÓ VÀO ĐÂY: Nằm trong SocketProvider để có kết nối, và chạy ngầm toàn App */}
       <GlobalSocketListener />
 
       <BrowserRouter>
         <NuqsAdapter>
           <Routes>
-
-            {/* ROUTE CÔNG KHAI (Không cần đăng nhập) */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/403" element={<UnauthorizedPage />} /> {/* Trang báo lỗi không có quyền */}
+            <Route path="/403" element={<UnauthorizedPage />} />
 
-            {/* ROUTE CẦN ĐĂNG NHẬP */}
             <Route element={<ProtectedRoute />}>
               <Route element={<MainLayout />}>
-                
-                {/* Đã đăng nhập thì chuyển hướng "/" về Dashboard thay vì Login */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                {/* ========================================== */}
-                {/* 🟢 KHU VỰC CHUNG (Member, Manager, Admin đều xem được) */}
-                {/* ========================================== */}
-                <Route path="/dashboard" element={<DashboardPage/>} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/board" element={<BoardPage />} />
                 <Route path="/board/:id" element={<BoardView />} />
                 <Route path="/workspaces" element={<WorkspacesPage />} />
                 <Route path="/aigenerateboard" element={<AiBoardGeneratorPage />} />
                 <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-                <Route path="/settings" element={<SettingsPage />} /> 
-                <Route path="/mytasks" element={<MyTasksPage />} /> 
-                <Route path="/notifications" element={<NotificationsPage />} /> 
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/mytasks" element={<MyTasksPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
 
-
-                {/* ========================================== */}
-                {/* 🔴 KHU VỰC QUẢN TRỊ (Chỉ Admin hoặc Role được cấp phép) */}
-                {/* ========================================== */}
                 <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'SYSTEM_ADMIN']} />}>
                   <Route path="/adminrbac" element={<AdminRBACPage />} />
                   <Route path="/organization" element={<OrganizationPage />} />
                   <Route path="/createuser" element={<CreateUserTab />} />
-                  <Route path="/activity" element={<ActivityLogPage />} />
                 </Route>
 
+                <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', "MANAGER", "ADMIN"]} />}>
+                  <Route path="/activity" element={<ActivityLogPage />} />
+                </Route>
               </Route>
             </Route>
-
           </Routes>
         </NuqsAdapter>
       </BrowserRouter>

@@ -3,7 +3,8 @@ package com.fluxboard.board.task.entity;
 import com.fluxboard.board.task.enums.TaskPriority;
 import com.fluxboard.common.entity.BaseDocument;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -23,7 +24,6 @@ import org.springframework.data.mongodb.core.mapping.Field;
         )
 })
 public class TaskEntity extends BaseDocument {
-
     @Field("title")
     private String title;
 
@@ -39,7 +39,7 @@ public class TaskEntity extends BaseDocument {
     @Field("parent_task_id")
     private String parentTaskId;
 
-    @Indexed 
+    @Indexed
     @Field("assignees_user_id")
     private List<String> assigneesUserId;
 
@@ -52,7 +52,7 @@ public class TaskEntity extends BaseDocument {
     @Field("due_date")
     private Instant dueDate;
 
-    @Indexed 
+    @Indexed
     @Field("status")
     private String status;
 
@@ -76,6 +76,9 @@ public class TaskEntity extends BaseDocument {
 
     @Field("attachments")
     private List<Map<String, Object>> attachments;
+
+    @Field("comments")
+    private List<Map<String, Object>> comments;
 
     public String getTitle() {
         return title;
@@ -211,5 +214,13 @@ public class TaskEntity extends BaseDocument {
 
     public void setAttachments(List<Map<String, Object>> attachments) {
         this.attachments = attachments;
+    }
+
+    public List<Map<String, Object>> getComments() {
+        return comments;
+    }
+
+    public void setComments(List<Map<String, Object>> comments) {
+        this.comments = comments;
     }
 }
