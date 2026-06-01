@@ -429,7 +429,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             entity.setColumnId(newColumnId);
             entity.setProjectId(projectId);
             entity.setOrder(targetOrder);
-            entity.setStatus(resolveStatusByColumnName(newColumn.getName()));
+            entity.setStatus(resolveMoveStatus(previousStatus, newColumn.getName()));
 
             TaskEntity saved = taskRepository.save(entity);
             String actorId = TextUtils.trimToNull(actorUserId);
@@ -889,6 +889,14 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         if (completedNow) return "TASK_COMPLETED";
         if (!sameText(oldColumnId, newColumnId) || oldOrder != newOrder) return "TASK_MOVE";
         return "TASK_UPDATE";
+    }
+
+    private String resolveMoveStatus(String previousStatus, String destinationColumnName) {
+        if ("DONE".equalsIgnoreCase(String.valueOf(previousStatus))) {
+            return "DONE";
+        }
+
+        return resolveStatusByColumnName(destinationColumnName);
     }
 
     private String resolveStatusByColumnName(String columnName) {

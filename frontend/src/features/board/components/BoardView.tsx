@@ -3,15 +3,115 @@ import Column from './Column';
 import TaskItem from './TaskItem';
 import { useUserStore } from '../../user/store/useUserStore';
 import { useBoardStore } from '../stores/useBoardStore';
-import { DndContext, closestCenter, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import {
+  DndContext,
+  closestCenter,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  MouseSensor,
+  TouchSensor,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+  DragCancelEvent,
+  Over
+} from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Save, Sparkles, Filter, Users, Plus, X } from 'lucide-react';
 import { useRealtimeEvent } from '../../../hooks/useRealtimeEvent';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetBoardDetail, useMoveTask, useCreateColumn, BOARD_QUERY_KEYS } from '../hooks/useBoardQueries';
-import { Task, BoardColumn } from '../types/index';
+import { Task, BoardColumn, Board } from '../types/index';
 import TaskDetailModal from './TaskDetailModal';
+
+const getTaskId = (task: Task) => String(task.id || task._id || '');
+const getColumnId = (column: BoardColumn) => String(column.id || column._id || '');
+
+const cloneColumns = (columns: BoardColumn[]) => {
+  return columns.map((column) => ({ ...column, tasks: [...(column.tasks || [])] }));
+};
+
+const findTaskLocation = (columns: BoardColumn[], taskId: string) => {
+  for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+    const taskIndex = (columns[columnIndex].tasks || []).findIndex((task) => getTaskId(task) === taskId);
+    if (taskIndex !== -1) return { columnIndex, taskIndex };
+  }
+  return null;
+};
+
+const findColumnIndexById = (columns: BoardColumn[], columnId: string) => {
+  return columns.findIndex((column) => getColumnId(column) === columnId);
+};
+
+const resolveOverColumnId = (columns: BoardColumn[], over: Over | null) => {
+  if (!over) return '';
+
+  const overData = over.data.current || {};
+  const directColumnId = overData.columnId || overData.listId;
+
+  if (directColumnId) return String(directColumnId);
+
+  const overId = String(over.id);
+  if (findColumnIndexById(columns, overId) !== -1) return overId;
+
+  const owner = findTaskLocation(columns, overId);
+  return owner ? getColumnId(columns[owner.columnIndex]) : '';
+};
+
+const buildBoardMovePreview = (sourceBoard: Board | undefined, activeTaskId: string, over: Over | null) => {
+  if (!sourceBoard?.columns || !over) return null;
+
+  const columns = cloneColumns(sourceBoard.columns);
+  const source = findTaskLocation(columns, activeTaskId);
+  const destinationColumnId = resolveOverColumnId(columns, over);
+
+  if (!source || !destinationColumnId) return null;
+
+  const sourceColumnId = getColumnId(columns[source.columnIndex]);
+  const destinationColumnIndex = findColumnIndexById(columns, destinationColumnId);
+
+  if (destinationColumnIndex === -1) return null;
+
+  const overData = over.data.current || {};
+  const overTaskId = overData.type === 'Task' ? String(over.id) : '';
+  const overLocationBeforeRemove = overTaskId ? findTaskLocation(columns, overTaskId) : null;
+
+  const [movedTask] = columns[source.columnIndex].tasks.splice(source.taskIndex, 1);
+  if (!movedTask) return null;
+
+  let insertIndex = columns[destinationColumnIndex].tasks.length;
+
+  if (overTaskId && overTaskId !== activeTaskId) {
+    if (sourceColumnId === destinationColumnId && overLocationBeforeRemove) {
+      insertIndex = overLocationBeforeRemove.taskIndex;
+    } else {
+      const overLocationAfterRemove = findTaskLocation(columns, overTaskId);
+      if (overLocationAfterRemove && getColumnId(columns[overLocationAfterRemove.columnIndex]) === destinationColumnId) {
+        insertIndex = overLocationAfterRemove.taskIndex;
+      }
+    }
+  }
+
+  insertIndex = Math.max(0, Math.min(insertIndex, columns[destinationColumnIndex].tasks.length));
+
+  if (sourceColumnId === destinationColumnId && source.taskIndex === insertIndex) return null;
+
+  const movedTaskWithColumn = {
+    ...movedTask,
+    column_id: destinationColumnId,
+    columnId: destinationColumnId
+  };
+
+  columns[destinationColumnIndex].tasks.splice(insertIndex, 0, movedTaskWithColumn);
+
+  return {
+    board: { ...sourceBoard, columns },
+    columnId: destinationColumnId,
+    order: insertIndex + 1
+  };
+};
 
 const BoardView = () => {
   const { id } = useParams();
@@ -33,9 +133,26 @@ const BoardView = () => {
   const [isAddingCol, setIsAddingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
   const newColInputRef = useRef<HTMLInputElement>(null);
+  const dragSnapshotBoardRef = useRef<Board | null>(null);
+  const lastPreviewMoveRef = useRef<{ taskId: string; columnId: string; order: number } | null>(null);
 
   const [selectedTaskDetailId, setSelectedTaskDetailId] = useState<string | null>(null);
   const [openCommentPanel, setOpenCommentPanel] = useState(false);
+
+  const getBoardFromCache = () => {
+    return (queryClient.getQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId)) as Board | undefined) || board;
+  };
+
+  const rollbackDrag = (fallbackBoard?: Board | null) => {
+    const rollbackBoard = fallbackBoard || dragSnapshotBoardRef.current;
+    if (rollbackBoard) queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), rollbackBoard);
+  };
+
+  const clearDragState = () => {
+    setActiveTask(null);
+    dragSnapshotBoardRef.current = null;
+    lastPreviewMoveRef.current = null;
+  };
 
   useEffect(() => {
     if (taskIdFromUrl && board) {
@@ -54,8 +171,8 @@ const BoardView = () => {
     if (!selectedTaskDetailId || !board?.columns) return { task: null, listId: '' };
 
     for (const col of board.columns) {
-      const foundTask = col.tasks?.find((task: Task) => String(task.id || task._id) === String(selectedTaskDetailId));
-      if (foundTask) return { task: foundTask, listId: String(col.id || col._id) };
+      const foundTask = col.tasks?.find((task: Task) => getTaskId(task) === String(selectedTaskDetailId));
+      if (foundTask) return { task: foundTask, listId: getColumnId(col) };
     }
 
     return { task: null, listId: '' };
@@ -75,6 +192,9 @@ const BoardView = () => {
 
   useRealtimeEvent(`/topic/board/${currentBoardId}`, (message) => {
     const action = String(message?.action || message?.type || '').toUpperCase();
+
+    if (dragSnapshotBoardRef.current) return;
+
     queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(currentBoardId) });
     queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
 
@@ -136,78 +256,136 @@ const BoardView = () => {
   };
 
   const handleDragStart = (e: DragStartEvent) => {
-    if (e.active.data.current?.type === 'Task') setActiveTask(e.active.data.current.task as Task);
+    if (e.active.data.current?.type !== 'Task') return;
+
+    const currentBoard = getBoardFromCache();
+    dragSnapshotBoardRef.current = currentBoard ? { ...currentBoard, columns: cloneColumns(currentBoard.columns || []) } : null;
+    lastPreviewMoveRef.current = null;
+    setActiveTask(e.active.data.current.task as Task);
   };
 
-  const findColumnIndex = (columnId: string) => {
-    return board?.columns?.findIndex((col: BoardColumn) => String(col.id || col._id) === String(columnId)) ?? -1;
+  const handleDragOver = (e: DragOverEvent) => {
+    const { active, over } = e;
+
+    if (!over || active.data.current?.type !== 'Task' || String(active.id) === String(over.id)) return;
+
+    const currentBoard = getBoardFromCache();
+    const preview = buildBoardMovePreview(currentBoard, String(active.id), over);
+
+    if (!preview) return;
+
+    queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), preview.board);
+    lastPreviewMoveRef.current = {
+      taskId: String(active.id),
+      columnId: preview.columnId,
+      order: preview.order
+    };
+  };
+
+  const findColumnIndex = (columns: BoardColumn[], columnId: string) => {
+    return columns.findIndex((col: BoardColumn) => getColumnId(col) === String(columnId));
   };
 
   const handleDragEnd = async (e: DragEndEvent) => {
-    setActiveTask(null);
-
     const { active, over } = e;
-    if (!over || !board?.columns) return;
+    const rollbackBoard = dragSnapshotBoardRef.current;
+
+    if (!over || active.data.current?.type !== 'Task') {
+      rollbackDrag(rollbackBoard);
+      clearDragState();
+      return;
+    }
+
+    const activeTaskId = String(active.id);
+    const previewMove = lastPreviewMoveRef.current;
+
+    if (previewMove) {
+      moveTaskApi({
+        taskId: activeTaskId,
+        columnId: previewMove.columnId,
+        order: previewMove.order,
+        boardId: currentBoardId
+      }).catch((error) => {
+        console.error('Lỗi khi di chuyển công việc:', error);
+        rollbackDrag(rollbackBoard);
+      });
+
+      clearDragState();
+      return;
+    }
+
+    const currentBoard = getBoardFromCache();
+
+    if (!currentBoard?.columns) {
+      rollbackDrag(rollbackBoard);
+      clearDragState();
+      return;
+    }
 
     const activeColId = active.data.current?.columnId || active.data.current?.listId;
-    let overColId = over.data.current?.columnId || over.data.current?.listId;
+    const overColId = resolveOverColumnId(currentBoard.columns, over);
 
-    if (!overColId) {
-      const overTaskId = String(over.id);
-      const ownerColumn = board.columns.find((col: BoardColumn) =>
-        col.tasks?.some((task: Task) => String(task.id || task._id) === overTaskId)
-      );
-      overColId = ownerColumn ? String(ownerColumn.id || ownerColumn._id) : String(over.id);
+    if (!activeColId || !overColId) {
+      rollbackDrag(rollbackBoard);
+      clearDragState();
+      return;
     }
 
-    if (!activeColId || !overColId) return;
+    const sourceColIndex = findColumnIndex(currentBoard.columns, String(activeColId));
+    const destColIndex = findColumnIndex(currentBoard.columns, String(overColId));
 
-    const sourceColIndex = findColumnIndex(String(activeColId));
-    const destColIndex = findColumnIndex(String(overColId));
-    if (sourceColIndex === -1 || destColIndex === -1) return;
+    if (sourceColIndex === -1 || destColIndex === -1) {
+      rollbackDrag(rollbackBoard);
+      clearDragState();
+      return;
+    }
 
-    const newColumns = [...board.columns];
     let newOrder = 1;
+    let nextColumns = cloneColumns(currentBoard.columns);
 
     if (String(activeColId) === String(overColId)) {
-      const col = newColumns[sourceColIndex];
-      const oldIndex = col.tasks.findIndex((task: Task) => String(task.id || task._id) === String(active.id));
-      const newIndex = col.tasks.findIndex((task: Task) => String(task.id || task._id) === String(over.id));
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+      const col = nextColumns[sourceColIndex];
+      const oldIndex = col.tasks.findIndex((task: Task) => getTaskId(task) === activeTaskId);
+      const newIndex = col.tasks.findIndex((task: Task) => getTaskId(task) === String(over.id));
 
-      newColumns[sourceColIndex] = { ...col, tasks: arrayMove(col.tasks, oldIndex, newIndex) };
-      newOrder = newIndex + 1;
-    } else {
-      const sourceCol = newColumns[sourceColIndex];
-      const destCol = newColumns[destColIndex];
-      const movedTask = sourceCol.tasks.find((task: Task) => String(task.id || task._id) === String(active.id));
-      if (!movedTask) return;
-
-      const newSourceTasks = sourceCol.tasks.filter((task: Task) => String(task.id || task._id) !== String(active.id));
-      const newDestTasks = [...(destCol.tasks || [])];
-
-      if (over.data.current?.type === 'Task') {
-        const newIndex = destCol.tasks.findIndex((task: Task) => String(task.id || task._id) === String(over.id));
-        const insertIndex = newIndex >= 0 ? newIndex : newDestTasks.length;
-        newDestTasks.splice(insertIndex, 0, movedTask);
-        newOrder = insertIndex + 1;
-      } else {
-        newDestTasks.push(movedTask);
-        newOrder = newDestTasks.length;
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+        clearDragState();
+        return;
       }
 
-      newColumns[sourceColIndex] = { ...sourceCol, tasks: newSourceTasks };
-      newColumns[destColIndex] = { ...destCol, tasks: newDestTasks };
+      nextColumns[sourceColIndex] = { ...col, tasks: arrayMove(col.tasks, oldIndex, newIndex) };
+      newOrder = newIndex + 1;
+    } else {
+      const preview = buildBoardMovePreview(currentBoard, activeTaskId, over);
+
+      if (!preview) {
+        rollbackDrag(rollbackBoard);
+        clearDragState();
+        return;
+      }
+
+      nextColumns = preview.board.columns;
+      newOrder = preview.order;
     }
 
-    const previousBoard = queryClient.getQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId));
-    queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), { ...board, columns: newColumns });
+    queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), { ...currentBoard, columns: nextColumns });
 
-    moveTaskApi({ taskId: String(active.id), columnId: String(overColId), order: newOrder, boardId: currentBoardId })
-      .catch((error) => {
-        console.error('Lỗi khi di chuyển công việc:', error);
-        queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), previousBoard);
-      });
+    moveTaskApi({
+      taskId: activeTaskId,
+      columnId: String(overColId),
+      order: newOrder,
+      boardId: currentBoardId
+    }).catch((error) => {
+      console.error('Lỗi khi di chuyển công việc:', error);
+      rollbackDrag(rollbackBoard);
+    });
+
+    clearDragState();
+  };
+
+  const handleDragCancel = (_e: DragCancelEvent) => {
+    rollbackDrag();
+    clearDragState();
   };
 
   if (isLoading || !board) {
@@ -229,7 +407,7 @@ const BoardView = () => {
 
   return (
     <>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="absolute inset-0 flex flex-col bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white overflow-hidden">
           <div className="shrink-0 px-4 py-3 md:px-6 bg-white/70 backdrop-blur-xl border-b border-white shadow-sm flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 z-10">
             <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">

@@ -38,7 +38,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const safeTaskId = String(task.id || task._id);
-  const isTaskDone = task.status === 'DONE' || task.is_done;
+  const isTaskDone = task.status === 'DONE' || task.is_done || task.isDone;
   const activeComments = useMemo(() => (task.comments || []).filter(isCommentActive), [task.comments]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -154,8 +154,8 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
                 onMouseDown={(e) => e.stopPropagation()}
                 className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors"
               >
-                {st.status === 'DONE' ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
-                <span className={`text-[11px] flex-1 truncate ${st.status === 'DONE' ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`} title={st.title}>
+                {(st.status === 'DONE' || st.is_done || st.isDone) ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
+                <span className={`text-[11px] flex-1 truncate ${(st.status === 'DONE' || st.is_done || st.isDone) ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`} title={st.title}>
                   {st.title}
                 </span>
               </div>
