@@ -47,5 +47,14 @@ export const workspaceApi = {
 
   createBoard: (data: CreateBoardPayload): Promise<ApiResponse<any>> => {
     return axiosClient.post('/boards', data);
+  },
+
+  updateBoard: (boardId: string, data: { name: string }): Promise<any> => {
+    return axiosClient.put(`/boards/${boardId}`, data);
+  },
+
+  // 🚀 BỔ SUNG: API Xóa bảng
+  deleteBoard: (boardId: string): Promise<any> => {
+    return axiosClient.delete(`/boards/${boardId}`);
   }
 };

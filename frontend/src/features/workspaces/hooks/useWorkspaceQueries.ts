@@ -16,20 +16,29 @@ export const useWorkspaces = () => {
       const response: any = await workspaceApi.getProjectOverviews(pageParam as number, 2);
       const rawData = response.content || response.data?.content || response.data || [];
       
-      // Lọc bỏ dự án đã xóa
-      const activeProjects = rawData.filter((item: WorkspaceOverview) => {
-        const p = item.project;
-        return p && (p.is_deleted === false || p.is_deleted === undefined);
-      }) as WorkspaceOverview[];
+      // 🚀 2. FIX LỖI: Lọc bỏ dự án ĐÃ XÓA và lọc luôn cả các Bảng (Board) ĐÃ XÓA bên trong dự án
+      const activeProjects = rawData
+        .filter((item: WorkspaceOverview) => {
+          const p = item.project;
+          return p && (p.is_deleted === false || p.is_deleted === undefined);
+        })
+        .map((item: WorkspaceOverview) => {
+          // Lọc sạch bong các Board đã bị xóa ngầm
+          const cleanBoards = (item.boards || []).filter((bItem: any) => {
+            const b = bItem.board || bItem;
+            return b && (b.is_deleted === false || b.is_deleted === undefined);
+          });
+          return { ...item, boards: cleanBoards };
+        }) as WorkspaceOverview[];
 
-      // 🚀 2. GỌI THÊM API LẤY MEMBER CHO TỪNG DỰ ÁN (Chạy song song bằng Promise.all)
+      // 3. GỌI THÊM API LẤY MEMBER CHO TỪNG DỰ ÁN (Chạy song song bằng Promise.all)
       const projectsWithMembers = await Promise.all(
         activeProjects.map(async (item) => {
           const pid = item.project?.id || item.project?._id;
           if (!pid) return { ...item, members: [] };
 
           try {
-            // Gọi API lấy members mà sếp vừa nhắc
+            // Gọi API lấy members
             const membersRes: any = await workspaceApi.getProjectMembers(String(pid));
             const membersData = membersRes.data?.data || membersRes.data?.content || membersRes.data || membersRes || [];
             
@@ -42,7 +51,7 @@ export const useWorkspaces = () => {
         })
       );
 
-      // 3. Lưu User vào Cache toàn cục để các modal khác bốc ra nhanh
+      // 4. Lưu User vào Cache toàn cục để các modal khác bốc ra nhanh
       projectsWithMembers.forEach(item => {
         const pid = item.project?.id || item.project?._id;
         if (pid && item.members && item.members.length > 0) {
@@ -50,11 +59,11 @@ export const useWorkspaces = () => {
         }
       });
 
-      // 4. Check xem còn trang không
+      // 5. Check xem còn trang không
       const isLastPage = response.last !== undefined ? response.last : rawData.length < 2;
       
       return {
-        data: projectsWithMembers, // 🚀 Trả về danh sách ĐÃ CÓ MEMBERS
+        data: projectsWithMembers, // Trả về danh sách SẠCH ĐÃ CÓ MEMBERS
         nextPage: !isLastPage ? (pageParam as number) + 1 : undefined,
       };
     },
@@ -75,5 +84,26 @@ export const useCreateBoard = () => {
   return useMutation({
     mutationFn: workspaceApi.createBoard,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all })
+  });
+};
+
+export const useUpdateBoard = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => 
+      workspaceApi.updateBoard(id, { name }), 
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
+    }
+  });
+};
+
+export const useDeleteBoard = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (boardId: string) => workspaceApi.deleteBoard(boardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
+    }
   });
 };

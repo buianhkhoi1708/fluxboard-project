@@ -7,6 +7,9 @@ import { useQuery } from '@tanstack/react-query';
 import axiosClient from '../lib/axiosClient';
 import ProjectDetailMemberModal from '../features/project/components/ProjectDetailMemberModal';
 
+// 🚀 BỔ SUNG: Import Component CreateProjectModal (Sếp nhớ check lại đường dẫn import cho đúng thư mục dự án nhé)
+import CreateProjectModal from '../features/workspaces/components/CreateProjectModal'; 
+
 import {
   Sparkles, ArrowRight, ArrowLeft,
   Loader2, CheckCircle2, Wand2,
@@ -80,6 +83,9 @@ const AiBoardGeneratorPage = () => {
 
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState<any>(null);
+
+  // 🚀 BỔ SUNG: State mở Modal Tạo Mới Dự Án
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
 
   const [prompt, setPrompt] = useState('');
   const [generationMode, setGenerationMode] = useState('ADVANCED');
@@ -250,12 +256,18 @@ const AiBoardGeneratorPage = () => {
                   <WorkspaceSkeleton />
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar content-start pb-4">
-                    <button className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-white transition-all group">
+                    
+                    {/* 🚀 BỔ SUNG: Gắn hàm mở Modal vào nút Tạo Mới */}
+                    <button 
+                      onClick={() => setIsCreateProjectModalOpen(true)}
+                      className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-white transition-all group"
+                    >
                       <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
                         <Plus className="text-slate-400 group-hover:text-indigo-600" />
                       </div>
                       <span className="text-xs font-bold text-slate-400 group-hover:text-indigo-600 uppercase tracking-widest">Tạo mới</span>
                     </button>
+
                     {projectList.map((item: any) => {
                       const p = item.project || item;
                       const isSelected = selectedProjectId === p.id;
@@ -570,7 +582,7 @@ const AiBoardGeneratorPage = () => {
           </div>
         </div>
 
-        {/* MODAL */}
+        {/* MODAL EDIT THÀNH VIÊN */}
         {isMemberModalOpen && (
           <ProjectDetailMemberModal
             isOpen={isMemberModalOpen}
@@ -581,6 +593,18 @@ const AiBoardGeneratorPage = () => {
             }}
             projectId={selectedProjectId}
             editMember={memberToEdit}
+          />
+        )}
+
+        {/* 🚀 BỔ SUNG: MODAL TẠO DỰ ÁN */}
+        {isCreateProjectModalOpen && (
+          <CreateProjectModal 
+            isOpen={isCreateProjectModalOpen} 
+            onClose={() => setIsCreateProjectModalOpen(false)} 
+            onSuccess={() => {
+              fetchProjects(); // Tải lại danh sách project để nó hiển thị liền lên UI
+              setIsCreateProjectModalOpen(false);
+            }} 
           />
         )}
 

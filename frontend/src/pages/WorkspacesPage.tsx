@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserStore } from '../features/user/store/useUserStore';
-import { useWorkspaces } from '../features/workspaces/hooks/useWorkspaceQueries';
+// 🚀 Nhớ import 2 hook vừa tạo vào đây nhé sếp:
+import { useWorkspaces, useDeleteBoard, useUpdateBoard } from '../features/workspaces/hooks/useWorkspaceQueries';
 import CreateProjectModal from '../features/workspaces/components/CreateProjectModal';
 import CreateBoardModal from '../features/workspaces/components/CreateBoardModal';
 import {
   Briefcase, Plus, MoreVertical, KanbanSquare, Users,
-  Search, LayoutGrid, Loader2
+  Search, LayoutGrid, Loader2, Pencil, Trash2, X
 } from 'lucide-react';
 
 // ------- Component Skeleton khi tải -------
@@ -37,18 +38,19 @@ const WorkspaceSkeleton = () => (
 const WorkspacesPage = () => {
   const getUser = useUserStore((state) => state.getUser);
 
-  const {
-    data,
-    isLoading,
-    isFetchingNextPage,
-    fetchNextPage,
-    hasNextPage
-  } = useWorkspaces();
+  // 🚀 GỌI HOOKS API
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } = useWorkspaces();
+  const deleteBoardMutation = useDeleteBoard();
+  const updateBoardMutation = useUpdateBoard();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // STATES CHO SỬA & XÓA BẢNG
+  const [boardMenuOpenId, setBoardMenuOpenId] = useState<string | null>(null);
+  const [editBoardData, setEditBoardData] = useState<{ id: string; name: string } | null>(null);
 
   // Làm phẳng & loại trùng lặp dữ liệu từ các trang
   const allProjects = useMemo(() => {
@@ -83,6 +85,27 @@ const WorkspacesPage = () => {
 
     if (node) observer.current.observe(node);
   }, [isLoading, isFetchingNextPage, hasNextPage, fetchNextPage]);
+
+  // 🚀 HÀM XỬ LÝ XÓA
+  const handleDeleteBoard = (id: string, name: string) => {
+    if (window.confirm(`Bạn có chắc muốn xóa bảng "${name}"? Thao tác này sẽ xóa toàn bộ cột và công việc bên trong.`)) {
+      deleteBoardMutation.mutate(id, {
+        onError: (err: any) => alert('Lỗi khi xóa bảng: ' + (err.response?.data?.message || err.message))
+      });
+    }
+  };
+
+  // 🚀 HÀM XỬ LÝ SỬA
+  const handleUpdateBoardSubmit = () => {
+    if (!editBoardData || !editBoardData.name.trim()) return;
+    updateBoardMutation.mutate(
+      { id: editBoardData.id, name: editBoardData.name.trim() },
+      {
+        onSuccess: () => setEditBoardData(null),
+        onError: (err: any) => alert('Lỗi khi đổi tên bảng: ' + (err.response?.data?.message || err.message))
+      }
+    );
+  };
 
   return (
     <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
@@ -200,7 +223,6 @@ const WorkspacesPage = () => {
                             <LayoutGrid size={12} /> {boardsData.length} bảng
                           </span>
 
-                          {/* Xem trước thành viên */}
                           <Link
                             to={`/projects/${workspace.id || workspace._id}?tab=members`}
                             title="Quản lý thành viên"
@@ -245,43 +267,84 @@ const WorkspacesPage = () => {
                         </div>
                       </div>
                     </div>
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200 active:scale-90"> 
-                       <Link
-                            to={`/projects/${workspace.id || workspace._id}?tab=members`}
-                            title="Quản lý thành viên"
-                            className="flex items-center gap-2 bg-slate-100/80 hover:bg-indigo-50 px-2.5 py-1 rounded-full cursor-pointer transition-all group"
-                          >
-                      <MoreVertical size={18} />
-                      </Link>
-                    </button>
                   </div>
 
                   {/* Lưới bảng */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {boardsData.map((boardItem) => {
                       const b = boardItem.board || boardItem;
+                      const bId = String(b.id || b._id);
+                      const isMenuOpen = boardMenuOpenId === bId;
+
                       return (
-                        <Link
-                          to={`/board/${b.id || b._id}`}
-                          key={b.id || b._id}
-                          className="group relative bg-gradient-to-br from-white to-slate-50/80 border border-slate-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/30 transition-all duration-200 block overflow-hidden hover:-translate-y-0.5"
-                        >
-                          <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-colors" />
-                          <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="bg-white border border-indigo-100 text-indigo-600 w-9 h-9 rounded-lg flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all duration-200">
-                                <KanbanSquare size={18} />
+                        <div key={bId} className="relative block group">
+                          {/* 🚀 BẢNG KANBAN (DÙNG THẺ LINK) */}
+                          <Link
+                            to={`/board/${bId}`}
+                            className="bg-gradient-to-br from-white to-slate-50/80 border border-slate-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/30 transition-all duration-200 block overflow-hidden hover:-translate-y-0.5"
+                          >
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-colors" />
+                            <div className="relative z-10 pr-6">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="bg-white border border-indigo-100 text-indigo-600 w-9 h-9 rounded-lg flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all duration-200">
+                                  <KanbanSquare size={18} />
+                                </div>
+                                <h3 className="font-bold text-sm text-slate-800 group-hover:text-indigo-700 transition-colors line-clamp-1">
+                                  {b.name}
+                                </h3>
                               </div>
-                              <h3 className="font-bold text-sm text-slate-800 group-hover:text-indigo-700 transition-colors line-clamp-1">
-                                {b.name}
-                              </h3>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                <span>Hoạt động</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              <span>Hoạt động</span>
-                            </div>
-                          </div>
-                        </Link>
+                          </Link>
+
+                          {/* 🚀 NÚT 3 CHẤM SETTING BẢNG */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setBoardMenuOpenId(isMenuOpen ? null : bId);
+                            }}
+                            className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors z-20 opacity-0 group-hover:opacity-100 md:opacity-100"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+
+                          {/* 🚀 MENU SỬA/XÓA BẢNG */}
+                          {isMenuOpen && (
+                            <>
+                              <div className="fixed inset-0 z-20" onClick={(e) => { e.stopPropagation(); setBoardMenuOpenId(null); }} />
+                              <div className="absolute top-10 right-2 w-36 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-100">
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEditBoardData({ id: bId, name: b.name });
+                                    setBoardMenuOpenId(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <Pencil size={14} /> Đổi tên bảng
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteBoard(bId, b.name);
+                                    setBoardMenuOpenId(null);
+                                  }}
+                                  disabled={deleteBoardMutation.isPending}
+                                  className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-slate-50 mt-1 pt-1"
+                                >
+                                  {deleteBoardMutation.isPending && deleteBoardMutation.variables === bId ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                  Xóa bảng
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       );
                     })}
 
@@ -315,7 +378,7 @@ const WorkspacesPage = () => {
           </div>
         )}
 
-        {/* Các Modal */}
+        {/* Các Modal Tạo mới */}
         <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
         <CreateBoardModal
           isOpen={isBoardModalOpen}
@@ -323,6 +386,44 @@ const WorkspacesPage = () => {
           projectId={selectedProjectId}
           onSuccess={() => setIsBoardModalOpen(false)}
         />
+
+        {/* 🚀 MODAL ĐỔI TÊN BẢNG */}
+        {editBoardData && (
+          <div className="fixed inset-0 z-[120] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden p-6 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-800">Đổi tên Bảng</h3>
+                <button onClick={() => setEditBoardData(null)} className="text-slate-400 hover:text-rose-500"><X size={18} /></button>
+              </div>
+              <input
+                type="text"
+                value={editBoardData.name}
+                onChange={(e) => setEditBoardData({ ...editBoardData, name: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateBoardSubmit(); }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 mb-6"
+                autoFocus
+              />
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setEditBoardData(null)} 
+                  disabled={updateBoardMutation.isPending}
+                  className="px-4 py-2.5 text-sm font-bold text-slate-500 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button 
+                  onClick={handleUpdateBoardSubmit} 
+                  disabled={updateBoardMutation.isPending || !editBoardData.name.trim()} 
+                  className="px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-md"
+                >
+                  {updateBoardMutation.isPending && <Loader2 size={16} className="animate-spin" />}
+                  Lưu thay đổi
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
