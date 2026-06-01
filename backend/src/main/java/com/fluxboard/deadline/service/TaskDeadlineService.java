@@ -332,6 +332,7 @@ public class TaskDeadlineService {
         String requesterId = deadline.getExtensionRequestedBy();
         String requestReason = deadline.getExtensionReason();
 
+        // 1. Cập nhật Deadline Record
         deadline.setDueDate(newDueDate);
         deadline.setExtensionCount((deadline.getExtensionCount() == null ? 0 : deadline.getExtensionCount()) + 1);
         deadline.setIsExtensionPending(false);
@@ -344,9 +345,11 @@ public class TaskDeadlineService {
         deadline.setStatus(calculateDynamicStatus(deadline));
         deadlineRepository.save(deadline);
 
+        // 2. Cập nhật TaskEntity
         task.setDueDate(newDueDate);
-        taskRepository.save(task);
+        taskRepository.save(task); // ĐÃ LƯU NGÀY MỚI VÀO DB
 
+        // 3. Bắn Event cho hệ thống Log / Noti
         eventPublisher.publishEvent(
                 new ExtensionApprovedEvent(
                         this,
@@ -361,13 +364,13 @@ public class TaskDeadlineService {
                 )
         );
 
+        // 4. Trả về Response
         Map<String, Object> result = toResponse(deadline);
         result.put("old_due_date", oldDueDate);
         result.put("new_due_date", newDueDate);
         result.put("status", "APPROVED");
         return result;
     }
-
     @Transactional
     public Map<String, Object> rejectExtension(String taskId, String reviewerId, String reason) {
         TaskEntity task = taskRepository.findById(taskId)

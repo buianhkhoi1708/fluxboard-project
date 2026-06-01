@@ -9,11 +9,13 @@ import com.fluxboard.ai.repository.AiContextRepository;
 import com.fluxboard.board.column.entity.BoardColumnEntity;
 import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
+import com.fluxboard.board.task.event.TaskCreatedEvent; // 🚀 ĐÃ BỔ SUNG
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher; // 🚀 ĐÃ BỔ SUNG
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -38,15 +40,17 @@ public class AiService {
     private final AiContextRepository aiContextRepo;
     private final TaskRepository taskRepository;
     private final BoardColumnRepository columnRepository;
+    private final ApplicationEventPublisher eventPublisher; // 🚀 ĐÃ BỔ SUNG LOA THÔNG BÁO
 
     @Value("${GEMINI_API_KEY}")
     private String apiKey;
 
     private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+    // 🚀 ĐÃ BỔ SUNG ApplicationEventPublisher VÀO CONSTRUCTOR
     public AiService(ObjectMapper objectMapper, UserService userService, 
                      AiContextRepository aiContextRepo, TaskRepository taskRepository,
-                     BoardColumnRepository columnRepository) {
+                     BoardColumnRepository columnRepository, ApplicationEventPublisher eventPublisher) {
         
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);  
@@ -61,13 +65,13 @@ public class AiService {
         this.aiContextRepo = aiContextRepo;
         this.taskRepository = taskRepository;
         this.columnRepository = columnRepository;
+        this.eventPublisher = eventPublisher; // 🚀 ĐÃ GÁN
     }
 
     public AiTaskResponse generateSmartTasks(String boardId, String projectId, String userPrompt, List<String> memberIds, String generationMode, String startDate) {
         
         // ==========================================
-        // 0. ĐỌC HIỆN TRẠNG BOARD (ĐỂ NHÉT VÀO NÃO AI)
-        // Đây là điểm then chốt giúp AI "phát triển tiếp" thay vì tạo mới hoàn toàn
+        // 0. ĐỌC HIỆN TRẠNG BOARD
         // ==========================================
         List<BoardColumnEntity> existingColumns = columnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         List<String> existingColIds = existingColumns.stream().map(BoardColumnEntity::getId).toList();
@@ -79,7 +83,7 @@ public class AiService {
                 existingTasks.stream().map(TaskEntity::getTitle).collect(Collectors.joining(" | "));
 
         // ==========================================
-        // 1. ALIAS MAPPING (CHỐNG ẢO GIÁC ID)
+        // 1. ALIAS MAPPING
         // ==========================================
         Map<String, String> aliasToRealId = new HashMap<>();
         StringBuilder personnelContextBuilder = new StringBuilder();
@@ -110,7 +114,7 @@ public class AiService {
                 });
 
         // ==========================================
-        // 2. PROMPT TIẾN HÓA: CÓ NGỮ CẢNH HIỆN TẠI
+        // 2. PROMPT TIẾN HÓA
         // ==========================================
         String modeInstruction = "SIMPLE".equalsIgnoreCase(generationMode) 
             ? "MÔ HÌNH: KANBAN ĐƠN GIẢN. Cố gắng sử dụng lại các cột đã có. Nếu chưa có cột nào, hãy đề xuất 3 cột: [\"TO DO\", \"IN PROGRESS\", \"DONE\"]."
@@ -198,14 +202,13 @@ public class AiService {
         }
 
         // ==========================================
-        // 4. LƯU DATABASE (CỘT & TASK - CÓ CƠ CHẾ GỘP/MERGE)
+        // 4. LƯU DATABASE
         // ==========================================
         if (finalResponse != null && finalResponse.tasks() != null) {
             
             Map<String, String> columnNameToIdMap = new HashMap<>();
             int maxOrder = 0;
             
-            // 4.1 Đưa các cột ĐÃ CÓ vào Map để tái sử dụng
             for (BoardColumnEntity col : existingColumns) {
                 columnNameToIdMap.put(col.getName().trim().toLowerCase(), col.getId());
                 if (col.getOrder() > maxOrder) maxOrder = col.getOrder();
@@ -213,7 +216,6 @@ public class AiService {
             
             AtomicInteger colOrder = new AtomicInteger(maxOrder + 1);
             
-            // 4.2 Xử lý các cột AI đề xuất (Chỉ tạo mới nếu chưa tồn tại)
             if (finalResponse.suggestedColumns() != null) {
                 for (String colName : finalResponse.suggestedColumns()) {
                     String colKey = colName.trim().toLowerCase();
@@ -229,7 +231,6 @@ public class AiService {
                 }
             }
 
-            // Fallback cột TO DO nếu trống không
             String fallbackColumnId = columnNameToIdMap.values().stream().findFirst()
                     .orElseGet(() -> {
                         BoardColumnEntity fb = new BoardColumnEntity();
@@ -241,10 +242,9 @@ public class AiService {
                         return fb.getId();
                     });
 
-            AtomicInteger taskOrder = new AtomicInteger(existingTasks.size()); // Đẩy task mới xuống cuối
+            AtomicInteger taskOrder = new AtomicInteger(existingTasks.size());
             List<TaskEntity> tasksToSave = new ArrayList<>();
 
-            // 4.3 Lưu Task Mới
             for (var dto : finalResponse.tasks()) {
                 TaskEntity parentTask = new TaskEntity();
                 String parentId = new ObjectId().toString(); 
@@ -302,6 +302,19 @@ public class AiService {
                 }
             }
             taskRepository.saveAll(tasksToSave);
+
+            // 🚀 ĐÃ BỔ SUNG: Phát sự kiện để Backend khởi tạo Record quản lý Deadline
+            for (TaskEntity task : tasksToSave) {
+                eventPublisher.publishEvent(new TaskCreatedEvent(
+                        this,
+                        task.getId(),
+                        task.getStartDate(),
+                        task.getDueDate(),
+                        "AI_GENERATED", // Đánh dấu task này là do AI đẻ ra
+                        boardId,
+                        projectId
+                ));
+            }
         }
 
         // 5. LƯU LỊCH SỬ CHAT
@@ -379,9 +392,6 @@ public class AiService {
         }
     }
 
-    // ==========================================
-    // AI DEVIATION INSIGHTS
-    // ==========================================
     public List<AiInsightResponse> getDeviationInsights(String projectId) {
         List<TaskEntity> completedTasks = taskRepository
                 .findByProjectIdAndStatusAndAiSuggestedPointIsNotNull(projectId, "DONE");

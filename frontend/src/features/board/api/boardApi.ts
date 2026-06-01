@@ -37,7 +37,6 @@ export const boardApi = {
     const res: any = await axiosClient.post('/board-columns', {
       name: payload.name,
       board_id: payload.board_id,
-      order: payload.order
     });
     return unwrap(res);
   },

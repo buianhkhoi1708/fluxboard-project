@@ -47,6 +47,8 @@ import {
   useGetProjectMembers,
   useGetTaskDeadline,
   useRequestDeadlineExtension,
+  useApproveDeadlineExtension, // 🚀 BỔ SUNG HOOK DUYỆT
+  useRejectDeadlineExtension,  // 🚀 BỔ SUNG HOOK TỪ CHỐI
   useResolveTaskComment,
   useUpdateTask,
   getPresignedUrl
@@ -142,7 +144,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const { mutateAsync: addAttachment } = useAddAttachmentToTask();
   const { mutateAsync: addComment } = useAddCommentToTask();
   const { mutateAsync: resolveComment } = useResolveTaskComment();
+  
+  // 🚀 CÁC HOOK LIÊN QUAN ĐẾN DEADLINE
   const { mutateAsync: requestDeadlineExtension } = useRequestDeadlineExtension();
+  const { mutateAsync: approveExtension } = useApproveDeadlineExtension();
+  const { mutateAsync: rejectExtension } = useRejectDeadlineExtension();
 
   const [localTask, setLocalTask] = useState<Task | null>(task);
   const [editTitle, setEditTitle] = useState('');
@@ -162,11 +168,19 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const [newComment, setNewComment] = useState('');
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [resolvingCommentId, setResolvingCommentId] = useState<string | null>(null);
+  
+  // States cho Extension
   const [isExtensionFormOpen, setIsExtensionFormOpen] = useState(false);
   const [requestedDueDate, setRequestedDueDate] = useState<Date | null>(null);
   const [extensionReason, setExtensionReason] = useState('');
   const [isRequestingExtension, setIsRequestingExtension] = useState(false);
   const [extensionMessage, setExtensionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // 🚀 States cho Approval (Manager)
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectReasonManager, setRejectReasonManager] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -236,6 +250,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       setRequestedDueDate(null);
       setExtensionReason('');
       setExtensionMessage(null);
+      setShowRejectInput(false);
+      setRejectReasonManager('');
     }
   }, [isOpen, localTask?.id, localTask?._id, listId, initialOpenComments]);
 
@@ -283,13 +299,26 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     }
   };
 
-  if (!isOpen || !localTask) return null;
-
   const handleSave = async () => {
     if (!activeBoardId || !board) return;
     setIsSaving(true);
 
     const cleanAssignees = editAssignees.filter((id) => id && id !== 'undefined' && !id.startsWith('temp-'));
+
+    // 🚀 FIX LỖI TIMEZONE: Xử lý ngày giờ trước khi gửi API
+    let finalStartDate = null;
+    if (editStartDate) {
+      finalStartDate = new Date(editStartDate);
+      // Ép giờ bắt đầu về 12h trưa để không bao giờ bị lùi ngày khi đổi sang UTC
+      finalStartDate.setHours(12, 0, 0, 0); 
+    }
+
+    let finalDueDate = null;
+    if (editDueDate) {
+      finalDueDate = new Date(editDueDate);
+      // Ép giờ deadline về 23:59:59 cuối ngày
+      finalDueDate.setHours(23, 59, 59, 999); 
+    }
 
     try {
       const updated = await updateApiTask({
@@ -299,19 +328,20 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           title: editTitle.trim() || 'Công việc không tên',
           description: editDesc,
           priority: editPriority ? editPriority.toUpperCase() : 'MEDIUM',
-          status: isDone ? 'DONE' : (localTask.status === 'DONE' ? 'TODO' : localTask.status || 'TODO'),
+          status: isDone ? 'DONE' : (localTask?.status === 'DONE' ? 'TODO' : localTask?.status || 'TODO'),
           story_point: Number(editStoryPoints) || 0,
-          start_date: editStartDate ? editStartDate.toISOString() : null,
-          due_date: editDueDate ? editDueDate.toISOString() : null,
+          start_date: finalStartDate ? finalStartDate.toISOString() : null, // 🚀 Gửi ngày đã fix
+          due_date: finalDueDate ? finalDueDate.toISOString() : null,       // 🚀 Gửi ngày đã fix
           assignees_user_id: cleanAssignees,
           column_id: String(editColumnId),
-          parent_task_id: localTask.parent_task_id || localTask.parentTaskId
+          parent_task_id: localTask?.parent_task_id || localTask?.parentTaskId
         }
       });
 
       setLocalTask(updated);
       await refetchDeadline();
       onClose();
+      await syncBoardAfterTaskMutation(); // 🚀 Ép bảng Kanban bên ngoài tải lại dữ liệu mới
     } catch (error) {
       console.error('Lỗi khi cập nhật công việc:', error);
       alert('Lưu thất bại! Vui lòng kiểm tra lại dữ liệu.');
@@ -323,7 +353,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const handleDelete = async () => {
     if (!activeBoardId) return;
 
-    if (window.confirm(`Bạn có chắc muốn xóa công việc "${localTask.title}"?`)) {
+    if (window.confirm(`Bạn có chắc muốn xóa công việc "${localTask?.title}"?`)) {
       try {
         await deleteApiTask({ taskId, boardId: activeBoardId });
         onClose();
@@ -410,7 +440,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     setIsCommentSubmitting(true);
     try {
       const updatedTask = await addComment({ taskId, boardId: activeBoardId, content: newComment.trim() });
-      if (updatedTask) setLocalTask((prev) => ({ ...(prev || localTask), ...updatedTask }));
+      if (updatedTask) setLocalTask((prev) => ({ ...(prev || localTask), ...updatedTask } as any));
       setNewComment('');
       setIsCommentPanelOpen(true);
       await syncBoardAfterTaskMutation();
@@ -433,7 +463,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       });
 
       const updatedTask = await resolveComment({ taskId, boardId: activeBoardId, commentId });
-      if (updatedTask) setLocalTask((prev) => ({ ...(prev || localTask), ...updatedTask }));
+      if (updatedTask) setLocalTask((prev) => ({ ...(prev || localTask), ...updatedTask } as any));
       await syncBoardAfterTaskMutation();
     } catch (error) {
       console.error('Lỗi giải quyết bình luận:', error);
@@ -469,7 +499,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       return;
     }
 
-    if (requestedDueDate.getTime() <= taskDueDate.getTime()) {
+    // 🚀 FIX LỖI TIMEZONE: Ép thời gian về cuối ngày (23:59:59)
+    const finalRequestedDate = new Date(requestedDueDate);
+    finalRequestedDate.setHours(23, 59, 59, 999);
+
+    if (finalRequestedDate.getTime() <= taskDueDate.getTime()) {
       setExtensionMessage({ type: 'error', text: 'Deadline mới phải sau deadline hiện tại.' });
       return;
     }
@@ -484,11 +518,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       await requestDeadlineExtension({
         taskId,
         boardId: activeBoardId,
-        requestedDueDate: requestedDueDate.toISOString(),
+        requestedDueDate: finalRequestedDate.toISOString(), // 🚀 Gửi ngày đã Fix xuống API
         reason: extensionReason.trim()
       });
 
-      setExtensionMessage({ type: 'success', text: 'Đã gửi yêu cầu dời deadline tới người tạo task hoặc người tạo board/project.' });
+      setExtensionMessage({ type: 'success', text: 'Đã gửi yêu cầu dời deadline tới người tạo task hoặc quản lý.' });
       setRequestedDueDate(null);
       setExtensionReason('');
       setIsExtensionFormOpen(false);
@@ -503,6 +537,52 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       setIsRequestingExtension(false);
     }
   };
+
+  // 🚀 HÀM MANAGER DUYỆT DEADLINE
+  const handleApproveExtension = async () => {
+    if (!activeBoardId) return;
+    setIsApproving(true);
+    try {
+      await approveExtension({ taskId, boardId: activeBoardId });
+      await refetchDeadline(); // Lấy lại deadline mới nhất
+      await syncBoardAfterTaskMutation(); // Ép F5 làm mới Kanban Board bên ngoài
+      setExtensionMessage({ type: 'success', text: 'Đã phê duyệt dời deadline thành công!' });
+      
+      // Update UI modal immediately to reflect new Date
+      if (pendingRequestedDate) {
+         setEditDueDate(new Date(pendingRequestedDate));
+      }
+    } catch (error: any) {
+      console.error('Lỗi duyệt deadline:', error);
+      setExtensionMessage({ type: 'error', text: error?.response?.data?.message || 'Lỗi khi duyệt yêu cầu.' });
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  // 🚀 HÀM MANAGER TỪ CHỐI DEADLINE
+  const handleRejectExtension = async () => {
+    if (!activeBoardId) return;
+    if (!rejectReasonManager.trim()) {
+      setExtensionMessage({ type: 'error', text: 'Vui lòng nhập lý do từ chối.' });
+      return;
+    }
+    setIsRejecting(true);
+    try {
+      await rejectExtension({ taskId, boardId: activeBoardId, reason: rejectReasonManager.trim() });
+      await refetchDeadline(); // Lấy lại trạng thái mới nhất
+      await syncBoardAfterTaskMutation();
+      setShowRejectInput(false);
+      setExtensionMessage({ type: 'success', text: 'Đã từ chối yêu cầu dời deadline.' });
+    } catch (error: any) {
+      console.error('Lỗi từ chối deadline:', error);
+      setExtensionMessage({ type: 'error', text: error?.response?.data?.message || 'Lỗi khi từ chối yêu cầu.' });
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
+  if (!isOpen || !localTask) return null;
 
   const modalContent = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-12">
@@ -871,13 +951,56 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       {extensionReasonFromServer && <div>Lý do: <b>{extensionReasonFromServer}</b></div>}
                       {extensionRequestedAt && <div>Đã gửi lúc: <b>{formatDateTime(extensionRequestedAt)}</b></div>}
                       {extensionExpiresAt && <div>Tự từ chối sau: <b>{formatDateTime(extensionExpiresAt)}</b></div>}
+                      
+                      {/* 🚀 VÙNG DÀNH RIÊNG CHO MANAGER DUYỆT BÀI */}
+                      {!canRequestExtensionByRole && (
+                        <div className="mt-3 pt-3 border-t border-amber-200/50 space-y-2">
+                          {!showRejectInput ? (
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowRejectInput(true)}
+                                className="flex-1 px-3 py-2 bg-white border border-rose-200 text-rose-600 text-xs rounded-lg hover:bg-rose-50 font-bold transition-all"
+                              >
+                                Từ chối
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleApproveExtension}
+                                disabled={isApproving}
+                                className="flex-1 px-3 py-2 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 flex justify-center items-center gap-2 font-bold shadow-sm transition-all"
+                              >
+                                {isApproving && <Loader2 size={14} className="animate-spin" />}
+                                Phê duyệt
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 mt-2 animate-in fade-in zoom-in-95 duration-200">
+                              <input
+                                type="text"
+                                value={rejectReasonManager}
+                                onChange={(e) => setRejectReasonManager(e.target.value)}
+                                placeholder="Nhập lý do từ chối..."
+                                className="w-full px-3 py-2 rounded-lg border border-rose-200 outline-none focus:border-rose-400 text-xs text-slate-700"
+                              />
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setShowRejectInput(false)} className="px-3 py-2 text-slate-500 text-xs hover:bg-slate-100 rounded-lg font-bold">Hủy</button>
+                                <button type="button" onClick={handleRejectExtension} disabled={isRejecting} className="flex-1 px-3 py-2 bg-rose-500 text-white text-xs rounded-lg hover:bg-rose-600 flex justify-center items-center gap-2 font-bold shadow-sm">
+                                  {isRejecting && <Loader2 size={14} className="animate-spin" />}
+                                  Xác nhận từ chối
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {!canRequestExtensionByRole && (
+                  {!canRequestExtensionByRole && !isExtensionPending && (
                     <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500 font-semibold flex gap-2">
                       <ShieldAlert size={16} className="text-slate-400 shrink-0" />
-                      Tài khoản quản lý/admin không gửi yêu cầu dời deadline cho chính mình.
+                      Bạn có quyền quản lý công việc này.
                     </div>
                   )}
 
