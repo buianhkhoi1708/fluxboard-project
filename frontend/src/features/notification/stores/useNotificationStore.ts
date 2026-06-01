@@ -606,6 +606,10 @@ export const getNotificationTargetUrl = (notification: AppNotification) => {
     return `/board/${boardId}?taskId=${taskId}`;
   }
 
+  if (taskId) {
+    return `/notifications?notificationId=${encodeURIComponent(notification.id)}&taskId=${encodeURIComponent(String(taskId))}&resolveTask=1`;
+  }
+
   return `/notifications?notificationId=${encodeURIComponent(notification.id)}`;
 };
 
@@ -613,5 +617,5 @@ export const canOpenNotificationTask = (notification: AppNotification | null | u
   if (!notification) return false;
 
   const { taskId, boardId, actionUrl } = getNotificationTaskNavigation(notification);
-  return Boolean((actionUrl && actionUrl.includes('/board/')) || (boardId && taskId));
+  return Boolean((actionUrl && actionUrl.includes('/board/')) || (boardId && taskId) || taskId);
 };

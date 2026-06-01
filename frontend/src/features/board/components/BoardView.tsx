@@ -73,9 +73,16 @@ const BoardView = () => {
   const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } });
   const sensors = useSensors(mouseSensor, touchSensor);
 
-  useRealtimeEvent(`/topic/board/${currentBoardId}`, () => {
+  useRealtimeEvent(`/topic/board/${currentBoardId}`, (message) => {
+    const action = String(message?.action || message?.type || '').toUpperCase();
     queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(currentBoardId) });
-  });
+    queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+
+    if (action.includes('DEADLINE') || action.includes('EXTENSION')) {
+      const taskId = message?.task_id || message?.taskId;
+      if (taskId) queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.taskDeadline(String(taskId)) });
+    }
+  }, 0);
 
   const projectId = board?.projectId || board?.project_id;
 
@@ -109,6 +116,8 @@ const BoardView = () => {
         order: board.columns ? board.columns.length + 1 : 1,
         boardId: activeBoardId
       });
+
+      await queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(activeBoardId) });
       setNewColName('');
       setIsAddingCol(false);
     } catch (error) {
@@ -194,12 +203,11 @@ const BoardView = () => {
     const previousBoard = queryClient.getQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId));
     queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), { ...board, columns: newColumns });
 
-    try {
-      await moveTaskApi({ taskId: String(active.id), columnId: String(overColId), order: newOrder, boardId: currentBoardId });
-    } catch (error) {
-      console.error('Lỗi khi di chuyển công việc:', error);
-      queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), previousBoard);
-    }
+    moveTaskApi({ taskId: String(active.id), columnId: String(overColId), order: newOrder, boardId: currentBoardId })
+      .catch((error) => {
+        console.error('Lỗi khi di chuyển công việc:', error);
+        queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), previousBoard);
+      });
   };
 
   if (isLoading || !board) {

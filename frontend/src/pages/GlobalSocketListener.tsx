@@ -57,6 +57,8 @@ const getMessageAction = (message: any) => String(message?.action || message?.ty
 const getMessageTaskId = (message: any) => String(message?.task_id || message?.taskId || message?.task?.id || message?.task?._id || '');
 const getMessageBoardId = (message: any) => String(message?.board_id || message?.boardId || message?.task?.board_id || message?.task?.boardId || '');
 const isTaskOrDeadlineEvent = (action: string) => action.startsWith('TASK_') || action.includes('DEADLINE') || action.includes('EXTENSION');
+const isBoardRealtimeEvent = (action: string) =>
+  action.startsWith('BOARD_') || action.startsWith('COLUMN_') || action.includes('BOARD') || action.includes('COLUMN');
 
 const NotificationToastViewport = () => {
   const toastNotifications = useNotificationStore((state) => state.toastNotifications);
@@ -217,7 +219,7 @@ export const GlobalSocketListener = () => {
       return;
     }
 
-    if (isTaskOrDeadlineEvent(action) || taskId || boardId) {
+    if (isTaskOrDeadlineEvent(action) || isBoardRealtimeEvent(action) || taskId || boardId) {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', 'my-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['my-tasks'] });

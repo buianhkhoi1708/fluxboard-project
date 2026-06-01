@@ -13,36 +13,42 @@ import com.fluxboard.common.exception.ErrorCode;
 import com.fluxboard.common.service.CrudService;
 import com.fluxboard.common.util.TextUtils;
 import com.fluxboard.project.repository.ProjectRepository;
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-@Service
-public class BoardColumnService
-        implements CrudService<BoardColumnResponse, String, CreateBoardColumnRequest, UpdateBoardColumnRequest> {
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
+@Service
+public class BoardColumnService implements CrudService<BoardColumnResponse, String, CreateBoardColumnRequest, UpdateBoardColumnRequest> {
     private final BoardColumnRepository boardColumnRepository;
     private final BoardRepository boardRepository;
     private final ProjectRepository projectRepository;
     private final TaskService taskService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public BoardColumnService(
             BoardColumnRepository boardColumnRepository,
             BoardRepository boardRepository,
             ProjectRepository projectRepository,
-            TaskService taskService
+            TaskService taskService,
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.boardColumnRepository = boardColumnRepository;
         this.boardRepository = boardRepository;
         this.projectRepository = projectRepository;
         this.taskService = taskService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Override
     public BoardColumnResponse create(CreateBoardColumnRequest request) {
         String boardId = TextUtils.trim(request.boardId());
-        findBoardById(boardId);
+        BoardEntity board = findBoardById(boardId);
         String name = TextUtils.trim(request.name());
 
         if (boardColumnRepository.existsByBoardIdAndNameAndDeletedFalse(boardId, name)) {
@@ -56,7 +62,10 @@ public class BoardColumnService
         entity.setName(name);
         entity.setOrder(targetOrder);
 
-        return toResponse(boardColumnRepository.save(entity));
+        BoardColumnEntity saved = boardColumnRepository.save(entity);
+        BoardColumnResponse response = toResponse(saved);
+        broadcastColumnChange("COLUMN_CREATED", board, saved, null, saved.getOrder());
+        return response;
     }
 
     @Override
@@ -71,21 +80,18 @@ public class BoardColumnService
 
     public Page<BoardColumnResponse> getPageByBoard(String boardId, Pageable pageable) {
         findBoardById(TextUtils.trim(boardId));
-        return boardColumnRepository.findByBoardIdAndDeletedFalse(TextUtils.trim(boardId), pageable)
-                .map(this::toResponse);
+        return boardColumnRepository.findByBoardIdAndDeletedFalse(TextUtils.trim(boardId), pageable).map(this::toResponse);
     }
 
     public List<BoardColumnResponse> getByBoardIdOrdered(String boardId) {
         findBoardById(TextUtils.trim(boardId));
-        return boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId))
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        return boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(TextUtils.trim(boardId)).stream().map(this::toResponse).toList();
     }
 
     @Override
     public BoardColumnResponse update(String id, UpdateBoardColumnRequest request) {
         BoardColumnEntity entity = findBoardColumnById(id);
+        BoardEntity board = findBoardById(entity.getBoardId());
         String boardId = entity.getBoardId();
         String name = TextUtils.trim(request.name());
 
@@ -95,39 +101,36 @@ public class BoardColumnService
 
         int currentOrder = entity.getOrder();
         int targetOrder = resolveUpdateOrder(boardId, request.order(), currentOrder);
-        if (targetOrder != currentOrder) {
-            moveInsideBoard(boardId, currentOrder, targetOrder, entity.getId());
-        }
+        if (targetOrder != currentOrder) moveInsideBoard(boardId, currentOrder, targetOrder, entity.getId());
 
         entity.setName(name);
         entity.setOrder(targetOrder);
 
-        return toResponse(boardColumnRepository.save(entity));
+        BoardColumnEntity saved = boardColumnRepository.save(entity);
+        BoardColumnResponse response = toResponse(saved);
+        broadcastColumnChange("COLUMN_UPDATED", board, saved, currentOrder, saved.getOrder());
+        return response;
     }
 
     @Override
     public void delete(String id) {
         BoardColumnEntity entity = findBoardColumnById(id);
+        BoardEntity board = findBoardById(entity.getBoardId());
         int currentOrder = entity.getOrder();
         String boardId = entity.getBoardId();
-        taskService.softDeleteByColumnId(entity.getId());
 
+        taskService.softDeleteByColumnId(entity.getId());
         entity.markDeleted();
         boardColumnRepository.save(entity);
-
         shiftOrdersAfterDelete(boardId, currentOrder, entity.getId());
+        broadcastColumnChange("COLUMN_DELETED", board, entity, currentOrder, null);
     }
 
     public void initializeDefaultColumns(String boardId, boolean isAiBoard) {
-        // Nếu là AI Board, không làm gì cả, để cho luồng AI tự tạo cột
-        if (isAiBoard) {
-            return;
-        }
+        if (isAiBoard) return;
 
         List<BoardColumnEntity> existing = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
-        if (!existing.isEmpty()) {
-            return;
-        }
+        if (!existing.isEmpty()) return;
 
         BoardColumnEntity todo = new BoardColumnEntity();
         todo.setBoardId(boardId);
@@ -145,19 +148,20 @@ public class BoardColumnService
         done.setOrder(3);
 
         boardColumnRepository.saveAll(List.of(todo, doing, done));
+        broadcastBoardOnly("COLUMNS_INITIALIZED", boardId, null);
     }
 
     public void softDeleteByBoardId(String boardId) {
         List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
-        if (columns.isEmpty()) {
-            return;
-        }
+        if (columns.isEmpty()) return;
 
         for (BoardColumnEntity column : columns) {
             taskService.softDeleteByColumnId(column.getId());
             column.markDeleted();
         }
+
         boardColumnRepository.saveAll(columns);
+        broadcastBoardOnly("BOARD_COLUMNS_DELETED", boardId, null);
     }
 
     private BoardColumnEntity findBoardColumnById(String columnId) {
@@ -179,18 +183,14 @@ public class BoardColumnService
     }
 
     private int resolveUpdateOrder(String boardId, Integer requestedOrder, int currentOrder) {
-        if (requestedOrder == null) {
-            return currentOrder;
-        }
+        if (requestedOrder == null) return currentOrder;
         int maxOrder = Math.max(listSize(boardId), 1);
         return Math.min(Math.max(requestedOrder, 1), maxOrder);
     }
 
     private int nextOrder(String boardId) {
         List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
-        if (columns.isEmpty()) {
-            return 1;
-        }
+        if (columns.isEmpty()) return 1;
         return columns.get(columns.size() - 1).getOrder() + 1;
     }
 
@@ -199,12 +199,9 @@ public class BoardColumnService
     }
 
     private void shiftOrdersAfterDelete(String boardId, int fromOrder, String exceptId) {
-        List<BoardColumnEntity> columns = boardColumnRepository
-                .findByBoardIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(boardId, fromOrder);
+        List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseAndOrderGreaterThanOrderByOrderAsc(boardId, fromOrder);
         for (BoardColumnEntity column : columns) {
-            if (exceptId != null && exceptId.equals(column.getId())) {
-                continue;
-            }
+            if (exceptId != null && exceptId.equals(column.getId())) continue;
             column.setOrder(column.getOrder() - 1);
         }
         boardColumnRepository.saveAll(columns);
@@ -213,15 +210,11 @@ public class BoardColumnService
     private void moveInsideBoard(String boardId, int currentOrder, int targetOrder, String columnId) {
         List<BoardColumnEntity> columns = boardColumnRepository.findByBoardIdAndDeletedFalseOrderByOrderAsc(boardId);
         for (BoardColumnEntity column : columns) {
-            if (columnId.equals(column.getId())) {
-                continue;
-            }
+            if (columnId.equals(column.getId())) continue;
 
             int order = column.getOrder();
             if (targetOrder > currentOrder) {
-                if (order > currentOrder && order <= targetOrder) {
-                    column.setOrder(order - 1);
-                }
+                if (order > currentOrder && order <= targetOrder) column.setOrder(order - 1);
             } else if (order >= targetOrder && order < currentOrder) {
                 column.setOrder(order + 1);
             }
@@ -238,5 +231,35 @@ public class BoardColumnService
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    private void broadcastColumnChange(String action, BoardEntity board, BoardColumnEntity column, Integer oldOrder, Integer newOrder) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("action", action);
+        payload.put("type", action);
+        payload.put("board_id", column.getBoardId());
+        payload.put("project_id", board.getProjectId());
+        payload.put("column_id", column.getId());
+        payload.put("old_order", oldOrder);
+        payload.put("new_order", newOrder);
+        payload.put("timestamp", Instant.now());
+        payload.put("column", toResponse(column));
+
+        messagingTemplate.convertAndSend("/topic/board/" + column.getBoardId(), payload);
+        messagingTemplate.convertAndSend("/topic/boards/" + column.getBoardId(), payload);
+        messagingTemplate.convertAndSend("/topic/system", payload);
+    }
+
+    private void broadcastBoardOnly(String action, String boardId, String projectId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("action", action);
+        payload.put("type", action);
+        payload.put("board_id", boardId);
+        payload.put("project_id", projectId);
+        payload.put("timestamp", Instant.now());
+
+        messagingTemplate.convertAndSend("/topic/board/" + boardId, payload);
+        messagingTemplate.convertAndSend("/topic/boards/" + boardId, payload);
+        messagingTemplate.convertAndSend("/topic/system", payload);
     }
 }

@@ -17,6 +17,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import axiosClient from '../lib/axiosClient';
 
 import {
   canOpenNotificationTask,
@@ -46,6 +47,19 @@ const formatDateTime = (value?: string | number | null) => {
   } catch {
     return String(value);
   }
+};
+
+const unwrapResponse = (res: any) => {
+  if (!res) return res;
+  if (res.data?.data !== undefined) return res.data.data;
+  if (res.data !== undefined) return res.data;
+  return res;
+};
+
+const resolveBoardIdFromTask = async (taskId: string) => {
+  const res = await axiosClient.get(`/tasks/${taskId}`);
+  const task = unwrapResponse(res);
+  return task?.board_id || task?.boardId || task?.board?.id || task?.board?._id || null;
 };
 
 const getTimeLabel = (notification: AppNotification) => {
@@ -426,6 +440,19 @@ const NotificationsPage = () => {
     if (notificationId) setSelectedNotificationId(notificationId);
   }, [searchParams]);
 
+  useEffect(() => {
+    const shouldResolveTask = searchParams.get('resolveTask') === '1';
+    const taskId = searchParams.get('taskId');
+
+    if (!shouldResolveTask || !taskId) return;
+
+    resolveBoardIdFromTask(taskId)
+      .then((boardId) => {
+        if (boardId) navigate(`/board/${boardId}?taskId=${encodeURIComponent(taskId)}`, { replace: true });
+      })
+      .catch((error) => console.error('Không thể tìm board của task từ thông báo:', error));
+  }, [navigate, searchParams]);
+
   const selectedNotification = useMemo(() => {
     if (selectedNotificationId) {
       return notifications.find((item) => item.id === selectedNotificationId) || notifications[0] || null;
@@ -453,6 +480,30 @@ const NotificationsPage = () => {
 
     if (!selectedNotification.isRead && !selectedNotification.is_read) {
       await markAsRead(selectedNotification.id);
+    }
+
+    const { taskId, boardId, actionUrl } = getNotificationTaskNavigation(selectedNotification);
+
+    if (actionUrl && actionUrl.includes('/board/')) {
+      navigate(actionUrl);
+      return;
+    }
+
+    if (boardId && taskId) {
+      navigate(`/board/${boardId}?taskId=${taskId}`);
+      return;
+    }
+
+    if (taskId) {
+      try {
+        const resolvedBoardId = await resolveBoardIdFromTask(String(taskId));
+        if (resolvedBoardId) {
+          navigate(`/board/${resolvedBoardId}?taskId=${taskId}`);
+          return;
+        }
+      } catch (error) {
+        console.error('Không thể tìm board của task từ thông báo:', error);
+      }
     }
 
     navigate(getNotificationTargetUrl(selectedNotification));

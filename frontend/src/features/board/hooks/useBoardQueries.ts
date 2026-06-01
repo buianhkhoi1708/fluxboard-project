@@ -121,8 +121,8 @@ export const useMoveTask = () => {
     mutationFn: ({ taskId, columnId, order, boardId }: { taskId: string; columnId: string; order: number; boardId: string }) =>
       boardApi.moveTask(taskId, columnId, order, boardId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(variables.boardId) });
       queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.taskDeadline(variables.taskId) });
     }
   });
 };
