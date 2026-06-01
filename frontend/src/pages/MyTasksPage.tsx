@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import axiosClient from "../lib/axiosClient";
 import { Task } from "../features/board/types";
+import { useRealtimeEvent } from "../hooks/useRealtimeEvent";
+import { useAuthStore } from "../features/auth/store/useAuthStore";
 
 type TaskGroup = "IN_PROGRESS" | "DONE" | "OVERDUE";
 
@@ -209,7 +211,10 @@ const TaskCard = ({ task }: { task: Task }) => {
 const MyTasksPage = () => {
   const [activeTab, setActiveTab] = useState<TaskGroup>("IN_PROGRESS");
 
-  const { data: tasks = [], isLoading, isError } = useQuery({
+  const user = useAuthStore((state: any) => state.user);
+  const userId = user?.id ? String(user.id) : user?.user_id ? String(user.user_id) : "";
+
+  const { data: tasks = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["my-tasks"],
     queryFn: async () => {
       const res: any = await axiosClient.get("/tasks/my-tasks");
@@ -217,6 +222,19 @@ const MyTasksPage = () => {
     },
     refetchInterval: 30000,
   });
+
+  const shouldRefreshMyTasks = (message: any) => {
+    const action = String(message?.action || message?.type || '').toUpperCase();
+    return action.startsWith('TASK_') || action.includes('DEADLINE') || action.includes('EXTENSION') || Boolean(message?.task_id || message?.taskId || message?.task);
+  };
+
+  useRealtimeEvent('/topic/system', (message) => {
+    if (shouldRefreshMyTasks(message)) refetch();
+  }, 0);
+
+  useRealtimeEvent(userId ? `/topic/my-tasks/${userId}` : '', (message) => {
+    if (shouldRefreshMyTasks(message)) refetch();
+  }, 0);
 
   const groupedTasks = useMemo(() => {
     const result: Record<TaskGroup, Task[]> = {

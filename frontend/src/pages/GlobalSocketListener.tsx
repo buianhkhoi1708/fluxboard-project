@@ -53,6 +53,11 @@ const navigateWithoutRouter = (url: string) => {
   window.location.assign(url || '/notifications');
 };
 
+const getMessageAction = (message: any) => String(message?.action || message?.type || '').toUpperCase();
+const getMessageTaskId = (message: any) => String(message?.task_id || message?.taskId || message?.task?.id || message?.task?._id || '');
+const getMessageBoardId = (message: any) => String(message?.board_id || message?.boardId || message?.task?.board_id || message?.task?.boardId || '');
+const isTaskOrDeadlineEvent = (action: string) => action.startsWith('TASK_') || action.includes('DEADLINE') || action.includes('EXTENSION');
+
 const NotificationToastViewport = () => {
   const toastNotifications = useNotificationStore((state) => state.toastNotifications);
   const removeToast = useNotificationStore((state) => state.removeToast);
@@ -203,32 +208,28 @@ export const GlobalSocketListener = () => {
   });
 
   useRealtimeEvent('/topic/system', (message) => {
-    const { action } = message || {};
+    const action = getMessageAction(message);
+    const taskId = getMessageTaskId(message);
+    const boardId = getMessageBoardId(message);
 
-    switch (action) {
-      case 'PROJECT_DELETED':
-        queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
-        break;
-
-      case 'TASK_ASSIGNED':
-      case 'TASK_COMMENT_ADDED':
-      case 'TASK_COMMENT_RESOLVED':
-      case 'TASK_UPDATED':
-      case 'TASK_UPDATE':
-      case 'TASK_MOVE':
-      case 'TASK_COMPLETED':
-      case 'EXTENSION_REQUESTED':
-      case 'EXTENSION_APPROVED':
-      case 'EXTENSION_REJECTED':
-        queryClient.invalidateQueries({ queryKey: ['tasks', 'my-tasks'] });
-        queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard', 'metrics'] });
-        break;
-
-      default:
-        break;
+    if (action === 'PROJECT_DELETED') {
+      queryClient.invalidateQueries({ queryKey: WORKSPACE_KEYS.all });
+      return;
     }
-  });
+
+    if (isTaskOrDeadlineEvent(action) || taskId || boardId) {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'metrics'] });
+      queryClient.invalidateQueries({ queryKey: SETTING_KEYS.notifications });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      if (taskId) queryClient.invalidateQueries({ queryKey: ['task-deadline', taskId] });
+      if (boardId) queryClient.invalidateQueries({ queryKey: ['board', boardId] });
+      else queryClient.invalidateQueries({ queryKey: ['board'] });
+    }
+  }, 0);
 
   return <NotificationToastViewport />;
 };

@@ -448,7 +448,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
                     saved.getId(),
                     saved.getStartDate(),
                     saved.getDueDate(),
-                    actorId,
+                                        actorId,
                     boardId,
                     projectId,
                     eventType,
@@ -851,11 +851,28 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
         payload.put("timestamp", Instant.now());
 
         if (task != null) {
-            payload.put("task", toResponse(task, resolveUserSummaries(List.of(task))));
+            TaskResponse taskResponse = toResponse(task, resolveUserSummaries(List.of(task)));
+            payload.put("task", taskResponse);
+            payload.put("parent_task_id", task.getParentTaskId());
+            payload.put("assignees_user_id", task.getAssigneesUserId() == null ? List.of() : List.copyOf(task.getAssigneesUserId()));
         }
 
         messagingTemplate.convertAndSend("/topic/board/" + boardId, payload);
         messagingTemplate.convertAndSend("/topic/boards/" + boardId, payload);
+        messagingTemplate.convertAndSend("/topic/system", payload);
+
+        if (task != null) {
+            messagingTemplate.convertAndSend("/topic/tasks/" + task.getId(), payload);
+
+            LinkedHashSet<String> recipients = new LinkedHashSet<>();
+            if (task.getAuthorUserId() != null && !task.getAuthorUserId().isBlank()) recipients.add(task.getAuthorUserId());
+            if (task.getAssigneesUserId() != null) recipients.addAll(task.getAssigneesUserId());
+            if (actorUserId != null && !actorUserId.isBlank()) recipients.add(actorUserId);
+
+            for (String userId : recipients) {
+                messagingTemplate.convertAndSend("/topic/my-tasks/" + userId, payload);
+            }
+        }
     }
 
     private String resolveTaskEventType(
@@ -901,8 +918,7 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
     private BoardEntity findBoardById(String boardId) {
         BoardEntity board = boardRepository.findByIdAndDeletedFalse(boardId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Board not found."));
-
-        if (!projectRepository.existsByIdAndDeletedFalse(board.getProjectId())) {
+                        if (!projectRepository.existsByIdAndDeletedFalse(board.getProjectId())) {
             throw new AppException(ErrorCode.NOT_FOUND, "Board not found.");
         }
 
@@ -1112,60 +1128,61 @@ public class TaskService implements CrudService<TaskResponse, String, CreateTask
             Set<String> deletedTaskIds,
             Set<String> affectedGroupKeys
     ) {
-        List<TaskEntity> result = new ArrayList<>();
+        Map<String, List<TaskEntity>> byGroup = new LinkedHashMap<>();
 
-        for (String groupKey : affectedGroupKeys) {
-            String parentTaskId = fromGroupKey(groupKey);
+        for (TaskEntity task : columnTasks) {
+            if (deletedTaskIds.contains(task.getId())) continue;
 
-            List<TaskEntity> siblings = columnTasks.stream()
-                    .filter(task -> !deletedTaskIds.contains(task.getId()))
-                    .filter(task -> sameParentTask(task.getParentTaskId(), parentTaskId))
-                    .toList();
+            String groupKey = toGroupKey(task.getParentTaskId());
+            if (!affectedGroupKeys.contains(groupKey)) continue;
 
-            int expectedOrder = 1;
+            byGroup.computeIfAbsent(groupKey, key -> new ArrayList<>()).add(task);
+        }
 
-            for (TaskEntity sibling : siblings) {
-                if (sibling.getOrder() != expectedOrder) {
-                    sibling.setOrder(expectedOrder);
-                    result.add(sibling);
+        List<TaskEntity> changed = new ArrayList<>();
+
+        for (List<TaskEntity> groupTasks : byGroup.values()) {
+            groupTasks.sort(Comparator
+                    .comparingInt(TaskEntity::getOrder)
+                    .thenComparing(TaskEntity::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+
+            for (int index = 0; index < groupTasks.size(); index++) {
+                TaskEntity task = groupTasks.get(index);
+                int newOrder = index + 1;
+
+                if (task.getOrder() != newOrder) {
+                    task.setOrder(newOrder);
+                    changed.add(task);
                 }
-
-                expectedOrder++;
             }
         }
 
-        return result;
+        return changed;
     }
 
     private String toGroupKey(String parentTaskId) {
-        String normalized = TextUtils.trimToNull(parentTaskId);
-        return normalized == null ? "__ROOT__" : normalized;
-    }
-
-    private String fromGroupKey(String groupKey) {
-        return "__ROOT__".equals(groupKey) ? null : groupKey;
-    }
-
-    private boolean sameText(String first, String second) {
-        String nFirst = TextUtils.trimToNull(first);
-        String nSecond = TextUtils.trimToNull(second);
-
-        return nFirst == null ? nSecond == null : nFirst.equals(nSecond);
+        String normalizedParentTaskId = TextUtils.trimToNull(parentTaskId);
+        return normalizedParentTaskId == null ? "__ROOT__" : normalizedParentTaskId;
     }
 
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 
-    private Page<TaskResponse> toResponsePage(Page<TaskEntity> entityPage) {
-        List<TaskEntity> entities = entityPage.getContent();
-        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
+    private boolean sameText(String first, String second) {
+        String left = TextUtils.trimToNull(first);
+        String right = TextUtils.trimToNull(second);
+        return left == null ? right == null : left.equals(right);
+    }
 
+    private Page<TaskResponse> toResponsePage(Page<TaskEntity> page) {
+        List<TaskEntity> entities = page.getContent();
+        Map<String, TaskUserSummaryResponse> users = resolveUserSummaries(entities);
         List<TaskResponse> responses = entities.stream()
                 .map(entity -> toResponse(entity, users))
                 .toList();
 
-        return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
+        return new PageImpl<>(responses, page.getPageable(), page.getTotalElements());
     }
 
     private Map<String, TaskUserSummaryResponse> resolveUserSummaries(List<TaskEntity> entities) {

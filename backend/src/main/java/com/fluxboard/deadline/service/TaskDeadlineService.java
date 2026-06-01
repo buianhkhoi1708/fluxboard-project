@@ -1,5 +1,7 @@
 package com.fluxboard.deadline.service;
 
+import com.fluxboard.board.column.entity.BoardColumnEntity;
+import com.fluxboard.board.column.repository.BoardColumnRepository;
 import com.fluxboard.board.task.entity.TaskEntity;
 import com.fluxboard.board.task.repository.TaskRepository;
 import com.fluxboard.common.exception.AppException;
@@ -25,6 +27,7 @@ import com.fluxboard.user.entity.User;
 import com.fluxboard.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +48,8 @@ public class TaskDeadlineService {
 
     private final TaskDeadlineRepository deadlineRepository;
     private final TaskRepository taskRepository;
+    private final BoardColumnRepository boardColumnRepository;
+    private final SimpMessagingTemplate messagingTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationDispatcher notificationDispatcher;
     private final PermissionEvaluatorService permissionEvaluatorService;
@@ -193,6 +198,7 @@ public class TaskDeadlineService {
             eventPublisher.publishEvent(new DeadlineConfigChangedEvent(this, taskId, userId, oldDueDate, dueDate));
         }
 
+        broadcastDeadlineChange("DEADLINE_UPDATED", task, deadline, userId, null);
         return toResponse(deadline);
     }
 
@@ -236,6 +242,7 @@ public class TaskDeadlineService {
             result.put("late_duration_minutes", 0);
         }
 
+        broadcastDeadlineChange("TASK_DEADLINE_COMPLETED", task, deadline, userId, null);
         return result;
     }
 
@@ -310,6 +317,7 @@ public class TaskDeadlineService {
         result.put("target_reviewer_id", targetReviewerId);
         result.put("status", "PENDING_APPROVAL");
         result.put("extension_expires_at", requestedAt.plus(EXTENSION_REVIEW_TIMEOUT));
+        broadcastDeadlineChange("EXTENSION_REQUESTED", task, deadline, userId, targetReviewerId);
         return result;
     }
 
@@ -332,7 +340,6 @@ public class TaskDeadlineService {
         String requesterId = deadline.getExtensionRequestedBy();
         String requestReason = deadline.getExtensionReason();
 
-        // 1. Cập nhật Deadline Record
         deadline.setDueDate(newDueDate);
         deadline.setExtensionCount((deadline.getExtensionCount() == null ? 0 : deadline.getExtensionCount()) + 1);
         deadline.setIsExtensionPending(false);
@@ -345,11 +352,9 @@ public class TaskDeadlineService {
         deadline.setStatus(calculateDynamicStatus(deadline));
         deadlineRepository.save(deadline);
 
-        // 2. Cập nhật TaskEntity
         task.setDueDate(newDueDate);
-        taskRepository.save(task); // ĐÃ LƯU NGÀY MỚI VÀO DB
+        taskRepository.save(task);
 
-        // 3. Bắn Event cho hệ thống Log / Noti
         eventPublisher.publishEvent(
                 new ExtensionApprovedEvent(
                         this,
@@ -364,13 +369,14 @@ public class TaskDeadlineService {
                 )
         );
 
-        // 4. Trả về Response
         Map<String, Object> result = toResponse(deadline);
         result.put("old_due_date", oldDueDate);
         result.put("new_due_date", newDueDate);
         result.put("status", "APPROVED");
+        broadcastDeadlineChange("EXTENSION_APPROVED", task, deadline, reviewerId, requesterId);
         return result;
     }
+
     @Transactional
     public Map<String, Object> rejectExtension(String taskId, String reviewerId, String reason) {
         TaskEntity task = taskRepository.findById(taskId)
@@ -463,6 +469,7 @@ public class TaskDeadlineService {
         result.put("current_due_date", currentDueDate);
         result.put("requested_due_date", requestedDueDate);
         result.put("reject_reason", rejectReason);
+        broadcastDeadlineChange(autoRejected ? "EXTENSION_AUTO_REJECTED" : "EXTENSION_REJECTED", task, deadline, reviewerId, requesterId);
         return result;
     }
 
@@ -531,6 +538,48 @@ public class TaskDeadlineService {
         return deadline.getExtensionRequestedAt() == null
                 ? null
                 : deadline.getExtensionRequestedAt().plus(EXTENSION_REVIEW_TIMEOUT);
+    }
+
+    private String resolveBoardId(TaskEntity task) {
+        if (task == null || task.getColumnId() == null) return null;
+        return boardColumnRepository.findByIdAndDeletedFalse(task.getColumnId()).map(BoardColumnEntity::getBoardId).orElse(null);
+    }
+
+    private List<String> resolveRealtimeRecipients(TaskEntity task, String actorUserId, String reviewerId) {
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        if (task != null) {
+            if (task.getAuthorUserId() != null && !task.getAuthorUserId().isBlank()) ids.add(task.getAuthorUserId());
+            if (task.getAssigneesUserId() != null) ids.addAll(task.getAssigneesUserId());
+        }
+        if (actorUserId != null && !actorUserId.isBlank()) ids.add(actorUserId);
+        if (reviewerId != null && !reviewerId.isBlank()) ids.add(reviewerId);
+        return new ArrayList<>(ids);
+    }
+
+    private void broadcastDeadlineChange(String action, TaskEntity task, TaskDeadlineEntity deadline, String actorUserId, String reviewerId) {
+        if (task == null || deadline == null) return;
+        String boardId = resolveBoardId(task);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("action", action);
+        payload.put("type", action);
+        payload.put("task_id", task.getId());
+        payload.put("board_id", boardId);
+        payload.put("project_id", task.getProjectId());
+        payload.put("actor_user_id", actorUserId);
+        payload.put("reviewer_user_id", reviewerId);
+        payload.put("deadline", toResponse(deadline));
+        payload.put("due_date", task.getDueDate());
+        payload.put("timestamp", Instant.now());
+
+        messagingTemplate.convertAndSend("/topic/system", payload);
+        messagingTemplate.convertAndSend("/topic/tasks/" + task.getId(), payload);
+        if (boardId != null && !boardId.isBlank()) {
+            messagingTemplate.convertAndSend("/topic/board/" + boardId, payload);
+            messagingTemplate.convertAndSend("/topic/boards/" + boardId, payload);
+        }
+        for (String userId : resolveRealtimeRecipients(task, actorUserId, reviewerId)) {
+            messagingTemplate.convertAndSend("/topic/my-tasks/" + userId, payload);
+        }
     }
 
     private Map<String, Object> toResponse(TaskDeadlineEntity deadline) {

@@ -55,6 +55,7 @@ import {
 } from '../hooks/useBoardQueries';
 import { Task, TaskAttachment, TaskComment, TaskDetailModalProps } from '../types/index';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRealtimeEvent } from '../../../hooks/useRealtimeEvent';
 
 registerLocale('vi', vi);
 
@@ -111,6 +112,10 @@ const getCurrentUserRole = (user: any) => {
 };
 
 const isManagerLikeRole = (role: string) => {
+  return ['SYSTEM_ADMIN', 'ADMIN', 'PM', 'PROJECT_ADMIN'].includes(normalizeRole(role));
+};
+
+const canReviewExtensionRole = (role: string) => {
   return ['SYSTEM_ADMIN', 'ADMIN', 'MANAGER', 'PM', 'PROJECT_ADMIN'].includes(normalizeRole(role));
 };
 
@@ -124,6 +129,27 @@ const formatDateTime = (value?: string | Date | null) => {
 };
 
 const read = (obj: any, camelKey: string, snakeKey: string) => obj?.[camelKey] ?? obj?.[snakeKey];
+
+const getIncomingTaskFromRealtime = (message: any): Task | null => {
+  const candidate = message?.task || message?.data?.task || message?.payload?.task || null;
+  if (!candidate) return null;
+  return getTaskId(candidate as Task) ? candidate as Task : null;
+};
+
+const mergeIncomingTask = (previous: Task | null, incoming: Task | null): Task | null => {
+  if (!incoming) return previous;
+  const previousId = getTaskId(previous);
+  const incomingId = getTaskId(incoming);
+  if (previousId && incomingId && previousId !== incomingId) return previous;
+
+  return {
+    ...(previous || {}),
+    ...incoming,
+    comments: Array.isArray((incoming as any).comments) ? (incoming as any).comments : ((previous as any)?.comments || []),
+    attachments: Array.isArray((incoming as any).attachments) ? (incoming as any).attachments : ((previous as any)?.attachments || []),
+    subtasks: Array.isArray((incoming as any).subtasks) ? (incoming as any).subtasks : ((previous as any)?.subtasks || [])
+  } as Task;
+};
 
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task, listId, initialOpenComments = false }) => {
   const queryClient = useQueryClient();
@@ -186,6 +212,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
 
   const currentUserRole = getCurrentUserRole(user);
   const canRequestExtensionByRole = !isManagerLikeRole(currentUserRole);
+  const canReviewExtension = canReviewExtensionRole(currentUserRole);
 
   const taskDueDateValue = localTask?.due_date || localTask?.dueDate || deadlineInfo?.due_date || deadlineInfo?.dueDate || null;
   const taskDueDate = taskDueDateValue ? new Date(taskDueDateValue) : null;
@@ -221,8 +248,68 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   }, [editStartDate, editDueDate]);
 
   useEffect(() => {
-    setLocalTask(task);
+    setLocalTask((prev) => mergeIncomingTask(prev, task));
   }, [task]);
+
+  const realtimeTaskTopic = taskId ? `/topic/tasks/${taskId}` : '';
+
+  useRealtimeEvent(realtimeTaskTopic, async (message) => {
+    const action = String(message?.action || message?.type || '').toUpperCase();
+    const incomingTask = getIncomingTaskFromRealtime(message);
+
+    if (incomingTask && getTaskId(incomingTask) === taskId) {
+      setLocalTask((prev) => mergeIncomingTask(prev, incomingTask));
+
+      const nextDueDate = (incomingTask as any).due_date || (incomingTask as any).dueDate;
+      if (nextDueDate) setEditDueDate(new Date(nextDueDate));
+
+      const nextStatus = String((incomingTask as any).status || '').toUpperCase();
+      if (nextStatus) setIsDone(nextStatus === 'DONE');
+    }
+
+    if (activeBoardId) {
+      queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEYS.boardDetail(activeBoardId) });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['task-deadline', taskId] });
+    queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+
+    if (action.includes('DEADLINE') || action.includes('EXTENSION')) {
+      const latest = await refetchDeadline();
+      const nextDueDate =
+        latest.data?.due_date ||
+        latest.data?.dueDate ||
+        message?.deadline?.due_date ||
+        message?.deadline?.dueDate ||
+        message?.new_due_date ||
+        message?.newDueDate;
+
+      if (nextDueDate) {
+        setEditDueDate(new Date(nextDueDate));
+        setLocalTask((prev) => prev ? ({ ...prev, due_date: nextDueDate, dueDate: nextDueDate } as any) : prev);
+      }
+
+      if (action === 'EXTENSION_APPROVED') {
+        setIsExtensionFormOpen(false);
+        setRequestedDueDate(null);
+        setExtensionReason('');
+        setShowRejectInput(false);
+        setExtensionMessage({ type: 'success', text: 'Yêu cầu dời deadline đã được duyệt và đồng bộ realtime.' });
+      } else if (action === 'EXTENSION_REJECTED' || action === 'EXTENSION_AUTO_REJECTED') {
+        setIsExtensionFormOpen(false);
+        setShowRejectInput(false);
+        setExtensionMessage({
+          type: 'error',
+          text: action === 'EXTENSION_AUTO_REJECTED'
+            ? 'Yêu cầu dời deadline đã bị hệ thống tự động từ chối.'
+            : 'Yêu cầu dời deadline đã bị từ chối.'
+        });
+      } else if (action === 'EXTENSION_REQUESTED') {
+        setIsExtensionFormOpen(false);
+        setExtensionMessage({ type: 'success', text: 'Yêu cầu dời deadline đang chờ duyệt và đã được đồng bộ realtime.' });
+      }
+    }
+  }, 0);
 
   useEffect(() => {
     if (isOpen && localTask) {
@@ -480,7 +567,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     setExtensionMessage(null);
 
     if (!canRequestExtensionByRole) {
-      setExtensionMessage({ type: 'error', text: 'Tài khoản quản lý/admin không gửi yêu cầu dời deadline cho chính mình. Hãy cập nhật hoặc duyệt deadline bằng luồng quản lý.' });
+      setExtensionMessage({ type: 'error', text: 'Role PM/Project Admin/Admin/System Admin không tự gửi yêu cầu dời deadline. Manager vẫn có thể gửi nếu đang là người được giao task.' });
       return;
     }
 
@@ -527,6 +614,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       setExtensionReason('');
       setIsExtensionFormOpen(false);
       await refetchDeadline();
+      await syncBoardAfterTaskMutation();
     } catch (error: any) {
       console.error('Lỗi xin dời deadline:', error);
       setExtensionMessage({
@@ -550,7 +638,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       
       // Update UI modal immediately to reflect new Date
       if (pendingRequestedDate) {
-         setEditDueDate(new Date(pendingRequestedDate));
+        setEditDueDate(new Date(pendingRequestedDate));
+        setLocalTask((prev) => prev ? ({ ...prev, due_date: pendingRequestedDate, dueDate: pendingRequestedDate } as any) : prev);
       }
     } catch (error: any) {
       console.error('Lỗi duyệt deadline:', error);
@@ -569,10 +658,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     }
     setIsRejecting(true);
     try {
-      await rejectExtension({ taskId, boardId: activeBoardId, reason: rejectReasonManager.trim() });
+      await rejectExtension({ taskId, boardId: activeBoardId, rejectReason: rejectReasonManager.trim() });
       await refetchDeadline(); // Lấy lại trạng thái mới nhất
       await syncBoardAfterTaskMutation();
       setShowRejectInput(false);
+      setRejectReasonManager('');
       setExtensionMessage({ type: 'success', text: 'Đã từ chối yêu cầu dời deadline.' });
     } catch (error: any) {
       console.error('Lỗi từ chối deadline:', error);
@@ -953,7 +1043,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       {extensionExpiresAt && <div>Tự từ chối sau: <b>{formatDateTime(extensionExpiresAt)}</b></div>}
                       
                       {/* 🚀 VÙNG DÀNH RIÊNG CHO MANAGER DUYỆT BÀI */}
-                      {!canRequestExtensionByRole && (
+                      {canReviewExtension && (
                         <div className="mt-3 pt-3 border-t border-amber-200/50 space-y-2">
                           {!showRejectInput ? (
                             <div className="flex gap-2 mt-2">
@@ -997,7 +1087,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                     </div>
                   )}
 
-                  {!canRequestExtensionByRole && !isExtensionPending && (
+                  {canReviewExtension && !isExtensionPending && (
                     <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500 font-semibold flex gap-2">
                       <ShieldAlert size={16} className="text-slate-400 shrink-0" />
                       Bạn có quyền quản lý công việc này.
@@ -1109,7 +1199,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       <MessageSquare size={24} className="text-violet-300" />
                     </div>
                     <p className="text-sm font-bold text-slate-500">Chưa có bình luận</p>
-                    <p className="text-xs mt-1 max-w-[240px]">Bình luận giúp nhóm ghi chú vấn đề cần xử lý trong công việc này.</p>
+                    <p className="text-xs mt-1 max-w-[240px]">Bình luận mới sẽ đồng bộ realtime cho các tài khoản đang mở task này.</p>
                   </div>
                 ) : (
                   taskComments.map((comment) => {
