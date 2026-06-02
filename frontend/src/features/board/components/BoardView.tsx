@@ -144,8 +144,8 @@ const BoardView = () => {
   };
 
   const rollbackDrag = (fallbackBoard?: Board | null) => {
-    const rollbackBoard = fallbackBoard || dragSnapshotBoardRef.current;
-    if (rollbackBoard) queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), rollbackBoard);
+    const rb = fallbackBoard || dragSnapshotBoardRef.current;
+    if (rb) queryClient.setQueryData(BOARD_QUERY_KEYS.boardDetail(currentBoardId), rb);
   };
 
   const clearDragState = () => {
@@ -409,74 +409,60 @@ const BoardView = () => {
     <>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="absolute inset-0 flex flex-col bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white overflow-hidden">
-          <div className="shrink-0 px-4 py-3 md:px-6 bg-white/70 backdrop-blur-xl border-b border-white shadow-sm flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 z-10">
-            <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
-              <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-lg md:text-xl shadow-md shrink-0">
+          
+          {/* Topbar đã tinh gọn */}
+          <div className="shrink-0 px-3 py-2.5 md:px-6 md:py-3 bg-white/70 backdrop-blur-xl border-b border-white shadow-sm flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 md:gap-3 z-10">
+            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+              <div className="w-8 h-8 md:w-11 md:h-11 rounded-lg md:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-base md:text-xl shadow-sm shrink-0">
                 {board.board_name?.charAt(0) || 'F'}
               </div>
               <div className="flex flex-col min-w-0 flex-1">
-                <h2 className="text-base md:text-xl font-black text-slate-800 tracking-tight truncate">{board.board_name}</h2>
+                <h2 className="text-sm md:text-xl font-black text-slate-800 tracking-tight truncate max-w-[150px] sm:max-w-[250px] md:max-w-md">{board.board_name}</h2>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 md:gap-3 shrink-0 ml-auto w-full sm:w-auto justify-end">
-              <div className="flex items-center -space-x-2 mr-1 md:mr-2 shrink-0">
-                {activeMembersInBoard.length > 0 ? (
-                  <>
-                    {activeMembersInBoard.slice(0, 4).map((member: any, idx: number) => {
-                      const displayName = member.full_name || member.fullName || 'Thành viên';
-                      const avatarUrl = member.avatar_url || member.avatarUrl;
-
-                      return (
-                        <div
-                          key={member.id || idx}
-                          title={displayName}
-                          className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white flex items-center justify-center overflow-hidden z-[10] shadow-sm transition-transform hover:scale-110 hover:z-50 cursor-pointer"
-                          style={{ zIndex: 10 - idx }}
-                        >
-                          {avatarUrl ? (
-                            <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover bg-white" />
-                          ) : (
-                            <div className="w-full h-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] md:text-xs font-bold">
-                              {displayName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+            <div className="flex items-center gap-1.5 md:gap-3 shrink-0 ml-auto w-auto justify-end">
+              <div className="hidden sm:flex items-center -space-x-2 mr-1 md:mr-2 shrink-0">
+                {activeMembersInBoard.slice(0, 3).map((member: any, idx: number) => {
+                  const displayName = member.full_name || member.fullName || 'Thành viên';
+                  const avatarUrl = member.avatar_url || member.avatarUrl;
+                  return (
+                    <div key={idx} className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white flex items-center justify-center overflow-hidden z-[10] shadow-sm">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover bg-white" />
+                      ) : (
+                        <div className="w-full h-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] md:text-xs font-bold">
+                          {displayName.charAt(0).toUpperCase()}
                         </div>
-                      );
-                    })}
-                    {activeMembersInBoard.length > 4 && (
-                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-slate-100 text-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold z-0 shadow-sm cursor-pointer hover:bg-slate-200" title={`Và ${activeMembersInBoard.length - 4} người khác`}>
-                        +{activeMembersInBoard.length - 4}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white bg-slate-50 text-slate-400 flex items-center justify-center shadow-sm cursor-default">
-                    <Users size={14} />
-                  </div>
-                )}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="h-5 md:h-6 w-px bg-slate-200 hidden sm:block shrink-0" />
+              <div className="hidden sm:block h-5 md:h-6 w-px bg-slate-200 shrink-0" />
 
-              <button type="button" className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 md:px-3 rounded-lg text-xs md:text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
-                <Filter size={16} className="w-4 h-4" />
+              <button type="button" className="flex items-center justify-center gap-1.5 p-2 md:px-3 md:py-1.5 rounded-lg text-xs md:text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
+                <Filter size={16} className="w-4 h-4 md:w-[18px] md:h-[18px]" />
                 <span className="hidden sm:inline">Lọc</span>
               </button>
 
-              <button type="button" className="flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-black text-white px-3 py-1.5 md:px-4 rounded-lg text-xs md:text-sm font-bold transition-all active:scale-95 shadow-md shrink-0">
-                <Save size={16} className="text-indigo-200 w-4 h-4" />
-                <span className="hidden sm:inline">Lưu dự án</span>
+              <button type="button" className="flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-black text-white p-2 md:px-4 md:py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all active:scale-95 shadow-md shrink-0">
+                <Save size={16} className="text-indigo-200 w-4 h-4 md:w-[18px] md:h-[18px]" />
+                <span className="hidden sm:inline">Lưu</span>
               </button>
             </div>
           </div>
 
-          <div className="flex-1 w-full p-4 md:p-6 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-4 md:gap-6 items-start custom-scrollbar">
+          {/* Vùng Container Cột: Tích hợp snap-x snap-mandatory cho Mobile hít mượt mà */}
+          <div className="flex-1 w-full px-3 py-4 md:p-6 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-3 md:gap-6 items-start custom-scrollbar snap-x snap-mandatory md:snap-none">
             {board.columns?.map((col: BoardColumn) => (
-              <Column key={col.id || col._id} list={col} onOpenTaskDetail={openTaskDetail} />
+              <div key={col.id || col._id} className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px] h-full flex flex-col justify-start">
+                 <Column list={col} onOpenTaskDetail={openTaskDetail} />
+              </div>
             ))}
 
-            <div className="w-[85vw] max-w-[280px] sm:w-[280px] shrink-0">
+            <div className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px]">
               {isAddingCol ? (
                 <div className="bg-slate-100/90 backdrop-blur-md rounded-xl p-2.5 shadow-sm border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
                   <input
@@ -514,7 +500,7 @@ const BoardView = () => {
                 </button>
               )}
             </div>
-            <div className="w-4 md:w-8 shrink-0" />
+            <div className="w-2 md:w-8 shrink-0" />
           </div>
         </div>
 

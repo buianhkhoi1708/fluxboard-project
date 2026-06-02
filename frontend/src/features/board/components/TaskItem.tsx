@@ -108,8 +108,8 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
         onClick={() => openDetail(false)}
         className={`group relative flex flex-col p-3.5 sm:p-4 rounded-xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-md transition-all ${isTaskDone ? 'bg-slate-50/80 border-slate-200/60 opacity-85 hover:border-slate-300' : 'bg-white border-slate-200 hover:border-indigo-300'} ${isOverlay ? 'rotate-3 scale-105 shadow-2xl border-indigo-500 ring-4 ring-indigo-50/80 z-50' : ''}`}
       >
-        <div className="flex justify-between items-start gap-2 pr-20">
-          <h4 className={`text-sm font-semibold break-words leading-snug transition-all ${isTaskDone ? 'line-through text-slate-400 font-medium' : 'text-slate-800'}`}>
+        <div className="flex justify-between items-start gap-2 pr-20 md:pr-16">
+          <h4 className={`text-[13px] md:text-sm font-semibold break-words leading-snug transition-all ${isTaskDone ? 'line-through text-slate-400 font-medium' : 'text-slate-800'}`}>
             {task.title}
           </h4>
           {isTaskDone && (
@@ -152,10 +152,10 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
                 key={String(st.id || st._id)}
                 onClick={(e) => handleToggleSubtask(e, String(st.id || st._id))}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded transition-colors"
+                className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 md:p-1 -mx-1 rounded transition-colors"
               >
-                {(st.status === 'DONE' || st.is_done || st.isDone) ? <CheckSquare size={13} className="text-emerald-500 shrink-0" /> : <Square size={13} className="text-slate-300 shrink-0" />}
-                <span className={`text-[11px] flex-1 truncate ${(st.status === 'DONE' || st.is_done || st.isDone) ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`} title={st.title}>
+                {(st.status === 'DONE' || st.is_done || st.isDone) ? <CheckSquare size={14} className="md:w-[13px] md:h-[13px] text-emerald-500 shrink-0" /> : <Square size={14} className="md:w-[13px] md:h-[13px] text-slate-300 shrink-0" />}
+                <span className={`text-[12px] md:text-[11px] flex-1 truncate ${(st.status === 'DONE' || st.is_done || st.isDone) ? 'line-through text-slate-400' : 'text-slate-600 font-medium'}`} title={st.title}>
                   {st.title}
                 </span>
               </div>
@@ -207,13 +207,13 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
                         className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all shadow-sm ${isTaskDone ? 'bg-slate-100 text-slate-400 border-slate-200/60' : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'}`}
                       >
                         {avatarUrl ? (
-                          <img src={avatarUrl} alt={displayName} className={`w-4 h-4 rounded-full object-cover border shrink-0 ${isTaskDone ? 'border-slate-200/80 grayscale' : 'border-indigo-200'}`} />
+                          <img src={avatarUrl} alt={displayName} className={`w-5 h-5 md:w-4 md:h-4 rounded-full object-cover border shrink-0 ${isTaskDone ? 'border-slate-200/80 grayscale' : 'border-indigo-200'}`} />
                         ) : (
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shrink-0 ${isTaskDone ? 'bg-slate-300' : 'bg-indigo-600'}`}>
+                          <div className={`w-5 h-5 md:w-4 md:h-4 rounded-full flex items-center justify-center text-[9px] md:text-[8px] text-white shrink-0 ${isTaskDone ? 'bg-slate-300' : 'bg-indigo-600'}`}>
                             {initial}
                           </div>
                         )}
-                        <span className="truncate max-w-[80px]">{displayName}</span>
+                        <span className="hidden sm:inline truncate max-w-[80px]">{displayName}</span>
                       </span>
                     );
                   })}
@@ -231,7 +231,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
             className="p-2 md:p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors"
             title="Bình luận nhanh"
           >
-            <MessageSquare size={14} />
+            <MessageSquare size={16} className="md:w-[14px] md:h-[14px]" />
           </button>
           <button
             type="button"
@@ -240,7 +240,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
             className="p-2 md:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
             title="Mở chi tiết"
           >
-            <Edit2 size={14} />
+            <Edit2 size={16} className="md:w-[14px] md:h-[14px]" />
           </button>
           <button
             type="button"
@@ -249,7 +249,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({ task, listId, isOverlay, onOpe
             className="p-2 md:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
             title="Xóa công việc"
           >
-            <Trash2 size={14} />
+            <Trash2 size={16} className="md:w-[14px] md:h-[14px]" />
           </button>
         </div>
       </div>

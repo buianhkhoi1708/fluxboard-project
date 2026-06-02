@@ -76,7 +76,7 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
     <div className="w-[85vw] max-w-[300px] sm:w-[300px] shrink-0 flex flex-col bg-slate-100/80 backdrop-blur-md rounded-2xl max-h-full relative border border-white/60 shadow-sm">
       {isMenuOpen && <div className="fixed inset-0 z-10" onClick={() => setIsMenuOpen(false)} />}
 
-      <div className="shrink-0 flex justify-between items-start p-3.5 pb-2 cursor-grab active:cursor-grabbing group/header">
+      <div className="shrink-0 flex justify-between items-start p-3 md:p-3.5 pb-2 cursor-grab active:cursor-grabbing group/header">
         <div className="flex flex-col gap-1.5 flex-1 min-w-0 pr-2">
           <div className="flex items-center gap-2">
             {isEditingName ? (
@@ -92,10 +92,10 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
                     setEditColName(list.list_name);
                   }
                 }}
-                className="text-sm font-extrabold text-slate-800 uppercase tracking-wide bg-white border border-indigo-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-indigo-100 w-full"
+                className="text-[13px] md:text-sm font-extrabold text-slate-800 uppercase tracking-wide bg-white border border-indigo-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-indigo-100 w-full"
               />
             ) : (
-              <h3 onDoubleClick={() => setIsEditingName(true)} className="text-sm font-extrabold text-slate-800 uppercase tracking-wide truncate cursor-text" title="Nhấn đúp để sửa">
+              <h3 onDoubleClick={() => setIsEditingName(true)} className="text-[13px] md:text-sm font-extrabold text-slate-800 uppercase tracking-wide truncate cursor-text" title="Nhấn đúp để sửa">
                 {list.list_name}
               </h3>
             )}
@@ -118,9 +118,9 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 rounded-lg transition-colors opacity-0 group-hover/header:opacity-100 md:opacity-100"
+            className="p-2 md:p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 rounded-lg transition-colors opacity-100 md:opacity-0 group-hover/header:opacity-100"
           >
-            <MoreHorizontal size={18} />
+            <MoreHorizontal size={18} className="w-5 h-5 md:w-[18px] md:h-[18px]" />
           </button>
 
           {isMenuOpen && (
@@ -131,7 +131,7 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
                   setIsEditingName(true);
                   setIsMenuOpen(false);
                 }}
-                className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                className="w-full text-left px-4 py-3 md:py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition-colors"
               >
                 <Edit2 size={14} />
                 Sửa tên cột
@@ -140,7 +140,7 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
               <button
                 type="button"
                 onClick={handleDeleteColumn}
-                className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors border-t border-slate-100"
+                className="w-full text-left px-4 py-3 md:py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors border-t border-slate-100"
               >
                 <Trash2 size={14} />
                 Xóa cột
@@ -167,7 +167,7 @@ const Column: React.FC<ExtendedColumnProps> = memo(({ list, onOpenTaskDetail }) 
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          className="group w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-200/50 hover:text-indigo-600 rounded-xl transition-all"
+          className="group w-full flex items-center gap-2 px-3 py-3 md:py-2 text-sm font-semibold text-slate-500 hover:bg-slate-200/50 hover:text-indigo-600 rounded-xl transition-all"
         >
           <Plus size={16} className="text-slate-400 group-hover:text-indigo-500 transition-colors" />
           <span>Thêm công việc mới</span>
