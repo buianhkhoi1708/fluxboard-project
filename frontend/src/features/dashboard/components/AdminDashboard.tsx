@@ -14,30 +14,30 @@ import { useGetOrgTree } from "../../organization/hooks/useOrgQueries";
 // SKELETON LOADING
 // ==========================================
 export const AdminDashboardSkeleton = () => (
-  <div className="space-y-5 lg:space-y-6 animate-pulse pb-8">
+  <div className="space-y-4 md:space-y-5 lg:space-y-6 animate-pulse pb-6 md:pb-8">
     {/* 3 StatCard skeletons */}
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 lg:gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
       {[...Array(3)].map((_, i) => (
-        <div key={i} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-5 lg:p-6 shadow-sm">
+        <div key={i} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-4 md:p-5 lg:p-6 shadow-sm">
           <div className="flex justify-between items-start mb-3">
             <div className="h-4 w-24 bg-slate-200 rounded-md" />
             <div className="h-8 w-8 bg-slate-200 rounded-xl" />
           </div>
-          <div className="h-9 w-16 bg-slate-200 rounded-md mt-3" />
+          <div className="h-7 md:h-9 w-16 bg-slate-200 rounded-md mt-3" />
           <div className="h-3 w-32 bg-slate-200 rounded-full mt-2" />
         </div>
       ))}
     </div>
 
     {/* Deadline health + BarChart skeletons */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-6 shadow-sm min-h-[400px] space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-4 md:p-5 lg:p-6 shadow-sm min-h-[300px] lg:min-h-[400px] space-y-4">
         <div className="h-5 w-48 bg-slate-200 rounded-md" />
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-slate-100">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-slate-200" />
+            <div key={i} className="flex items-center justify-between p-3 md:p-4 rounded-2xl bg-slate-100">
+              <div className="flex items-center gap-3 md:gap-3.5">
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-slate-200" />
                 <div className="space-y-2">
                   <div className="h-4 w-24 bg-slate-200 rounded-md" />
                   <div className="h-3 w-16 bg-slate-200 rounded-md" />
@@ -50,9 +50,9 @@ export const AdminDashboardSkeleton = () => (
         <div className="h-8 bg-slate-200 rounded-xl w-3/4 mx-auto mt-4" />
       </div>
 
-      <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-6 shadow-sm min-h-[400px] space-y-4">
+      <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 p-4 md:p-5 lg:p-6 shadow-sm min-h-[300px] lg:min-h-[400px] space-y-4">
         <div className="h-5 w-56 bg-slate-200 rounded-md" />
-        <div className="h-64 bg-slate-100 rounded-2xl" />
+        <div className="h-48 sm:h-56 lg:h-64 bg-slate-100 rounded-2xl" />
       </div>
     </div>
   </div>
@@ -71,28 +71,28 @@ interface StatCardProps {
 
 const StatCard = ({ title, value, icon, subtitle, className = "" }: StatCardProps) => (
   <div
-    className={`bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-5 lg:p-6 flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/20 hover:-translate-y-0.5 ${className}`}
+    className={`bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-4 md:p-5 lg:p-6 flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/20 hover:-translate-y-0.5 ${className}`}
   >
     <div className="flex justify-between items-start mb-3">
       <div className="flex items-center gap-2.5">
         {icon && (
-          <div className="p-2 bg-white shadow-sm text-slate-600 rounded-xl border border-slate-100">
+          <div className="p-1.5 md:p-2 bg-white shadow-sm text-slate-600 rounded-xl border border-slate-100">
             {icon}
           </div>
         )}
-        <h3 className="font-extrabold text-[12px] uppercase tracking-widest text-slate-500">{title}</h3>
+        <h3 className="font-extrabold text-[11px] md:text-[12px] uppercase tracking-widest text-slate-500">{title}</h3>
       </div>
-      <button className="text-slate-300 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors">
+      <button className="text-slate-300 hover:text-indigo-600 p-1 md:p-1.5 rounded-lg hover:bg-indigo-50 transition-colors">
         <MoreVertical size={18} />
       </button>
     </div>
 
-    <div className="mt-auto pt-3">
+    <div className="mt-auto pt-2 md:pt-3">
       {value !== undefined && (
-        <div className="text-[36px] leading-none font-black tracking-tighter text-slate-800">{value}</div>
+        <div className="text-2xl md:text-3xl lg:text-[36px] leading-none font-black tracking-tighter text-slate-800">{value}</div>
       )}
       {subtitle && (
-        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">{subtitle}</div>
+        <div className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1.5 md:mt-2">{subtitle}</div>
       )}
     </div>
   </div>
@@ -133,111 +133,111 @@ const AdminDashboard = ({ data }: AdminDashboardProps) => {
   });
 
   return (
-    <div className="space-y-5 lg:space-y-6 pb-8 animate-in fade-in zoom-in-95 duration-500">
+    <div className="space-y-4 md:space-y-5 lg:space-y-6 pb-6 md:pb-8 animate-in fade-in zoom-in-95 duration-500">
       {/* ROW 1: KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
         <StatCard
           title="Tổng Nhân Sự"
           value={kpi.total_users.toLocaleString()}
-          icon={<Users size={18} />}
+          icon={<Users size={16} className="md:w-[18px] md:h-[18px]" />}
           subtitle="Tài khoản hoạt động"
           className="border-l-4 border-l-indigo-500"
         />
         <StatCard
           title="Phòng Ban"
           value={kpi.total_departments.toLocaleString()}
-          icon={<Building2 size={18} />}
+          icon={<Building2 size={16} className="md:w-[18px] md:h-[18px]" />}
           subtitle="Đang vận hành"
           className="border-l-4 border-l-emerald-500"
         />
         <StatCard
           title="Đội Nhóm (Teams)"
           value={kpi.total_teams.toLocaleString()}
-          icon={<Network size={18} />}
+          icon={<Network size={16} className="md:w-[18px] md:h-[18px]" />}
           subtitle="Các dự án nhỏ"
-          className="border-l-4 border-l-amber-500"
+          className="border-l-4 border-l-amber-500 sm:col-span-2 lg:col-span-1"
         />
       </div>
 
       {/* ROW 2: Deadline Health & Biểu đồ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
         {/* Deadline Health */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-6 flex flex-col min-h-[400px] transition-all hover:shadow-xl hover:shadow-indigo-100/20">
-          <div className="flex justify-between items-start mb-5 shrink-0">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-4 md:p-5 lg:p-6 flex flex-col min-h-[auto] lg:min-h-[400px] transition-all hover:shadow-xl hover:shadow-indigo-100/20">
+          <div className="flex justify-between items-start mb-4 md:mb-5 shrink-0">
             <div>
-              <h3 className="font-black text-lg text-slate-800 tracking-tight">Cảnh Báo Deadline</h3>
-              <p className="text-xs text-slate-500 font-medium mt-1">Sức khỏe toàn công ty</p>
+              <h3 className="font-black text-base md:text-lg text-slate-800 tracking-tight">Cảnh Báo Deadline</h3>
+              <p className="text-[11px] md:text-xs text-slate-500 font-medium mt-0.5 md:mt-1">Sức khỏe toàn công ty</p>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 shadow-sm border border-indigo-100">
-              <ShieldAlert size={20} strokeWidth={2} />
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 shadow-sm border border-indigo-100">
+              <ShieldAlert size={18} className="md:w-5 md:h-5" strokeWidth={2} />
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-3.5 mt-1">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-emerald-50/70 border border-emerald-100 transition-colors hover:bg-emerald-50">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-white text-emerald-500 flex items-center justify-center shadow-sm border border-emerald-100/50">
-                  <CheckCircle2 size={20} strokeWidth={2.5} />
+          <div className="flex-1 flex flex-col justify-center gap-2.5 md:gap-3.5 mt-1">
+            <div className="flex items-center justify-between p-3 md:p-4 rounded-2xl bg-emerald-50/70 border border-emerald-100 transition-colors hover:bg-emerald-50">
+              <div className="flex items-center gap-2.5 md:gap-3.5">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white text-emerald-500 flex items-center justify-center shadow-sm border border-emerald-100/50">
+                  <CheckCircle2 size={18} className="md:w-5 md:h-5" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-emerald-900 leading-tight">Đúng Tiến Độ</div>
-                  <div className="text-[10px] font-black text-emerald-500/80 uppercase tracking-widest mt-1">On Track</div>
+                  <div className="font-bold text-[13px] md:text-sm text-emerald-900 leading-tight">Đúng Tiến Độ</div>
+                  <div className="text-[9px] md:text-[10px] font-black text-emerald-500/80 uppercase tracking-widest mt-0.5 md:mt-1">On Track</div>
                 </div>
               </div>
-              <span className="text-2xl font-black text-emerald-600">{health.on_track}</span>
+              <span className="text-xl md:text-2xl font-black text-emerald-600">{health.on_track}</span>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-amber-50/70 border border-amber-100 transition-colors hover:bg-amber-50">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-white text-amber-500 flex items-center justify-center shadow-sm border border-amber-100/50">
-                  <AlertTriangle size={20} strokeWidth={2.5} />
+            <div className="flex items-center justify-between p-3 md:p-4 rounded-2xl bg-amber-50/70 border border-amber-100 transition-colors hover:bg-amber-50">
+              <div className="flex items-center gap-2.5 md:gap-3.5">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white text-amber-500 flex items-center justify-center shadow-sm border border-amber-100/50">
+                  <AlertTriangle size={18} className="md:w-5 md:h-5" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-amber-900 leading-tight">Nguy Cơ Trễ</div>
-                  <div className="text-[10px] font-black text-amber-500/80 uppercase tracking-widest mt-1">At Risk</div>
+                  <div className="font-bold text-[13px] md:text-sm text-amber-900 leading-tight">Nguy Cơ Trễ</div>
+                  <div className="text-[9px] md:text-[10px] font-black text-amber-500/80 uppercase tracking-widest mt-0.5 md:mt-1">At Risk</div>
                 </div>
               </div>
-              <span className="text-2xl font-black text-amber-600">{health.at_risk}</span>
+              <span className="text-xl md:text-2xl font-black text-amber-600">{health.at_risk}</span>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-rose-50/70 border border-rose-100 transition-colors hover:bg-rose-50">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-white text-rose-500 flex items-center justify-center shadow-sm border border-rose-100/50">
-                  <Clock size={20} strokeWidth={2.5} />
+            <div className="flex items-center justify-between p-3 md:p-4 rounded-2xl bg-rose-50/70 border border-rose-100 transition-colors hover:bg-rose-50">
+              <div className="flex items-center gap-2.5 md:gap-3.5">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white text-rose-500 flex items-center justify-center shadow-sm border border-rose-100/50">
+                  <Clock size={18} className="md:w-5 md:h-5" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-rose-900 leading-tight">Đã Cháy Hạn</div>
-                  <div className="text-[10px] font-black text-rose-500/80 uppercase tracking-widest mt-1">Overdue</div>
+                  <div className="font-bold text-[13px] md:text-sm text-rose-900 leading-tight">Đã Cháy Hạn</div>
+                  <div className="text-[9px] md:text-[10px] font-black text-rose-500/80 uppercase tracking-widest mt-0.5 md:mt-1">Overdue</div>
                 </div>
               </div>
-              <span className="text-2xl font-black text-rose-600">{health.overdue}</span>
+              <span className="text-xl md:text-2xl font-black text-rose-600">{health.overdue}</span>
             </div>
 
-            <div className="mt-2 text-center">
-              <span className="inline-block text-[11px] font-bold text-slate-500 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm">
-                Tổng lượt xin gia hạn (Extensions): <strong className="text-indigo-600 text-[13px] ml-1">{health.total_extensions}</strong>
+            <div className="mt-1 md:mt-2 text-center">
+              <span className="inline-block text-[10px] md:text-[11px] font-bold text-slate-500 bg-white px-3 md:px-3.5 py-1.5 md:py-2 rounded-xl border border-slate-200/80 shadow-sm">
+                Tổng lượt xin gia hạn (Extensions): <strong className="text-indigo-600 text-[12px] md:text-[13px] ml-1">{health.total_extensions}</strong>
               </span>
             </div>
           </div>
         </div>
 
         {/* Biểu đồ Story Points */}
-        <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-6 flex flex-col min-h-[400px] transition-all hover:shadow-xl hover:shadow-indigo-100/20">
-          <div className="flex justify-between items-start mb-6 shrink-0">
+        <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-200/20 p-4 md:p-5 lg:p-6 flex flex-col min-h-[300px] md:min-h-[350px] lg:min-h-[400px] transition-all hover:shadow-xl hover:shadow-indigo-100/20">
+          <div className="flex justify-between items-start mb-4 md:mb-6 shrink-0">
             <div>
-              <h3 className="font-black text-lg text-slate-800 tracking-tight">Phân Bổ Điểm Số (Story Points)</h3>
-              <p className="text-xs text-slate-500 font-medium mt-1">
+              <h3 className="font-black text-base md:text-lg text-slate-800 tracking-tight">Phân Bổ Điểm Số (Story Points)</h3>
+              <p className="text-[11px] md:text-xs text-slate-500 font-medium mt-0.5 md:mt-1">
                 So sánh điểm hoàn thành và điểm được giao theo phòng ban
               </p>
             </div>
           </div>
 
           {chartData.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-sm font-bold text-slate-300 uppercase tracking-widest bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <div className="flex-1 flex items-center justify-center text-xs md:text-sm font-bold text-slate-300 uppercase tracking-widest bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
               Chưa có dữ liệu phòng ban
             </div>
           ) : (
-            <div className="flex-1 w-full min-h-[280px] -ml-4">
+            <div className="flex-1 w-full min-h-[220px] md:min-h-[250px] lg:min-h-[280px] -ml-4 md:-ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -245,13 +245,13 @@ const AdminDashboard = ({ data }: AdminDashboardProps) => {
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: "#475569", fontSize: 11, fontWeight: 700 }}
+                    tick={{ fill: "#475569", fontSize: 10, fontWeight: 700 }}
                     dy={10}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: "#475569", fontSize: 11, fontWeight: 700 }}
+                    tick={{ fill: "#475569", fontSize: 10, fontWeight: 700 }}
                   />
                   <Tooltip
                     cursor={{ fill: "#f8fafc" }}
@@ -260,17 +260,17 @@ const AdminDashboard = ({ data }: AdminDashboardProps) => {
                       border: "none",
                       boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
                       fontWeight: 600,
-                      fontSize: "12px",
+                      fontSize: "11px",
                       padding: "8px 12px",
                     }}
                   />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: "12px", fontWeight: 600, paddingTop: "16px" }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", fontWeight: 600, paddingTop: "12px" }} />
                   <Bar
                     dataKey="completed"
                     name="Điểm hoàn thành"
                     stackId="a"
                     fill="#6366f1"
-                    barSize={36}
+                    barSize={window.innerWidth < 640 ? 24 : 36}
                     radius={[0, 0, 6, 6]}
                     className="hover:opacity-90 transition-opacity"
                   />
@@ -279,7 +279,7 @@ const AdminDashboard = ({ data }: AdminDashboardProps) => {
                     name="Điểm còn lại"
                     stackId="a"
                     fill="#cbd5e1"
-                    barSize={36}
+                    barSize={window.innerWidth < 640 ? 24 : 36}
                     radius={[6, 6, 0, 0]}
                     className="hover:opacity-90 transition-opacity"
                   />
