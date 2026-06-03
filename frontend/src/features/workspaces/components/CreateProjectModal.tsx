@@ -185,34 +185,34 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[110] p-3 md:p-4">
+      <div className="bg-white rounded-[1.25rem] md:rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
         
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Briefcase size={20} className="text-indigo-600" /> Khởi tạo Dự án
+        <div className="px-4 md:px-6 py-3.5 md:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+          <h2 className="text-[15px] md:text-lg font-bold text-slate-800 flex items-center gap-2">
+            <Briefcase size={18} className="text-indigo-600 md:w-5 md:h-5" /> Khởi tạo Dự án
           </h2>
-          <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-50"><X size={20} /></button>
+          <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-full transition-colors disabled:opacity-50"><X size={18} className="md:w-5 md:h-5" /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 no-scrollbar">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5 custom-scrollbar">
           
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Tên Dự Án *</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5">Tên Dự Án *</label>
             <input 
               type="text" value={name} onChange={(e) => setName(e.target.value)}
               placeholder="VD: Dự án Fluxboard Core..." maxLength={150} disabled={isProcessing}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all font-medium disabled:opacity-60"
+              className="w-full px-3.5 md:px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all font-medium disabled:opacity-60"
               required autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phòng Ban Chủ Quản *</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5">Phòng Ban Chủ Quản *</label>
             <select 
               value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}
               disabled={isLoadingDepts || availableDepartments.length === 0 || isProcessing}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all font-medium cursor-pointer disabled:opacity-60"
+              className="w-full px-3.5 md:px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all font-medium cursor-pointer disabled:opacity-60"
             >
               {isLoadingDepts && <option value="">Đang tải danh sách phòng ban...</option>}
               {availableDepartments.map((dept: any) => (
@@ -222,25 +222,25 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+            <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 md:mb-2 flex items-center gap-1.5">
               <Layers size={14} className="text-slate-400" /> Các Team Tham Gia * ({selectedTeamIds.length} đã chọn)
             </label>
-            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
+            <div className="border border-slate-200 rounded-xl p-2.5 md:p-3 bg-slate-50/50 space-y-1.5 max-h-32 md:max-h-36 overflow-y-auto custom-scrollbar">
               {isLoadingHierarchy ? (
-                <div className="flex items-center gap-2 py-2 text-xs font-medium text-slate-400 justify-center"><Loader2 size={14} className="animate-spin text-indigo-500" /> Đang load sơ đồ tổ chức...</div>
+                <div className="flex items-center gap-2 py-2 text-[11px] md:text-xs font-medium text-slate-400 justify-center"><Loader2 size={14} className="animate-spin text-indigo-500" /> Đang load sơ đồ tổ chức...</div>
               ) : availableTeams.length === 0 ? (
-                <div className="text-center py-2 text-xs text-slate-400 font-medium">Phòng ban này chưa có Team nào.</div>
+                <div className="text-center py-2 text-[11px] md:text-xs text-slate-400 font-medium">Phòng ban này chưa có Team nào.</div>
               ) : (
                 availableTeams.map((team: any) => {
                   const isChecked = selectedTeamIds.includes(team.id);
                   return (
                     <button
                       type="button" key={team.id} disabled={isProcessing} onClick={() => handleToggleTeam(team.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 ${
+                      className={`w-full flex items-center justify-between px-3 py-2 md:py-2.5 rounded-lg border text-[11px] md:text-xs font-bold transition-all disabled:opacity-60 ${
                         isChecked ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <span>{team.name} ({team.code || 'No Code'})</span>
+                      <span className="truncate pr-2">{team.name} ({team.code || 'No Code'})</span>
                       {isChecked && <div className="bg-indigo-600 text-white p-0.5 rounded-full shrink-0"><Check size={10} strokeWidth={3} /></div>}
                     </button>
                   );
@@ -250,27 +250,27 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+            <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 md:mb-2 flex items-center gap-1.5">
               <Users size={14} className="text-slate-400" /> Thành Viên Dự Án * ({selectedMemberIds.length} nhân sự)
             </label>
-            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-1.5 max-h-44 overflow-y-auto no-scrollbar">
+            <div className="border border-slate-200 rounded-xl p-2.5 md:p-3 bg-slate-50/50 space-y-1.5 max-h-40 md:max-h-44 overflow-y-auto custom-scrollbar">
               {selectedTeamIds.length === 0 ? (
-                <div className="text-center py-4 text-xs text-slate-400 font-medium">Vui lòng chọn Team ở trên.</div>
+                <div className="text-center py-4 text-[11px] md:text-xs text-slate-400 font-medium">Vui lòng chọn Team ở trên.</div>
               ) : availableMembers.length === 0 ? (
-                <div className="text-center py-4 text-xs text-slate-400 font-medium">Các Team được chọn chưa có thành viên.</div>
+                <div className="text-center py-4 text-[11px] md:text-xs text-slate-400 font-medium">Các Team được chọn chưa có thành viên.</div>
               ) : (
                 availableMembers.map((member: any) => {
                   const isChecked = selectedMemberIds.includes(member.id);
                   return (
                     <button
                       type="button" key={member.id} disabled={isProcessing} onClick={() => handleToggleMember(member.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 ${
+                      className={`w-full flex items-center justify-between px-3 py-2 md:py-2.5 rounded-lg border transition-all disabled:opacity-60 ${
                         isChecked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span>{member.fullName || member.full_name || member.name}</span>
-                        <span className="text-[10px] font-medium text-slate-400">{member.email}</span>
+                      <div className="flex flex-col items-start gap-0.5 min-w-0 pr-2">
+                        <span className="text-[11px] md:text-xs font-bold truncate w-full text-left">{member.fullName || member.full_name || member.name}</span>
+                        <span className="text-[9px] md:text-[10px] font-medium text-slate-400 truncate w-full text-left">{member.email}</span>
                       </div>
                       {isChecked && <div className="bg-emerald-600 text-white p-0.5 rounded-full shrink-0"><Check size={10} strokeWidth={3} /></div>}
                     </button>
@@ -281,10 +281,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Trạng Thái *</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5">Trạng Thái *</label>
             <select 
               value={status} onChange={(e) => setStatus(e.target.value)} disabled={isProcessing}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all cursor-pointer disabled:opacity-60"
+              className="w-full px-3.5 md:px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm font-medium outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all cursor-pointer disabled:opacity-60"
             >
               <option value="ACTIVE">Đang hoạt động (Active)</option>
               <option value="PLANNING">Đang lên kế hoạch (Planning)</option>
@@ -292,17 +292,28 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             </select>
           </div>
 
-          <div className="mt-8 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 shrink-0">
-            <button type="button" onClick={onClose} disabled={isProcessing} className="px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-50">Hủy</button>
+          <div className="mt-6 md:mt-8 flex flex-col-reverse sm:flex-row items-center sm:justify-end gap-2.5 md:gap-3 pt-4 border-t border-slate-100 shrink-0">
+            <button type="button" onClick={onClose} disabled={isProcessing} className="w-full sm:w-auto px-5 py-2.5 rounded-xl md:rounded-lg text-[13px] md:text-sm font-bold text-slate-500 bg-slate-100 sm:bg-transparent hover:bg-slate-200 sm:hover:bg-slate-100 disabled:opacity-50 transition-colors">
+              Hủy
+            </button>
             <button 
               type="submit" 
               disabled={isProcessing || isLoadingDepts || selectedMemberIds.length === 0} 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 shadow-md"
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl md:rounded-lg text-[13px] md:text-sm font-bold flex justify-center items-center gap-2 transition-all disabled:opacity-50 active:scale-95 shadow-md"
             >
               {isProcessing ? <><Loader2 size={16} className="animate-spin" /> Đang cấu hình...</> : 'Khai sinh Dự án'}
             </button>
           </div>
         </form>
+
+        {/* Custom Scrollbar Styles for the Lists */}
+        <style>{`
+            .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+            @media (min-width: 768px) { .custom-scrollbar::-webkit-scrollbar { width: 6px; } }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        `}</style>
       </div>
     </div>
   );
