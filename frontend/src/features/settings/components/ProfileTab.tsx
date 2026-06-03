@@ -79,8 +79,8 @@ export const ProfileTab: React.FC = () => {
   if (isLoadingUser) {
     return (
       <div className="w-full h-48 flex items-center justify-center gap-2 text-slate-400">
-        <Loader2 size={24} className="animate-spin text-indigo-600" />
-        <span className="text-sm font-medium">Đang tải thông tin tài khoản...</span>
+        <Loader2 className="animate-spin text-indigo-600 w-6 h-6 md:w-8 md:h-8" />
+        <span className="text-[13px] md:text-sm font-medium">Đang tải thông tin tài khoản...</span>
       </div>
     );
   }
@@ -93,38 +93,38 @@ export const ProfileTab: React.FC = () => {
     : matchedRole?.name || user?.system_role || 'Chưa xác định';
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-lg">
       {/* Message báo lỗi / thành công */}
       {message.text && (
         <div
-          className={`p-3 mb-6 rounded-xl text-sm font-medium border flex items-center gap-2 ${
+          className={`p-3 md:p-4 mb-5 md:mb-6 rounded-xl text-[13px] md:text-sm font-medium border flex items-start sm:items-center gap-2 md:gap-2.5 ${
             message.type === 'error'
               ? 'bg-rose-50 text-rose-700 border-rose-200'
               : 'bg-emerald-50 text-emerald-700 border-emerald-200'
           }`}
         >
           {message.type === 'error' ? (
-            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <AlertTriangle className="w-[18px] h-[18px] md:w-5 md:h-5 shrink-0 mt-0.5 sm:mt-0" />
           ) : (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="w-[18px] h-[18px] md:w-5 md:h-5 shrink-0 mt-0.5 sm:mt-0" />
           )}
-          {message.text}
+          <span className="leading-snug">{message.text}</span>
         </div>
       )}
 
       {/* Avatar section */}
-      <div className="flex items-center gap-5 mb-10">
-        <div className="relative">
+      <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 md:gap-5 mb-8 md:mb-10">
+        <div className="relative shrink-0">
           <img
             src={
               preview ||
               `https://ui-avatars.com/api/?name=${name}&background=6366f1&color=fff&bold=true`
             }
-            className="w-20 h-20 rounded-full object-cover ring-2 ring-white shadow-sm border border-slate-200 bg-white"
+            className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover ring-2 ring-white shadow-sm border border-slate-200 bg-white"
             alt="Avatar Preview"
           />
-          <label className="absolute -bottom-1 -right-1 p-1.5 bg-indigo-600 text-white rounded-full cursor-pointer shadow-sm hover:bg-indigo-700 transition-colors">
-            <Camera size={14} strokeWidth={2.5} />
+          <label className="absolute -bottom-1 -right-1 md:-bottom-1.5 md:-right-1.5 p-1.5 md:p-2 bg-indigo-600 text-white rounded-full cursor-pointer shadow-sm hover:bg-indigo-700 transition-colors">
+            <Camera size={14} className="md:w-4 md:h-4" strokeWidth={2.5} />
             <input
               type="file"
               className="hidden"
@@ -133,67 +133,67 @@ export const ProfileTab: React.FC = () => {
             />
           </label>
         </div>
-        <div>
-          <p className="font-semibold text-slate-800">{name}</p>
-          <p className="text-xs text-slate-500 mt-0.5">
+        <div className="pt-1 sm:pt-2 md:pt-3">
+          <p className="font-semibold text-slate-800 text-[15px] md:text-base">{name}</p>
+          <p className="text-[11px] md:text-xs text-slate-500 mt-0.5 md:mt-1">
             {file ? file.name : 'PNG, JPG hoặc GIF (tối đa 2MB)'}
           </p>
         </div>
       </div>
 
       {/* Form chỉnh sửa */}
-      <div className="space-y-5 max-w-lg">
+      <div className="space-y-4 md:space-y-5">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+          <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">
             Họ và tên
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full px-3.5 md:px-4 py-2.5 md:py-3 border border-slate-300 rounded-xl focus:outline-none text-[13px] md:text-sm text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             placeholder="Nhập họ tên"
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">
               Email
             </label>
             <input
               type="email"
               value={user?.email || ''}
               readOnly
-              className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
+              className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-100/80 border border-slate-200/80 text-[13px] md:text-sm text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">
               Phòng ban
             </label>
             <input
               type="text"
               value={user?.department || 'Chưa xác định'}
               readOnly
-              className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
+              className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-100/80 border border-slate-200/80 text-[13px] md:text-sm text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
             />
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+          <div className="sm:col-span-2">
+            <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">
               Vai trò hệ thống
             </label>
             {isLoadingRoles ? (
-              <div className="flex items-center gap-2 w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl">
+              <div className="flex items-center gap-2 w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-100/80 border border-slate-200/80 rounded-xl">
                 <Loader2 size={16} className="animate-spin text-slate-400" />
-                <span className="text-sm text-slate-400 font-medium">Đang tải vai trò...</span>
+                <span className="text-[13px] md:text-sm text-slate-400 font-medium">Đang tải vai trò...</span>
               </div>
             ) : (
               <input
                 type="text"
                 value={displayRoleName}
                 readOnly
-                className="w-full px-4 py-2.5 bg-slate-100/80 border border-slate-200/80 text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
+                className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-100/80 border border-slate-200/80 text-[13px] md:text-sm text-slate-500 font-medium rounded-xl cursor-not-allowed outline-none"
               />
             )}
           </div>
@@ -202,11 +202,11 @@ export const ProfileTab: React.FC = () => {
         <button
           onClick={handleSave}
           disabled={isPending}
-          className="mt-8 w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-2.5 rounded-xl font-bold hover:from-indigo-700 hover:to-indigo-800 active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200/50"
+          className="mt-6 md:mt-8 w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 md:px-8 py-2.5 md:py-3 rounded-xl text-[13px] md:text-sm font-bold hover:from-indigo-700 hover:to-indigo-800 active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200/50"
         >
           {isPending ? (
             <>
-              <Loader2 size={18} className="animate-spin" />
+              <Loader2 size={16} className="animate-spin md:w-[18px] md:h-[18px]" />
               Đang lưu...
             </>
           ) : (

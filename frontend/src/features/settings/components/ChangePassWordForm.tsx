@@ -95,29 +95,29 @@ const ChangePasswordForm = () => {
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-md">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 w-full max-w-md">
       {/* Thông báo */}
       {serverMessage.text && (
         <div
-          className={`p-3 mb-6 rounded-xl text-sm font-medium border flex items-center gap-2 ${
+          className={`p-3 md:p-4 mb-5 md:mb-6 rounded-xl text-[13px] md:text-sm font-medium border flex items-center gap-2 md:gap-2.5 ${
             serverMessage.type === 'error'
               ? 'bg-rose-50 text-rose-700 border-rose-200'
               : 'bg-emerald-50 text-emerald-700 border-emerald-200'
           }`}
         >
           {serverMessage.type === 'error' ? (
-            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <AlertTriangle className="w-4 h-4 md:w-[18px] md:h-[18px] shrink-0" />
           ) : (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 md:w-[18px] md:h-[18px] shrink-0" />
           )}
           {serverMessage.text}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
         {/* Mật khẩu hiện tại */}
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mật khẩu hiện tại</label>
+          <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">Mật khẩu hiện tại</label>
           <div className="relative">
             <input
               type={showPasswords.current ? 'text' : 'password'}
@@ -125,7 +125,7 @@ const ChangePasswordForm = () => {
               value={formData.currentPassword}
               onChange={handleChange}
               placeholder="••••••••"
-              className={`w-full px-4 py-2.5 pr-10 border rounded-xl focus:outline-none text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
+              className={`w-full px-3.5 md:px-4 py-2.5 md:py-3 pr-10 border rounded-xl focus:outline-none text-[13px] md:text-sm text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
                 errors.currentPassword
                   ? 'border-rose-400 focus:ring-2 focus:ring-rose-100'
                   : 'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -134,20 +134,20 @@ const ChangePasswordForm = () => {
             <button
               type="button"
               onClick={() => togglePasswordVisibility('current')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
               tabIndex={-1}
             >
-              {showPasswords.current ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPasswords.current ? <EyeOff size={16} className="md:w-[18px] md:h-[18px]" /> : <Eye size={16} className="md:w-[18px] md:h-[18px]" />}
             </button>
           </div>
           {errors.currentPassword && (
-            <p className="text-rose-500 text-xs mt-1.5 font-medium">{errors.currentPassword}</p>
+            <p className="text-rose-500 text-[11px] md:text-xs mt-1.5 font-medium">{errors.currentPassword}</p>
           )}
         </div>
 
         {/* Mật khẩu mới */}
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mật khẩu mới</label>
+          <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">Mật khẩu mới</label>
           <div className="relative">
             <input
               type={showPasswords.new ? 'text' : 'password'}
@@ -155,7 +155,7 @@ const ChangePasswordForm = () => {
               value={formData.newPassword}
               onChange={handleChange}
               placeholder="Ít nhất 8 ký tự, 1 chữ hoa, 1 số"
-              className={`w-full px-4 py-2.5 pr-10 border rounded-xl focus:outline-none text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
+              className={`w-full px-3.5 md:px-4 py-2.5 md:py-3 pr-10 border rounded-xl focus:outline-none text-[13px] md:text-sm text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
                 errors.newPassword
                   ? 'border-rose-400 focus:ring-2 focus:ring-rose-100'
                   : 'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -164,20 +164,20 @@ const ChangePasswordForm = () => {
             <button
               type="button"
               onClick={() => togglePasswordVisibility('new')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
               tabIndex={-1}
             >
-              {showPasswords.new ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPasswords.new ? <EyeOff size={16} className="md:w-[18px] md:h-[18px]" /> : <Eye size={16} className="md:w-[18px] md:h-[18px]" />}
             </button>
           </div>
           {errors.newPassword && (
-            <p className="text-rose-500 text-xs mt-1.5 font-medium">{errors.newPassword}</p>
+            <p className="text-rose-500 text-[11px] md:text-xs mt-1.5 font-medium">{errors.newPassword}</p>
           )}
         </div>
 
         {/* Xác nhận mật khẩu */}
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Xác nhận mật khẩu</label>
+          <label className="block text-[13px] md:text-sm font-semibold text-slate-700 mb-1.5 md:mb-2">Xác nhận mật khẩu</label>
           <div className="relative">
             <input
               type={showPasswords.confirm ? 'text' : 'password'}
@@ -185,7 +185,7 @@ const ChangePasswordForm = () => {
               value={formData.confirmPassword}
               onChange={handleChange}
               placeholder="Nhập lại mật khẩu mới"
-              className={`w-full px-4 py-2.5 pr-10 border rounded-xl focus:outline-none text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
+              className={`w-full px-3.5 md:px-4 py-2.5 md:py-3 pr-10 border rounded-xl focus:outline-none text-[13px] md:text-sm text-slate-800 placeholder-slate-400 transition-all bg-white/80 backdrop-blur-sm ${
                 errors.confirmPassword
                   ? 'border-rose-400 focus:ring-2 focus:ring-rose-100'
                   : 'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -194,21 +194,21 @@ const ChangePasswordForm = () => {
             <button
               type="button"
               onClick={() => togglePasswordVisibility('confirm')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
               tabIndex={-1}
             >
-              {showPasswords.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPasswords.confirm ? <EyeOff size={16} className="md:w-[18px] md:h-[18px]" /> : <Eye size={16} className="md:w-[18px] md:h-[18px]" />}
             </button>
           </div>
           {errors.confirmPassword && (
-            <p className="text-rose-500 text-xs mt-1.5 font-medium">{errors.confirmPassword}</p>
+            <p className="text-rose-500 text-[11px] md:text-xs mt-1.5 font-medium">{errors.confirmPassword}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isLoading || Object.keys(errors).length > 0}
-          className={`w-full sm:w-auto mt-8 py-2.5 px-8 font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 
+          className={`w-full sm:w-auto mt-6 md:mt-8 py-2.5 md:py-3 px-6 md:px-8 font-bold text-[13px] md:text-sm rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 
             ${
               isLoading || Object.keys(errors).length > 0
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
@@ -217,7 +217,7 @@ const ChangePasswordForm = () => {
         >
           {isLoading ? (
             <>
-              <Loader2 className="animate-spin w-5 h-5" />
+              <Loader2 className="animate-spin w-4 h-4 md:w-5 md:h-5" />
               Đang xử lý...
             </>
           ) : (
