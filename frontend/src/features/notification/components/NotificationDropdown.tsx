@@ -123,11 +123,11 @@ const NotificationDropdown: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-[430px] max-w-[calc(100vw-2rem)] bg-white rounded-[1.5rem] border border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+        <div className="absolute right-0 sm:right-0 -mr-16 sm:mr-0 mt-3 w-[90vw] md:w-[430px] max-w-[430px] bg-white rounded-[1.5rem] border border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="px-4 md:px-5 py-3 md:py-4 border-b border-slate-100 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-base font-extrabold text-slate-800">Thông báo</h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">
+              <h3 className="text-sm md:text-base font-extrabold text-slate-800">Thông báo</h3>
+              <p className="text-[11px] md:text-xs font-bold text-slate-400 mt-0.5 md:mt-1">
                 {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Không có thông báo chưa đọc'}
               </p>
             </div>
@@ -136,22 +136,22 @@ const NotificationDropdown: React.FC = () => {
               <button
                 type="button"
                 onClick={handleMarkAll}
-                className="inline-flex items-center gap-1.5 text-xs font-extrabold text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50"
+                className="inline-flex items-center gap-1.5 text-[11px] md:text-xs font-extrabold text-indigo-600 hover:text-indigo-700 px-2 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
               >
-                <CheckCheck size={14} />
+                <CheckCheck size={14} className="shrink-0" />
                 Đọc tất cả
               </button>
             )}
           </div>
 
-          <div className="max-h-[520px] overflow-y-auto custom-scrollbar">
+          <div className="max-h-[60vh] md:max-h-[520px] overflow-y-auto custom-scrollbar">
             {latestNotifications.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <div className="w-14 h-14 mx-auto rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mb-3">
+              <div className="px-6 py-10 md:py-12 text-center">
+                <div className="w-12 h-12 md:w-14 md:h-14 mx-auto rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mb-3">
                   <Bell size={24} className="text-slate-300" />
                 </div>
-                <p className="text-sm font-bold text-slate-500">Chưa có thông báo</p>
-                <p className="text-xs text-slate-400 mt-1">Thông báo mới sẽ xuất hiện tại đây.</p>
+                <p className="text-[13px] md:text-sm font-bold text-slate-500">Chưa có thông báo</p>
+                <p className="text-[11px] md:text-xs text-slate-400 mt-1">Thông báo mới sẽ xuất hiện tại đây.</p>
               </div>
             ) : (
               latestNotifications.map((notification) => {
@@ -163,7 +163,7 @@ const NotificationDropdown: React.FC = () => {
                     key={notification.id}
                     type="button"
                     onClick={() => handleNotificationClick(notification)}
-                    className={`w-full text-left px-5 py-4 border-b border-slate-100 last:border-b-0 transition-all group relative ${
+                    className={`w-full text-left px-4 md:px-5 py-3 md:py-4 border-b border-slate-100 last:border-b-0 transition-all group relative ${
                       isRead
                         ? 'bg-white hover:bg-slate-50 opacity-55'
                         : 'bg-indigo-50/55 hover:bg-indigo-50 opacity-100'
@@ -175,7 +175,7 @@ const NotificationDropdown: React.FC = () => {
 
                     <div className="flex items-start gap-3">
                       <div
-                        className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                        className={`w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center shrink-0 ${
                           isRead ? 'bg-slate-50 border-slate-200 grayscale' : `${style.bg} ${style.border}`
                         }`}
                       >
@@ -184,23 +184,23 @@ const NotificationDropdown: React.FC = () => {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className={`text-sm line-clamp-1 ${isRead ? 'font-bold text-slate-500' : 'font-extrabold text-slate-900'}`}>
+                          <h4 className={`text-[13px] md:text-sm line-clamp-1 ${isRead ? 'font-bold text-slate-500' : 'font-extrabold text-slate-900'}`}>
                             {notification.title || 'Thông báo mới'}
                           </h4>
 
                           {!isRead && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 mt-1.5" />}
                         </div>
 
-                        <p className={`mt-1 text-xs leading-relaxed line-clamp-2 ${isRead ? 'text-slate-400' : 'text-slate-600'}`}>
+                        <p className={`mt-0.5 md:mt-1 text-[11px] md:text-xs leading-relaxed line-clamp-2 ${isRead ? 'text-slate-400' : 'text-slate-600'}`}>
                           {notification.message}
                         </p>
 
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-slate-400">
+                        <div className="mt-2.5 md:mt-3 flex items-center justify-between gap-2">
+                          <span className="text-[10px] md:text-[11px] font-bold text-slate-400">
                             {getTimeLabel(notification)}
                           </span>
 
-                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-indigo-600 group-hover:text-indigo-700">
+                          <span className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-extrabold text-indigo-600 group-hover:text-indigo-700">
                             Mở công việc
                             <ExternalLink size={12} />
                           </span>
@@ -216,7 +216,7 @@ const NotificationDropdown: React.FC = () => {
           <button
             type="button"
             onClick={handleOpenAll}
-            className="w-full px-5 py-4 border-t border-slate-100 bg-white hover:bg-indigo-50 text-indigo-600 text-sm font-extrabold transition-colors"
+            className="w-full px-5 py-3.5 md:py-4 border-t border-slate-100 bg-white hover:bg-indigo-50 text-indigo-600 text-[13px] md:text-sm font-extrabold transition-colors"
           >
             Xem tất cả thông báo
           </button>
