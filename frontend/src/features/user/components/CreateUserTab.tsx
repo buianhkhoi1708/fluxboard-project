@@ -22,7 +22,7 @@ const CreateUserTab: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   // 🚀 Tự động tải danh sách Role từ API lúc mới vào trang
- useEffect(() => {
+  useEffect(() => {
     const fetchRoles = async () => {
       try {
         const res: any = await userApi.getRoles();
@@ -104,19 +104,19 @@ const CreateUserTab: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-4 md:p-6 lg:p-8">
+    <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 h-full overflow-y-auto no-scrollbar p-3 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         
         {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div className="space-y-1">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-3 text-slate-800">
-              <div className="p-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-indigo-100">
-                <UserPlus className="text-indigo-600" size={24} />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 mb-6 md:mb-8">
+          <div className="space-y-1 md:space-y-1.5">
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-extrabold tracking-tight flex items-center gap-2.5 md:gap-3 text-slate-800">
+              <div className="p-1.5 md:p-2 bg-white/80 backdrop-blur-sm rounded-lg md:rounded-xl shadow-sm border border-indigo-100">
+                <UserPlus className="text-indigo-600 w-5 h-5 md:w-6 md:h-6" />
               </div>
               Cấp tài khoản mới
             </h1>
-            <p className="text-sm font-medium text-slate-500 pl-12">
+            <p className="text-xs md:text-sm font-medium text-slate-500 pl-10 md:pl-12">
               Tạo tài khoản và phân quyền cho nhân sự mới.
             </p>
           </div>
@@ -124,25 +124,25 @@ const CreateUserTab: React.FC = () => {
 
         {/* FORM CARD */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-lg overflow-hidden">
-          <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+          <form onSubmit={handleSubmit} className="p-5 md:p-6 lg:p-8 space-y-5 md:space-y-6">
             
             {/* Thông báo */}
             {successMsg && (
-              <div className="flex items-center gap-2 p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl text-sm font-bold">
-                <CheckCircle2 size={18} /> {successMsg}
+              <div className="flex items-center gap-2 p-3.5 md:p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl md:rounded-2xl text-[13px] md:text-sm font-bold">
+                <CheckCircle2 size={18} className="shrink-0 md:w-5 md:h-5" /> <span className="leading-snug">{successMsg}</span>
               </div>
             )}
             {errorMsg && (
-              <div className="flex items-center gap-2 p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-sm font-bold">
-                <Shield size={18} /> {errorMsg}
+              <div className="flex items-center gap-2 p-3.5 md:p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl md:rounded-2xl text-[13px] md:text-sm font-bold">
+                <Shield size={18} className="shrink-0 md:w-5 md:h-5" /> <span className="leading-snug">{errorMsg}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
               {/* Full Name */}
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <User size={16} className="text-slate-400" /> Họ và tên
+              <div className="space-y-1.5 md:space-y-2">
+                <label className="text-[13px] md:text-sm font-bold text-slate-700 flex items-center gap-1.5 md:gap-2">
+                  <User size={16} className="text-slate-400 md:w-[18px] md:h-[18px]" /> Họ và tên
                 </label>
                 <input 
                   required
@@ -151,14 +151,14 @@ const CreateUserTab: React.FC = () => {
                   value={formData.fullName}
                   onChange={handleChange}
                   placeholder="VD: Nguyễn Văn A" 
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                  className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-[13px] md:text-sm text-slate-700"
                 />
               </div>
 
               {/* Email */}
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Mail size={16} className="text-slate-400" /> Địa chỉ Email
+              <div className="space-y-1.5 md:space-y-2">
+                <label className="text-[13px] md:text-sm font-bold text-slate-700 flex items-center gap-1.5 md:gap-2">
+                  <Mail size={16} className="text-slate-400 md:w-[18px] md:h-[18px]" /> Địa chỉ Email
                 </label>
                 <input 
                   required
@@ -167,14 +167,14 @@ const CreateUserTab: React.FC = () => {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="email@fluxboard.com" 
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                  className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-[13px] md:text-sm text-slate-700"
                 />
               </div>
 
               {/* Password */}
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Lock size={16} className="text-slate-400" /> Mật khẩu khởi tạo
+              <div className="space-y-1.5 md:space-y-2">
+                <label className="text-[13px] md:text-sm font-bold text-slate-700 flex items-center gap-1.5 md:gap-2">
+                  <Lock size={16} className="text-slate-400 md:w-[18px] md:h-[18px]" /> Mật khẩu khởi tạo
                 </label>
                 <input 
                   required
@@ -184,14 +184,14 @@ const CreateUserTab: React.FC = () => {
                   onChange={handleChange}
                   placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)" 
                   minLength={6}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-slate-700"
+                  className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-medium text-[13px] md:text-sm text-slate-700"
                 />
               </div>
 
               {/* DYNAMIC ROLE SELECTOR */}
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Shield size={16} className="text-slate-400" /> Quyền hạn (Role)
+              <div className="space-y-1.5 md:space-y-2">
+                <label className="text-[13px] md:text-sm font-bold text-slate-700 flex items-center gap-1.5 md:gap-2">
+                  <Shield size={16} className="text-slate-400 md:w-[18px] md:h-[18px]" /> Quyền hạn (Role)
                 </label>
                 
                 <div className="relative">
@@ -200,7 +200,7 @@ const CreateUserTab: React.FC = () => {
                     value={formData.role}
                     onChange={handleChange}
                     disabled={isLoadingRoles || roles.length === 0}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-slate-700 appearance-none disabled:opacity-50"
+                    className="w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-[13px] md:text-sm text-slate-700 appearance-none disabled:opacity-50"
                   >
                     {isLoadingRoles ? (
                       <option value="">Đang tải danh sách quyền...</option>
@@ -225,13 +225,13 @@ const CreateUserTab: React.FC = () => {
             <hr className="border-slate-100" />
 
             {/* Submit Button */}
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row justify-end pt-2 md:pt-0">
               <button 
                 type="submit" 
                 disabled={isSubmitting || isLoadingRoles || roles.length === 0}
-                className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-indigo-200/50 transition-all duration-200 active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 md:px-8 py-3 md:py-3.5 rounded-xl font-bold text-[13px] md:text-sm shadow-lg shadow-indigo-200/50 transition-all duration-200 active:scale-95 disabled:opacity-70 disabled:active:scale-100"
               >
-                {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+                {isSubmitting ? <Loader2 size={18} className="animate-spin md:w-5 md:h-5" /> : <UserPlus size={18} className="md:w-5 md:h-5" />}
                 {isSubmitting ? 'Đang tạo...' : 'Xác nhận tạo tài khoản'}
               </button>
             </div>
