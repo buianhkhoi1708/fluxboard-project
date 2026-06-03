@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query'; 
 import { X, Search, ChevronDown, Loader2, Building2, Users, User, Hash, Check } from 'lucide-react';
-
-// 🚀 1. XÓA import useOrgStore cũ đi, IMPORT HOOK useGetOrgTree VÀO ĐÂY
-// (Sếp check lại đường dẫn import cho đúng thư mục của sếp nhé, tui đoán là ../hooks/useOrgQueries)
 import { useGetOrgTree } from '../hooks/useOrgQueries'; 
-
 import { orgApi } from '../api/organizationApi';
 import { OrgMember } from '../types/orgTypes';
 
@@ -38,9 +34,6 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
   targetDept
 }) => {
   const queryClient = useQueryClient();
-
-  // 🚀 2. DÙNG TANSTACK QUERY LẤY DATA PHÒNG BAN NGAY TRONG MODAL 
-  // (Nó sẽ xài lại cache của trang ngoài rất mượt, không tốn API)
   const { data: orgTree = [] } = useGetOrgTree();
   
   const initialForm: OrgFormData = { 
@@ -101,7 +94,6 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
     }
   }, [isOpen, targetDeptId, action, targetTeam, targetDept, mode]);
 
-  // Logic tìm kiếm Lead
   useEffect(() => {
     if (searchLeadTerm.trim().length < 2) {
       setSearchResults([]);
@@ -207,77 +199,76 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-[24px] w-full max-w-lg shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex flex-col relative max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm">
+      <div className="bg-white rounded-[1.25rem] md:rounded-[24px] w-full max-w-lg shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex flex-col relative max-h-[90vh]">
         
         {/* HEADER */}
-        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-[24px] shrink-0">
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-2xl flex items-center justify-center shadow-sm border ${mode === 'DEPARTMENT' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-              {mode === 'DEPARTMENT' ? <Building2 size={24} strokeWidth={1.5} /> : <Users size={24} strokeWidth={1.5} />}
+        <div className="px-5 md:px-8 py-5 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-[1.25rem] md:rounded-t-[24px] shrink-0">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className={`p-2.5 md:p-3 rounded-2xl flex items-center justify-center shadow-sm border ${mode === 'DEPARTMENT' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+              {mode === 'DEPARTMENT' ? <Building2 size={22} className="md:w-6 md:h-6" strokeWidth={1.5} /> : <Users size={22} className="md:w-6 md:h-6" strokeWidth={1.5} />}
             </div>
             <div>
-              <h2 className="font-black text-xl text-slate-800 tracking-tight">
+              <h2 className="font-black text-lg md:text-xl text-slate-800 tracking-tight">
                 {mode === 'DEPARTMENT' 
                   ? (action === 'EDIT' ? 'Cập nhật Phòng ban' : 'Tạo Phòng Ban mới')
-                  : (action === 'EDIT' ? 'Cập nhật thông tin Team' : 'Thêm Team mới')}
+                  : (action === 'EDIT' ? 'Cập nhật Team' : 'Thêm Team mới')}
               </h2>
-              <p className="text-xs font-medium text-slate-400 mt-0.5">
+              <p className="text-[11px] md:text-xs font-medium text-slate-400 mt-0.5">
                 Thiết lập thông tin & nhân sự
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors self-start">
+          <button onClick={onClose} className="p-2 -mr-1 md:mr-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors self-start">
             <X size={20} />
           </button>
         </div>
 
         {/* FORM BODY */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+        <form onSubmit={handleSubmit} className="p-5 md:p-8 space-y-5 md:space-y-6 overflow-y-auto custom-scrollbar">
           
           {mode === 'TEAM' && (
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Thuộc phòng ban <span className="text-rose-500">*</span></label>
+              <label className="block text-xs md:text-sm font-bold text-slate-700 mb-1.5 md:mb-2">Thuộc phòng ban <span className="text-rose-500">*</span></label>
               <div className="relative">
-                <Building2 size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Building2 size={16} className="absolute left-3.5 md:left-4 top-1/2 -translate-y-1/2 text-slate-400 md:w-[18px] md:h-[18px]" />
                 <select 
                   required 
                   value={formData.departmentId} 
                   onChange={e => setFormData({...formData, departmentId: e.target.value})} 
-                  className="w-full pl-11 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none cursor-pointer"
+                  className="w-full pl-10 md:pl-11 pr-10 py-3 md:py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none cursor-pointer"
                 >
                   <option value="" disabled>-- Chọn phòng ban --</option>
-                  {/* 🚀 LIST PHÒNG BAN ĐƯỢC MAP TỪ DATA TANSTACK QUERY */}
                   {orgTree.map((dept: any) => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
                 </select>
-                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <ChevronDown size={16} className="absolute right-3.5 md:right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Tên {mode === 'DEPARTMENT' ? 'phòng ban' : 'Team'} <span className="text-rose-500">*</span></label>
+              <label className="block text-xs md:text-sm font-bold text-slate-700 mb-1.5 md:mb-2">Tên {mode === 'DEPARTMENT' ? 'phòng ban' : 'Team'} <span className="text-rose-500">*</span></label>
               <input 
                 required 
                 type="text" 
                 placeholder="VD: Khối Kỹ Thuật"
                 value={formData.name} 
                 onChange={e => setFormData({...formData, name: e.target.value})} 
-                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-slate-400" 
+                className="w-full px-3.5 md:px-4 py-3 md:py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-slate-400" 
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Mã Code <span className="text-rose-500">*</span></label>
+              <label className="block text-xs md:text-sm font-bold text-slate-700 mb-1.5 md:mb-2">Mã Code <span className="text-rose-500">*</span></label>
               <div className="relative">
-                <Hash size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Hash size={16} className="absolute left-3.5 md:left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   required 
                   type="text" 
                   placeholder="VD: ENG"
                   value={formData.code} 
                   onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} 
-                  className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all uppercase placeholder:text-slate-400 placeholder:normal-case" 
+                  className="w-full pl-9 md:pl-10 pr-3.5 md:pr-4 py-3 md:py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] md:text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all uppercase placeholder:text-slate-400 placeholder:normal-case" 
                 />
               </div>
             </div>
@@ -285,68 +276,67 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
           
           {/* LEADER SEARCH */}
           <div className="relative">
-            <label className="block text-sm font-bold text-slate-700 mb-2">Chỉ định Leader</label>
+            <label className="block text-xs md:text-sm font-bold text-slate-700 mb-1.5 md:mb-2">Chỉ định Leader</label>
             <div 
               onClick={() => setShowLeadDropdown(!showLeadDropdown)} 
-              className={`w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer transition-all hover:bg-slate-100 ${showLeadDropdown ? 'ring-4 ring-indigo-50 border-indigo-400 bg-white' : ''}`}
+              className={`w-full px-3.5 md:px-4 py-3 md:py-3.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer transition-all hover:bg-slate-100 ${showLeadDropdown ? 'ring-4 ring-indigo-50 border-indigo-400 bg-white' : ''}`}
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${formData.leadName ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'}`}>
-                  {formData.leadName ? formData.leadName.charAt(0).toUpperCase() : <User size={14} />}
+              <div className="flex items-center gap-2.5 md:gap-3">
+                <div className={`w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[10px] md:text-xs font-bold ${formData.leadName ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'}`}>
+                  {formData.leadName ? formData.leadName.charAt(0).toUpperCase() : <User size={12} className="md:w-[14px] md:h-[14px]" />}
                 </div>
-                <span className={`text-sm font-medium ${formData.leadName ? 'text-slate-800' : 'text-slate-400'}`}>
+                <span className={`text-[13px] md:text-sm font-medium ${formData.leadName ? 'text-slate-800' : 'text-slate-400'}`}>
                   {formData.leadName || 'Tìm kiếm người quản lý...'}
                 </span>
               </div>
-              <ChevronDown size={18} className={`text-slate-400 transition-transform duration-200 ${showLeadDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown size={16} className={`text-slate-400 md:w-[18px] md:h-[18px] transition-transform duration-200 ${showLeadDropdown ? 'rotate-180' : ''}`} />
             </div>
 
             {showLeadDropdown && (
               <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden">
-                <div className="p-3 border-b border-slate-100 bg-slate-50/50 relative">
-                  <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="p-2 md:p-3 border-b border-slate-100 bg-slate-50/50 relative">
+                  <Search size={14} className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-400 md:w-4 md:h-4" />
                   <input 
                     autoFocus type="text" placeholder="Gõ tên hoặc email..." value={searchLeadTerm} onChange={(e) => setSearchLeadTerm(e.target.value)} 
-                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg outline-none text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50" 
+                    className="w-full pl-9 md:pl-10 pr-3.5 md:pr-4 py-2 bg-white border border-slate-200 rounded-lg outline-none text-[13px] md:text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50" 
                   />
                 </div>
                 <ul className="max-h-48 overflow-y-auto custom-scrollbar py-1">
                   {isSearchingLead ? (
-                    <li className="p-4 text-center text-slate-400"><Loader2 className="animate-spin inline" size={18} /></li>
+                    <li className="p-4 text-center text-slate-400"><Loader2 className="animate-spin inline" size={16} /></li>
                   ) : searchResults.length > 0 ? (
                     searchResults.map(u => (
-                      <li key={u.id || u.user_id} onClick={() => handleSelectLead(u)} className="px-4 py-3 hover:bg-indigo-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-3 group">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-200 group-hover:text-indigo-700">
+                      <li key={u.id || u.user_id} onClick={() => handleSelectLead(u)} className="px-3.5 md:px-4 py-2.5 md:py-3 hover:bg-indigo-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-2.5 md:gap-3 group">
+                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] md:text-xs group-hover:bg-indigo-200 group-hover:text-indigo-700 shrink-0">
                            {(u.full_name || u.fullName || u.name || 'U').charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <span className="font-bold text-sm block group-hover:text-indigo-700">{u.full_name || u.fullName || u.name}</span>
-                          <span className="text-[11px] text-slate-400">{u.email}</span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-[13px] md:text-sm block group-hover:text-indigo-700 truncate">{u.full_name || u.fullName || u.name}</span>
+                          <span className="text-[10px] md:text-[11px] text-slate-400 truncate block">{u.email}</span>
                         </div>
                       </li>
                     ))
-                  ) : <li className="p-4 text-center text-sm text-slate-400">Không tìm thấy kết quả.</li>}
+                  ) : <li className="p-4 text-center text-[13px] md:text-sm text-slate-400">Không tìm thấy kết quả.</li>}
                 </ul>
               </div>
             )}
           </div>
 
-          {/* 🚀 MULTI-SELECT MEMBERS */}
+          {/* MULTI-SELECT MEMBERS */}
           {mode === 'TEAM' && (
-            <div className="pt-4 border-t border-slate-100 relative">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-bold text-slate-700">Gom nhanh thành viên <span className="text-xs font-normal text-slate-400 ml-1">(Từ danh sách chưa gán)</span></label>
+            <div className="pt-3 md:pt-4 border-t border-slate-100 relative">
+              <div className="flex justify-between items-center mb-1.5 md:mb-2">
+                <label className="block text-xs md:text-sm font-bold text-slate-700">Gom nhanh thành viên <span className="text-[10px] md:text-xs font-normal text-slate-400 ml-0.5 md:ml-1">(Từ ds chưa gán)</span></label>
               </div>
 
-              {/* Danh sách các Member đã chọn (Pills) */}
               {selectedMembers.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex flex-wrap gap-1.5 md:gap-2 mb-2.5 md:mb-3">
                   {selectedMembers.map(m => (
-                    <div key={m.id} className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 group shadow-sm transition-all">
-                      <span>{m.full_name || m.fullName}</span>
+                    <div key={m.id} className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 md:px-3 py-1 md:py-1.5 rounded-xl text-[11px] md:text-xs font-bold flex items-center gap-1.5 md:gap-2 group shadow-sm transition-all">
+                      <span className="truncate max-w-[100px] md:max-w-none">{m.full_name || m.fullName}</span>
                       <X 
-                        size={14} 
-                        className="cursor-pointer text-indigo-400 group-hover:text-rose-500 group-hover:scale-110 transition-all" 
+                        size={12} 
+                        className="cursor-pointer text-indigo-400 md:w-[14px] md:h-[14px] group-hover:text-rose-500 group-hover:scale-110 transition-all shrink-0" 
                         onClick={() => toggleSelectMember(m)}
                       />
                     </div>
@@ -354,22 +344,20 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
                 </div>
               )}
 
-              {/* Nút mở Dropdown Chọn Member */}
               <div 
                 onClick={() => setShowMemberDropdown(!showMemberDropdown)} 
-                className={`w-full px-4 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex justify-between items-center cursor-pointer transition-all hover:bg-slate-100 ${showMemberDropdown ? 'border-indigo-400 bg-white' : ''}`}
+                className={`w-full px-3.5 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex justify-between items-center cursor-pointer transition-all hover:bg-slate-100 ${showMemberDropdown ? 'border-indigo-400 bg-white' : ''}`}
               >
-                <span className="text-sm font-medium text-slate-500">
-                  <Users size={16} className="inline mr-2 text-slate-400" />
+                <span className="text-[13px] md:text-sm font-medium text-slate-500 flex items-center gap-1.5 md:gap-2">
+                  <Users size={14} className="text-slate-400 md:w-4 md:h-4" />
                   Bấm để chọn nhân sự...
                 </span>
-                <ChevronDown size={18} className={`text-slate-400 transition-transform duration-200 ${showMemberDropdown ? 'rotate-180' : ''}`} />
+                <ChevronDown size={16} className={`text-slate-400 md:w-[18px] md:h-[18px] transition-transform duration-200 ${showMemberDropdown ? 'rotate-180' : ''}`} />
               </div>
 
-              {/* Dropdown Member List */}
               {showMemberDropdown && (
                 <div className="absolute z-40 w-full mt-2 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden">
-                  <ul className="max-h-56 overflow-y-auto custom-scrollbar py-2">
+                  <ul className="max-h-48 md:max-h-56 overflow-y-auto custom-scrollbar py-1.5 md:py-2">
                     {unassignedUsers.length > 0 ? (
                       unassignedUsers.map(u => {
                         const isSelected = selectedMembers.some(m => m.id === u.id);
@@ -377,27 +365,27 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
                           <li 
                             key={u.id} 
                             onClick={() => toggleSelectMember(u)} 
-                            className={`px-4 py-2.5 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
+                            className={`px-3.5 md:px-4 py-2 md:py-2.5 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
                           >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
+                            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                              <div className={`w-7 h-7 md:w-8 md:h-8 shrink-0 rounded-full flex items-center justify-center font-bold text-[10px] md:text-xs transition-colors ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
                                 {(u.full_name || u.fullName || 'U').charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <span className={`text-sm font-bold block transition-colors ${isSelected ? 'text-indigo-700' : 'text-slate-700 group-hover:text-slate-900'}`}>{u.full_name || u.fullName}</span>
-                                <span className="text-[11px] text-slate-400">{u.email}</span>
+                              <div className="min-w-0">
+                                <span className={`text-[13px] md:text-sm font-bold block truncate transition-colors ${isSelected ? 'text-indigo-700' : 'text-slate-700 group-hover:text-slate-900'}`}>{u.full_name || u.fullName}</span>
+                                <span className="text-[10px] md:text-[11px] text-slate-400 truncate block">{u.email}</span>
                               </div>
                             </div>
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white group-hover:border-indigo-400'}`}>
-                               {isSelected && <Check size={14} strokeWidth={3} />}
+                            <div className={`w-4 h-4 md:w-5 md:h-5 shrink-0 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white group-hover:border-indigo-400'}`}>
+                               {isSelected && <Check size={12} className="md:w-3.5 md:h-3.5" strokeWidth={3} />}
                             </div>
                           </li>
                         );
                       })
                     ) : (
-                      <li className="p-6 text-center">
-                        <User className="mx-auto text-slate-300 mb-2" size={24} />
-                        <span className="text-sm text-slate-500 font-medium">Hiện không có nhân sự nào đang trống.</span>
+                      <li className="p-5 md:p-6 text-center">
+                        <User className="mx-auto text-slate-300 mb-1.5 md:mb-2 w-5 h-5 md:w-6 md:h-6" />
+                        <span className="text-[13px] md:text-sm text-slate-500 font-medium">Hiện không có nhân sự nào đang trống.</span>
                       </li>
                     )}
                   </ul>
@@ -406,15 +394,15 @@ const OrgFormModal: React.FC<OrgFormModalProps> = ({
             </div>
           )}
 
-          <div className="pt-6 shrink-0 bg-white">
+          <div className="pt-4 md:pt-6 shrink-0 bg-white mt-auto">
             <button 
               disabled={isSubmitting || (mode === 'TEAM' && !formData.departmentId)} 
               type="submit" 
-              className="w-full bg-slate-900 text-white font-bold text-sm py-4 rounded-xl hover:bg-indigo-600 shadow-[0_8px_20px_rgb(0,0,0,0.08)] hover:shadow-[0_8px_20px_rgb(79,70,229,0.25)] disabled:opacity-50 transition-all duration-300 active:scale-[0.98] flex justify-center gap-2 items-center"
+              className="w-full bg-slate-900 text-white font-bold text-[13px] md:text-sm py-3.5 md:py-4 rounded-xl hover:bg-indigo-600 shadow-[0_8px_20px_rgb(0,0,0,0.08)] hover:shadow-[0_8px_20px_rgb(79,70,229,0.25)] disabled:opacity-50 transition-all duration-300 active:scale-[0.98] flex justify-center gap-2 items-center"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="animate-spin" size={18} /> Đang xử lý...
+                  <Loader2 className="animate-spin" size={16} /> Đang xử lý...
                 </>
               ) : (
                 action === 'EDIT' ? 'Lưu thay đổi' : 'Xác nhận & Cập nhật'
