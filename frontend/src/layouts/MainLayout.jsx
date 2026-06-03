@@ -22,23 +22,33 @@ const MainLayout = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-800">
-      {/* Đã gỡ bỏ truyền prop apiStatus */}
+    <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+      {/* Thanh điều hướng TopNavbar ở trên cùng */}
       <TopNavbar />
       
-      <div className="flex flex-1 w-full overflow-hidden">
+      <div className="flex flex-1 w-full overflow-hidden relative">
+        {/* Sidebar điều hướng bên trái */}
         <Sidebar />
         
-        <main className="flex-1 w-full overflow-y-auto flex flex-col bg-white shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10">
+        {/* Vùng nội dung chính: Tích hợp dvh chiều cao động, custom-scrollbar đồng bộ và tinh chỉnh shadow chỉ hiện trên desktop */}
+        <main className="flex-1 w-full overflow-y-auto flex flex-col bg-white md:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10 custom-scrollbar overscroll-none">
           
-          {/* Thanh trạng thái API đã được xóa khỏi UI */}
-          
-          <div className="flex-1 relative">
+          <div className="flex-1 relative w-full flex flex-col">
              {/* Outlet bơm trang con vào đây */}
             <Outlet />
           </div>
         </main>
       </div>
+
+      {/* Style scrollbar mượt mà ẩn trên mobile, hiện tinh tế trên desktop */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 };
