@@ -15,7 +15,8 @@ import {
   DragOverEvent,
   DragEndEvent,
   DragCancelEvent,
-  Over
+  Over,
+  PointerSensor
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Save, Sparkles, Filter, Users, Plus, X } from 'lucide-react';
@@ -186,9 +187,21 @@ const BoardView = () => {
     if (isAddingCol && newColInputRef.current) newColInputRef.current.focus();
   }, [isAddingCol]);
 
-  const mouseSensor = useSensor(MouseSensor, { activationConstraint: { distance: 5 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } });
-  const sensors = useSensors(mouseSensor, touchSensor);
+  // 🚀 FIX LỖI KÉO THẢ TRÊN ĐIỆN THOẠI:
+  // Cấu hình PointerSensor để bắt cảm ứng tốt hơn, 
+  // delay 150ms để phân biệt giữa thao tác "Chạm để Cuộn (Scroll)" và "Chạm-Giữ để Kéo (Drag)"
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      delay: 150, 
+      tolerance: 5,
+    },
+  });
+  const mouseSensor = useSensor(MouseSensor, {
+      activationConstraint: { distance: 5 }
+  });
+  
+  // Ưu tiên PointerSensor cho màn hình cảm ứng, MouseSensor làm dự phòng
+  const sensors = useSensors(pointerSensor, mouseSensor);
 
   useRealtimeEvent(`/topic/board/${currentBoardId}`, (message) => {
     const action = String(message?.action || message?.type || '').toUpperCase();
@@ -407,7 +420,15 @@ const BoardView = () => {
 
   return (
     <>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+      {/* Cấu hình thêm thuộc tính style touch-action: none cho DndContext để hạn chế scroll khi kéo thả */}
+      <DndContext 
+        sensors={sensors} 
+        collisionDetection={closestCenter} 
+        onDragStart={handleDragStart} 
+        onDragOver={handleDragOver} 
+        onDragEnd={handleDragEnd} 
+        onDragCancel={handleDragCancel}
+      >
         <div className="absolute inset-0 flex flex-col bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white overflow-hidden">
           
           {/* Topbar đã tinh gọn */}
@@ -457,7 +478,7 @@ const BoardView = () => {
           {/* Vùng Container Cột: Tích hợp snap-x snap-mandatory cho Mobile hít mượt mà */}
           <div className="flex-1 w-full px-3 py-4 md:p-6 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-3 md:gap-6 items-start custom-scrollbar snap-x snap-mandatory md:snap-none">
             {board.columns?.map((col: BoardColumn) => (
-              <div key={col.id || col._id} className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px] h-full flex flex-col justify-start">
+              <div key={col.id || col._id} className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px] h-full flex flex-col justify-start touch-pan-y">
                  <Column list={col} onOpenTaskDetail={openTaskDetail} />
               </div>
             ))}
