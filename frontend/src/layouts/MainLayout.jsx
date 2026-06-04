@@ -22,16 +22,16 @@ const MainLayout = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
       {/* Thanh điều hướng TopNavbar ở trên cùng */}
       <TopNavbar />
       
       <div className="flex flex-1 w-full overflow-hidden relative">
-        {/* Sidebar điều hướng bên trái */}
+        {/* Sidebar điều hướng bên trái / Menu dưới đáy trên mobile */}
         <Sidebar />
         
-        {/* Vùng nội dung chính: Tích hợp dvh chiều cao động, custom-scrollbar đồng bộ và tinh chỉnh shadow chỉ hiện trên desktop */}
-        <main className="flex-1 w-full overflow-y-auto flex flex-col bg-white md:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10 custom-scrollbar overscroll-none">
+        {/* 🚀 FIX: Thêm pb-24 trên mobile để tạo không gian hở, cuộn nội dung qua khỏi thanh Sidebar */}
+        <main className="flex-1 w-full overflow-y-auto flex flex-col bg-white md:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.05)] z-10 custom-scrollbar overscroll-none pb-24 md:pb-0">
           
           <div className="flex-1 relative w-full flex flex-col">
              {/* Outlet bơm trang con vào đây */}

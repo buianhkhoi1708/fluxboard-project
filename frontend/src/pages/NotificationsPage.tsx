@@ -240,7 +240,7 @@ const NotificationDetail = ({
 }) => {
   if (!notification) {
     return (
-      <div className="h-full min-h-[400px] rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center p-10">
+      <div className="h-full min-h-[400px] rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center p-10 sticky top-6 md:top-8">
         <div className="w-16 h-16 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center mb-4">
           <Bell size={28} className="text-indigo-400" />
         </div>
@@ -265,7 +265,7 @@ const NotificationDetail = ({
   const busy = isApproving || isRejecting;
 
   return (
-    <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden sticky top-6">
+    <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden sticky top-6 md:top-8">
       <div className="p-6 border-b border-slate-100 bg-slate-50/60">
         <div className="flex items-start gap-4">
           <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 ${style.bg} ${style.border}`}>
@@ -554,7 +554,8 @@ const NotificationsPage = () => {
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto no-scrollbar bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-4 md:p-6 lg:p-8">
+    // 🚀 ĐÃ SỬA LỖI: Tháo bỏ hoàn toàn class "h-full overflow-y-auto no-scrollbar" ở dòng dưới này
+    <div className="w-full bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div className="space-y-1">
@@ -593,7 +594,7 @@ const NotificationsPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-6 items-start">
             <div className="space-y-3">
               {notifications.map((notification) => (
                 <NotificationCard
