@@ -10,13 +10,12 @@ import {
   useSensor,
   useSensors,
   MouseSensor,
-  TouchSensor,
+  TouchSensor, // 🚀 Dùng TouchSensor chuyên dụng cho thiết bị cảm ứng
   DragStartEvent,
   DragOverEvent,
   DragEndEvent,
   DragCancelEvent,
-  Over,
-  PointerSensor
+  Over
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Save, Sparkles, Filter, Users, Plus, X } from 'lucide-react';
@@ -187,21 +186,22 @@ const BoardView = () => {
     if (isAddingCol && newColInputRef.current) newColInputRef.current.focus();
   }, [isAddingCol]);
 
-  // 🚀 FIX LỖI KÉO THẢ TRÊN ĐIỆN THOẠI:
-  // Cấu hình PointerSensor để bắt cảm ứng tốt hơn, 
-  // delay 150ms để phân biệt giữa thao tác "Chạm để Cuộn (Scroll)" và "Chạm-Giữ để Kéo (Drag)"
-  const pointerSensor = useSensor(PointerSensor, {
+  // 🚀 BỘ SENSOR TỐI ƯU CỰC ĐỘ CHO MOBILE VÀ PC:
+  // MouseSensor: dành cho PC/Mac kéo thả chuột bình thường (chuột rê 5px là bắt đầu)
+  const mouseSensor = useSensor(MouseSensor, {
+    activationConstraint: { distance: 5 },
+  });
+
+  // TouchSensor: dành cho điện thoại, iPad, iPhone
+  // BẮT BUỘC: Phải giữ ngón tay (delay) 200ms để nhấc thẻ lên, tránh trình duyệt nhầm thành "Vuốt màn hình"
+  const touchSensor = useSensor(TouchSensor, {
     activationConstraint: {
-      delay: 150, 
-      tolerance: 5,
+      delay: 200,      // Nhấn giữ 0.2s để thẻ được nhấc lên
+      tolerance: 8,    // Trong lúc giữ, tay có thể rung nhẹ 8px
     },
   });
-  const mouseSensor = useSensor(MouseSensor, {
-      activationConstraint: { distance: 5 }
-  });
-  
-  // Ưu tiên PointerSensor cho màn hình cảm ứng, MouseSensor làm dự phòng
-  const sensors = useSensors(pointerSensor, mouseSensor);
+
+  const sensors = useSensors(mouseSensor, touchSensor);
 
   useRealtimeEvent(`/topic/board/${currentBoardId}`, (message) => {
     const action = String(message?.action || message?.type || '').toUpperCase();
@@ -420,7 +420,6 @@ const BoardView = () => {
 
   return (
     <>
-      {/* Cấu hình thêm thuộc tính style touch-action: none cho DndContext để hạn chế scroll khi kéo thả */}
       <DndContext 
         sensors={sensors} 
         collisionDetection={closestCenter} 
@@ -431,7 +430,6 @@ const BoardView = () => {
       >
         <div className="absolute inset-0 flex flex-col bg-slate-50/50 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/40 via-slate-50 to-white overflow-hidden">
           
-          {/* Topbar đã tinh gọn */}
           <div className="shrink-0 px-3 py-2.5 md:px-6 md:py-3 bg-white/70 backdrop-blur-xl border-b border-white shadow-sm flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 md:gap-3 z-10">
             <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
               <div className="w-8 h-8 md:w-11 md:h-11 rounded-lg md:rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-base md:text-xl shadow-sm shrink-0">
@@ -475,15 +473,14 @@ const BoardView = () => {
             </div>
           </div>
 
-          {/* Vùng Container Cột: Tích hợp snap-x snap-mandatory cho Mobile hít mượt mà */}
-          <div className="flex-1 w-full px-3 py-4 md:p-6 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-3 md:gap-6 items-start custom-scrollbar snap-x snap-mandatory md:snap-none">
+          <div className="flex-1 w-full px-3 py-4 md:p-6 overflow-x-auto overflow-y-hidden flex flex-nowrap gap-3 md:gap-6 items-start custom-scrollbar">
             {board.columns?.map((col: BoardColumn) => (
-              <div key={col.id || col._id} className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px] h-full flex flex-col justify-start touch-pan-y">
+              <div key={col.id || col._id} className="shrink-0 w-[85vw] max-w-[280px] sm:w-[280px] h-full flex flex-col justify-start">
                  <Column list={col} onOpenTaskDetail={openTaskDetail} />
               </div>
             ))}
 
-            <div className="snap-center shrink-0 w-[85vw] max-w-[280px] sm:w-[280px]">
+            <div className="shrink-0 w-[85vw] max-w-[280px] sm:w-[280px]">
               {isAddingCol ? (
                 <div className="bg-slate-100/90 backdrop-blur-md rounded-xl p-2.5 shadow-sm border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
                   <input

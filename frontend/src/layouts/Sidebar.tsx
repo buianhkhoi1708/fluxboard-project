@@ -187,13 +187,13 @@ const Sidebar = () => {
           </div>
         )}
 
-        {/* NÚT ĐĂNG XUẤT */}
+        {/* NÚT ĐĂNG XUẤT - Bỏ class mt-auto để nó nằm ngay dưới các menu trên PC */}
         <button
           type="button"
           onClick={logout}
           className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-2.5 py-2 md:px-4 md:py-3 
                      rounded-2xl text-[10px] md:text-sm font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 
-                     transition-all group min-w-[4.2rem] md:min-w-0 md:w-full md:mt-auto md:mb-6 active:scale-95 select-none touch-manipulation shrink-0"
+                     transition-all group min-w-[4.2rem] md:min-w-0 md:w-full md:mt-4 md:mb-6 active:scale-95 select-none touch-manipulation shrink-0"
         >
           <LogOut className="w-5 h-5 group-hover:text-rose-500 transition-colors shrink-0" />
           <span className="whitespace-nowrap">Đăng xuất</span>
